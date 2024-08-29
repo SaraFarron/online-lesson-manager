@@ -1,9 +1,7 @@
-import json
-from pathlib import Path
-
 from aiogram import Router, html
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
+
 from online_lesson_manager.keyborads import builder
 
 router: Router = Router()

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytz
+
 
 def get_weeks(start_date: datetime | None = None):
     if start_date is None:
-        start_date = datetime.now()
+        start_date = datetime.now(pytz.timezone("Europe/Moscow"))
     weeks = []
     for i in range(4):
         week_start = start_date + timedelta(days=i * 7)
@@ -16,7 +18,7 @@ def get_weeks(start_date: datetime | None = None):
             week.append(
                 {
                     "weekday": weekday,
-                    "date": date.strftime("%m.%d"),
+                    "date": date.strftime("%d.%m"),
                 },
             )
         weeks.append(week)
