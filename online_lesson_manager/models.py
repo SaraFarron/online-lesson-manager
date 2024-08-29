@@ -9,7 +9,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "user_account"
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(64))
 
     def __repr__(self) -> str:
         """String model represetation."""
@@ -21,8 +21,11 @@ class Lesson(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     date: Mapped[Date] = mapped_column(Date)
     time: Mapped[Time] = mapped_column(Time)
+    end_time: Mapped[Time] = mapped_column(Time)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
     user: Mapped[User] = relationship(back_populates="lessons", cascade="all, delete-orphan")
+    # statuses: upcoming, canceled, completed
+    status: Mapped[str] = mapped_column(String(10), default="upcoming")
 
     def __repr__(self) -> str:
         """String model represetation."""
