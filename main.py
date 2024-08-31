@@ -3,13 +3,14 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
+from src.config import logs
 from src.config.config import Config, load_config
 from src.handlers import router
 from src.logger import logger
 
 
 async def main():
-    logger.info("Starting bot")
+    logger.info(logs.START)
     config: Config = load_config()
     bot: Bot = Bot(token=config.tg_bot.token, default=DefaultBotProperties(parse_mode="HTML"))
     dp: Dispatcher = Dispatcher()
@@ -23,4 +24,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped")
+        logger.info(logs.STOP)

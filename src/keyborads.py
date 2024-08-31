@@ -16,6 +16,8 @@ def available_commands(user_id: int):
     builder.button(text="/add_lesson - add a lesson")
     builder.button(text="/remove_lesson - remove or reschedule a lesson")
     builder.button(text="/get_schedule - get schedule for today")
+    builder.button(text="/get_schedule_week - get schedule for the next week")
+    builder.button(text="/cancel - cancel current operation")
     if user_id in ADMINS:
         builder.button(text="this just shows, that you are in admin group")
     builder.adjust(2, repeat=True)
