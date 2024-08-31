@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import aiohttp
 from sqlalchemy.orm import Session
 
+from src.config.base import getenv
 from src.config.config import ADMINS, AVAILABLE_HOURS, DATE_FORMAT, DATE_FORMAT_HR, TIMEZONE
 from src.database import engine
 from src.models import Lesson
@@ -46,16 +48,18 @@ def get_available_time(date: datetime) -> list[tuple[int, int]]:
             )
             for lesson in lessons
         ]
-        # taken_times = {(lesson.time.hour, lesson.time.minute) for lesson in lessons}
 
         # Create a list of available times
         available_times = []
         for hour in AVAILABLE_HOURS:
             for minute in range(0, 60, 30):
                 current_time = datetime(*today_args, hour, minute, tzinfo=TIMEZONE)
+                taken = False
                 for taken_time in taken_times:
-                    if not taken_time[0] <= current_time < taken_time[1]:
-                        available_times.append((hour, minute))
+                    if taken_time[0] <= current_time < taken_time[1]:
+                        taken = True
+                if not taken:
+                    available_times.append((hour, minute))
 
     return available_times
 
@@ -72,3 +76,11 @@ def get_todays_schedule(date: datetime, user_id: int, telegram_id: int) -> list[
     if not schedule:
         return "Today's schedule is empty"
     return "Today's schedule:\n" + schedule
+
+
+async def send_message(telegram_id: int, message: str) -> None:
+    """Send a message to the user."""
+    token = getenv("BOT_TOKEN")
+    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={telegram_id}&text={message}"
+    async with aiohttp.ClientSession() as session, session.get(url) as resp:
+        await resp.text()
