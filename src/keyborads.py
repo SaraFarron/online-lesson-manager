@@ -2,8 +2,7 @@ from datetime import datetime
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from src.logger import logger
-from src.states import AddLesson
+from src.callbacks import DateCallBack, TimeCallBack
 from src.utils import get_available_time, get_weeks
 
 
@@ -17,8 +16,7 @@ def calendar():
 
     for week in get_weeks():
         for day in week:
-            builder.button(text=day["date"], callback_data=AddLesson.choose_date.state)
-            # logger.info(day)
+            builder.button(text=day["date_hr"], callback_data=DateCallBack(date=day["date"]))
 
     builder.adjust(7, repeat=True)
     return builder.as_markup()
@@ -31,8 +29,10 @@ def available_time(date: datetime):
     if not available_times:
         return None
     for hour, minute in available_times:
+        # Separator symbol ':' can not be used in callback_data
         if minute == 0:
-            builder.button(text=f"{hour:02}:00", callback_data=AddLesson.choose_time.state)
+            builder.button(text=f"{hour:02}:00", callback_data=TimeCallBack(time=f"{hour:02}.00"))
         else:
-            builder.button(text=f"{hour:02}:{minute:02}", callback_data=AddLesson.choose_time.state)
+            builder.button(text=f"{hour:02}:{minute:02}", callback_data=TimeCallBack(time=f"{hour:02}.{minute:02}"))
+    builder.adjust(1, repeat=True)
     return builder.as_markup()

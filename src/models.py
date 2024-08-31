@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import List
+
 from sqlalchemy import Date, ForeignKey, String, Time
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -9,7 +13,9 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "user_account"
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(64))
+    telegram_id: Mapped[int] = mapped_column(unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    lessons: Mapped[list[Lesson]] = relationship(back_populates="user")
 
     def __repr__(self) -> str:
         """String model represetation."""

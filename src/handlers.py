@@ -6,11 +6,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
 
+from src.callbacks import DateCallBack, TimeCallBack
+from src.config.config import DATE_FORMAT, TIME_FORMAT
 from src.database import engine
 from src.keyborads import available_time, calendar
+from src.logger import logger
 from src.models import Lesson, User
 from src.states import AddLesson
-from src.logger import logger
 
 router: Router = Router()
 
@@ -18,6 +20,12 @@ router: Router = Router()
 @router.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
     """Handler receives messages with `/start` command."""
+    with Session(engine) as session:
+        if not session.query(User).filter(User.telegram_id == message.from_user.id).first():
+            user = User(name=message.from_user.full_name, telegram_id=message.from_user.id)
+            session.add(user)
+            session.commit()
+            logger.info("User %s registered", message.from_user.full_name)
     await message.answer(f"你好, {html.bold(message.from_user.full_name)}!")
 
 
@@ -43,35 +51,40 @@ async def add_lesson(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/add_lesson` command."""
     logger.info("User %s wants to add a lesson", message.from_user.full_name)
     await state.set_state(AddLesson.choose_date)
+    await state.update_data(user_id=message.from_user.id, name=message.from_user.full_name)
     await message.answer("Choose date", reply_markup=calendar())
 
 
-@router.callback_query(AddLesson.choose_date)
-async def choose_date(message: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(DateCallBack.filter())
+async def choose_date(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_date` state."""
-    logger.info("User %s chose %s date", message.from_user.full_name, message.data)
-    day = datetime.strptime(message.data, "%d.%m").date()
+    logger.info("User %s chose %s date", callback.from_user.full_name, callback.data)
+    day = datetime.strptime(callback.data, f"choose_date:{DATE_FORMAT}").date()
     await state.update_data(date=day)
     await state.set_state(AddLesson.choose_time)
-    await message.answer("Choose time", reply_markup=available_time(day))
+    await callback.message.answer("Choose time", reply_markup=available_time(day))
 
 
-@router.callback_query(AddLesson.choose_time)
-async def choose_time(message: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(TimeCallBack.filter())
+async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_time` state."""
-    logger.info("User %s chose %s time", message.from_user.full_name, message.data)
-    time = datetime.strptime(message.data, "%H:%M").time()
+    state_data = await state.get_data()
+    logger.info("User %s chose %s time", callback.from_user.full_name, callback.data)
+    time = datetime.strptime(callback.data, f"choose_time:{TIME_FORMAT}").time()  # Separator symbol ':' can not be used
     await state.update_data(time=time)
     with Session(engine) as session:
-        user = session.get(User, message.from_user.full_name)
+        user = session.query(User).filter(User.telegram_id == state_data["user_id"]).first()
         if not user:
-            await message.answer("User not found")
+            await callback.message.answer(f"User {state_data["name"]} not found")
+            logger.info("User %s:%s not found", state_data["user_id"], state_data["name"])
             return
         lesson = Lesson(
-            date=state.data["date"],
-            time=state.data["time"],
+            date=state_data["date"],
+            time=time,
             user_id=user.id,
+            status="upcoming",
+            end_time=time.replace(hour=time.hour + 1) if time.hour < 23 else time.replace(hour=0, minute=time.minute),
         )
         session.add(lesson)
         session.commit()
-    await message.answer("Lesson added")
+    await callback.message.answer("Lesson added")
