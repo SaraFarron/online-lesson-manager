@@ -7,13 +7,13 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
 
 from src.callbacks import DateCallBack, TimeCallBack
-from src.config.config import BOT_DESCRIPTION, DATE_FORMAT, HELP_MESSAGE, TIME_FORMAT, TIMEZONE
+from src.config.config import ADMINS, BOT_DESCRIPTION, DATE_FORMAT, HELP_MESSAGE, TIME_FORMAT, TIMEZONE
 from src.database import engine
 from src.keyborads import available_commands, available_time, calendar
 from src.logger import logger
 from src.models import Lesson, User
 from src.states import AddLesson
-from src.utils import get_todays_schedule
+from src.utils import get_todays_schedule, send_message
 
 router: Router = Router()
 
@@ -103,4 +103,9 @@ async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
         )
         session.add(lesson)
         session.commit()
+        username = user.name
+        lesson_date, lesson_time = lesson.date, lesson.time
     await callback.message.answer("Lesson added")
+    for admin in ADMINS:
+        await send_message(admin, f"{username} added a lesson {lesson_date} at {lesson_time}")
+    await state.clear()
