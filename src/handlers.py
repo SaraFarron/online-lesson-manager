@@ -3,13 +3,14 @@ from datetime import datetime
 from aiogram import Router, html
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
 
-from online_lesson_manager.database import engine
-from online_lesson_manager.keyborads import available_time, calendar
-from online_lesson_manager.models import Lesson, User
-from online_lesson_manager.states import AddLesson
+from src.database import engine
+from src.keyborads import available_time, calendar
+from src.models import Lesson, User
+from src.states import AddLesson
+from src.logger import logger
 
 router: Router = Router()
 
@@ -40,23 +41,26 @@ async def get_schedule(message: Message) -> None:
 @router.message(Command("add_lesson"))
 async def add_lesson(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/add_lesson` command."""
+    logger.info("User %s wants to add a lesson", message.from_user.full_name)
     await state.set_state(AddLesson.choose_date)
     await message.answer("Choose date", reply_markup=calendar())
 
 
-@router.message(AddLesson.choose_date)
-async def choose_date(message: Message, state: FSMContext) -> None:
+@router.callback_query(AddLesson.choose_date)
+async def choose_date(message: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_date` state."""
-    day = datetime.strptime(message.text, "%d.%m").date()
+    logger.info("User %s chose %s date", message.from_user.full_name, message.data)
+    day = datetime.strptime(message.data, "%d.%m").date()
     await state.update_data(date=day)
     await state.set_state(AddLesson.choose_time)
     await message.answer("Choose time", reply_markup=available_time(day))
 
 
-@router.message(AddLesson.choose_time)
-async def choose_time(message: Message, state: FSMContext) -> None:
+@router.callback_query(AddLesson.choose_time)
+async def choose_time(message: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_time` state."""
-    time = datetime.strptime(message.text, "%H:%M").time()
+    logger.info("User %s chose %s time", message.from_user.full_name, message.data)
+    time = datetime.strptime(message.data, "%H:%M").time()
     await state.update_data(time=time)
     with Session(engine) as session:
         user = session.get(User, message.from_user.full_name)

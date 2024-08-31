@@ -23,7 +23,7 @@ class Lesson(Base):
     time: Mapped[Time] = mapped_column(Time)
     end_time: Mapped[Time] = mapped_column(Time)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
-    user: Mapped[User] = relationship(back_populates="lessons", cascade="all, delete-orphan")
+    user: Mapped[User] = relationship(back_populates="lessons")
     # statuses: upcoming, canceled, completed
     status: Mapped[str] = mapped_column(String(10), default="upcoming")
 

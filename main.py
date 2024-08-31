@@ -3,9 +3,9 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
-from online_lesson_manager.config.config import Config, load_config
-from online_lesson_manager.handlers import router
-from online_lesson_manager.logger import logger
+from src.config.config import Config, load_config
+from src.handlers import router
+from src.logger import logger
 
 
 async def main():

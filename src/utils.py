@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import pytz
 from sqlalchemy.orm import Session
 
-from online_lesson_manager.database import engine
-from online_lesson_manager.models import Lesson
+from src.database import engine
+from src.models import Lesson
 
 
 def get_weeks(start_date: datetime | None = None):

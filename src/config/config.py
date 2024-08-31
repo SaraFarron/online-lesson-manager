@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
-from online_lesson_manager.config.base import getenv
+from src.config.base import getenv
 
 
 @dataclass
