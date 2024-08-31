@@ -61,6 +61,8 @@ def get_available_time(date: datetime) -> list[tuple[int, int]]:
                 if not taken:
                     available_times.append((hour, minute))
 
+    if (AVAILABLE_HOURS[-1], 30) in available_times:
+        available_times.remove((AVAILABLE_HOURS[-1], 30))
     return available_times
 
 

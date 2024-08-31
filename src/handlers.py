@@ -6,13 +6,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
 
-from src.callbacks import (DateCallBack, RemoveLessonCallBack, TimeCallBack,
-                           YesNoCallBack)
-from src.config.config import (BOT_DESCRIPTION, DATE_FORMAT, HELP_MESSAGE,
-                               TIME_FORMAT, TIMEZONE)
+from src.callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
+from src.config.config import BOT_DESCRIPTION, DATE_FORMAT, HELP_MESSAGE, TIME_FORMAT, TIMEZONE
 from src.database import engine
-from src.keyborads import (available_commands, available_time, calendar,
-                           lessons_to_remove, yes_no)
+from src.keyborads import available_commands, available_time, calendar, lessons_to_remove, yes_no
 from src.logger import logger
 from src.models import Lesson, User
 from src.states import AddLesson
