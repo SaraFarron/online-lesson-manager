@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pytz
 from sqlalchemy.orm import Session
 
+from src.config.config import AVAILABLE_HOURS, DATE_FORMAT, DATE_FORMAT_HR
 from src.database import engine
 from src.models import Lesson
 
@@ -23,7 +24,8 @@ def get_weeks(start_date: datetime | None = None):
             week.append(
                 {
                     "weekday": weekday,
-                    "date": date.strftime("%d.%m"),
+                    "date_hr": date.strftime(DATE_FORMAT_HR),
+                    "date": date.strftime(DATE_FORMAT),
                 },
             )
         weeks.append(week)
@@ -34,17 +36,14 @@ def get_available_time(date: datetime) -> list[tuple[int, int]]:
     """Get a list of available time for the current day."""
     with Session(engine) as session:
         # Get all lessons for the current day
-        lessons = session.query(Lesson).filter(
-            Lesson.date == date.date(),
-            Lesson.status == "upcoming",
-        ).all()
+        lessons = session.query(Lesson).filter(Lesson.date == date, Lesson.status == "upcoming").all()
 
         # Create a set of all times that are taken
         taken_times = {(lesson.time.hour, lesson.time.minute) for lesson in lessons}
 
         # Create a list of available times
         available_times = []
-        for hour in range(24):
+        for hour in AVAILABLE_HOURS:
             for minute in range(0, 60, 30):
                 if (hour, minute) not in taken_times:
                     available_times.append((hour, minute))
