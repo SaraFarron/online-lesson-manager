@@ -6,14 +6,17 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
 
-from src.callbacks import DateCallBack, TimeCallBack
-from src.config.config import ADMINS, BOT_DESCRIPTION, DATE_FORMAT, HELP_MESSAGE, TIME_FORMAT, TIMEZONE
+from src.callbacks import (DateCallBack, RemoveLessonCallBack, TimeCallBack,
+                           YesNoCallBack)
+from src.config.config import (BOT_DESCRIPTION, DATE_FORMAT, HELP_MESSAGE,
+                               TIME_FORMAT, TIMEZONE)
 from src.database import engine
-from src.keyborads import available_commands, available_time, calendar
+from src.keyborads import (available_commands, available_time, calendar,
+                           lessons_to_remove, yes_no)
 from src.logger import logger
 from src.models import Lesson, User
 from src.states import AddLesson
-from src.utils import get_todays_schedule, send_message
+from src.utils import get_todays_schedule, notify_admins
 
 router: Router = Router()
 
@@ -106,6 +109,53 @@ async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
         username = user.name
         lesson_date, lesson_time = lesson.date, lesson.time
     await callback.message.answer("Lesson added")
-    for admin in ADMINS:
-        await send_message(admin, f"{username} added a lesson {lesson_date} at {lesson_time}")
+    await notify_admins(f"{username} added a lesson {lesson_date} at {lesson_time}")
     await state.clear()
+
+
+@router.message(Command("remove_lesson"))
+async def remove_lesson(message: Message) -> None:
+    """Handler receives messages with `/remove_lesson` command."""
+    logger.info("User %s wants to remove a lesson", message.from_user.full_name)
+    with Session(engine) as session:
+        user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
+        if user:
+            lessons = session.query(Lesson).filter(Lesson.user_id == user.id, Lesson.status == "upcoming").all()
+            if lessons:
+                await message.answer("Choose lesson to remove", reply_markup=lessons_to_remove(lessons))
+            else:
+                await message.answer("No upcoming lessons")
+        else:
+            await message.answer("You are not registered. Please use /start command")
+
+
+@router.callback_query(RemoveLessonCallBack.filter())
+async def choose_lesson_to_remove(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handler receives messages with `choose_lesson_to_remove` state."""
+    logger.info("User %s chose %s lesson to remove", callback.from_user.full_name, callback.data)
+    with Session(engine) as session:
+        # logger.info("CALLBACK DATA: %s", callback.data)
+        lesson_id = int(callback.data.replace("remove_lesson:", ""))
+        lesson = session.query(Lesson).filter(Lesson.id == lesson_id).first()
+        await state.update_data(user_id=lesson.user.telegram_id, name=lesson.user.name)
+        if lesson:
+            lesson.status = "canceled"
+            session.commit()
+            await notify_admins(f"{lesson.user.name} canceled lesson at {lesson.date} {lesson.time}")
+        else:
+            await callback.message.answer("Lesson not found")
+            return
+    await callback.message.answer("Would you like to set a new date?", reply_markup=yes_no())
+
+
+@router.callback_query(YesNoCallBack.filter())
+async def set_new_date(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handler receives messages with `set_new_date` state."""
+    logger.info("User %s chose %s", callback.from_user.full_name, callback.data)
+    if callback.data == "yes_no:yes":
+        # state_data = await state.get_data()
+        await state.set_state(AddLesson.choose_date)
+        # await state.update_data(user_id=state_data["user_id"], name=state_data["user_name"])
+        await callback.message.answer("Choose new date", reply_markup=calendar())
+    else:
+        await callback.message.answer("Lesson canceled")

@@ -2,8 +2,9 @@ from datetime import datetime
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from src.callbacks import DateCallBack, TimeCallBack
+from src.callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
 from src.config.config import ADMINS, MAX_BUTTON_ROWS
+from src.models import Lesson
 from src.utils import get_available_time, get_weeks
 
 
@@ -13,6 +14,7 @@ def available_commands(user_id: int):
     builder.button(text="/start - show welcoming message")
     builder.button(text="/help - show this message")
     builder.button(text="/add_lesson - add a lesson")
+    builder.button(text="/remove_lesson - remove or reschedule a lesson")
     builder.button(text="/get_schedule - get schedule for today")
     if user_id in ADMINS:
         builder.button(text="this just shows, that you are in admin group")
@@ -49,4 +51,23 @@ def available_time(date: datetime):
         else:
             builder.button(text=f"{hour:02}:{minute:02}", callback_data=TimeCallBack(time=f"{hour:02}.{minute:02}"))
     builder.adjust(1 if len(list(builder.buttons)) <= MAX_BUTTON_ROWS else 2, repeat=True)
+    return builder.as_markup()
+
+
+def lessons_to_remove(lessons: list[Lesson]):
+    """Create a keyboard with available lessons to remove."""
+    builder = InlineKeyboardBuilder()
+    for lesson in lessons:
+        text = f"{lesson.date} {lesson.time}-{lesson.end_time}"
+        builder.button(text=text, callback_data=RemoveLessonCallBack(lesson_id=lesson.id))
+    builder.adjust(1 if len(list(builder.buttons)) <= MAX_BUTTON_ROWS else 2, repeat=True)
+    return builder.as_markup()
+
+
+def yes_no():
+    """Create a keyboard with yes and no buttons."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Yes", callback_data=YesNoCallBack(answer="yes"))
+    builder.button(text="No", callback_data=YesNoCallBack(answer="no"))
+    builder.adjust(2)
     return builder.as_markup()
