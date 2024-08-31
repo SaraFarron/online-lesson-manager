@@ -1,9 +1,23 @@
 from datetime import datetime
 
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from src.callbacks import DateCallBack, TimeCallBack
+from src.config.config import ADMINS, MAX_BUTTON_ROWS
 from src.utils import get_available_time, get_weeks
+
+
+def available_commands(user_id: int):
+    """Create a keyboard with available commands."""
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="/start - show welcoming message")
+    builder.button(text="/help - show this message")
+    builder.button(text="/add_lesson - add a lesson")
+    builder.button(text="/get_schedule - get schedule for today")
+    if user_id in ADMINS:
+        builder.button(text="this just shows, that you are in admin group")
+    builder.adjust(2, repeat=True)
+    return builder.as_markup()
 
 
 def calendar():
@@ -34,5 +48,5 @@ def available_time(date: datetime):
             builder.button(text=f"{hour:02}:00", callback_data=TimeCallBack(time=f"{hour:02}.00"))
         else:
             builder.button(text=f"{hour:02}:{minute:02}", callback_data=TimeCallBack(time=f"{hour:02}.{minute:02}"))
-    builder.adjust(1, repeat=True)
+    builder.adjust(1 if len(list(builder.buttons)) <= MAX_BUTTON_ROWS else 2, repeat=True)
     return builder.as_markup()
