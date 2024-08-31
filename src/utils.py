@@ -71,10 +71,12 @@ def get_todays_schedule(date: datetime, user_id: int, telegram_id: int) -> list[
     with Session(engine) as session:
         upcoming_today_filter_args = (Lesson.date == date.date(), Lesson.status == "upcoming")
         if telegram_id in ADMINS:
-            lessons = session.query(Lesson).filter(*upcoming_today_filter_args).all()
+            lessons = session.query(Lesson).filter(*upcoming_today_filter_args).order_by(Lesson.time).all()
             schedule = "\n".join([f"{lesson.time}-{lesson.end_time}:{lesson.user.name}" for lesson in lessons])
         else:
-            lessons = session.query(Lesson).filter(*upcoming_today_filter_args, Lesson.user_id == user_id).all()
+            lessons = session.query(Lesson).filter(
+                *upcoming_today_filter_args, Lesson.user_id == user_id,
+            ).order_by(Lesson.time).all()
             schedule = "\n".join([f"{lesson.time} - {lesson.end_time}" for lesson in lessons])
     if not schedule:
         return "Today's schedule is empty"
