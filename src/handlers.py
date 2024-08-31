@@ -7,14 +7,21 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
 
 from src.callbacks import DateCallBack, TimeCallBack
-from src.config.config import DATE_FORMAT, TIME_FORMAT
+from src.config.config import BOT_DESCRIPTION, DATE_FORMAT, HELP_MESSAGE, TIME_FORMAT, TIMEZONE
 from src.database import engine
-from src.keyborads import available_time, calendar
+from src.keyborads import available_commands, available_time, calendar
 from src.logger import logger
 from src.models import Lesson, User
 from src.states import AddLesson
+from src.utils import get_todays_schedule
 
 router: Router = Router()
+
+
+@router.message(Command("help"))
+async def get_help(message: Message) -> None:
+    """Handler receives messages with `/help` command."""
+    await message.answer(HELP_MESSAGE, reply_markup=available_commands(message.from_user.id))
 
 
 @router.message(CommandStart())
@@ -27,6 +34,7 @@ async def command_start_handler(message: Message) -> None:
             session.commit()
             logger.info("User %s registered", message.from_user.full_name)
     await message.answer(f"你好, {html.bold(message.from_user.full_name)}!")
+    await message.answer(BOT_DESCRIPTION)
 
 
 @router.message(Command("cancel"))
@@ -43,7 +51,15 @@ async def cancel_handler(message: Message, state: FSMContext) -> None:
 @router.message(Command("get_schedule"))
 async def get_schedule(message: Message) -> None:
     """Handler receives messages with `/schedule` command."""
-    await message.answer("Calendar", reply_markup=calendar())
+    today = datetime.now(TIMEZONE)
+    with Session(engine) as session:
+        user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
+        if user:
+            logger.info("User %s requested schedule", message.from_user.full_name)
+            await message.answer(get_todays_schedule(today, user.id, user.telegram_id))
+        else:
+            logger.info("User %s requested schedule without registration", message.from_user.full_name)
+            await message.answer("You are not registered. Please use /start command")
 
 
 @router.message(Command("add_lesson"))
