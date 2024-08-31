@@ -1,2 +1,2 @@
-ADD_LESSON = "%s added a lesson %s at %s"
-CANCEL_LESSON = "%s canceled lesson %s at %s"
+ADD_LESSON = "%s добавил урок на %s в %s"
+CANCEL_LESSON = "%s отменил урок на %s в %s"

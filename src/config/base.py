@@ -1,7 +1,7 @@
 import os
 
 
-class ImproperlyConfigured(Exception):
+class ImproperlyConfiguredError(Exception):
     """Raises when a environment variable is missing."""
 
     def __init__(self, variable_name: str, *args, **kwargs):
@@ -32,6 +32,7 @@ def getenv(var_name: str, cast_to=str) -> str:
         value = os.environ[var_name]
         return cast_to(value)
     except KeyError:
-        raise ImproperlyConfigured(var_name)
+        raise ImproperlyConfiguredError(var_name)  # noqa: B904
     except ValueError:
-        raise ValueError(f"The value {value} can't be cast to {cast_to}.")
+        error = f"The value {value} can't be cast to {cast_to}."
+        raise ValueError(error)  # noqa: B904

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import aiohttp
 from sqlalchemy.orm import Session
 
+from src.config import messages
 from src.config.base import getenv
 from src.config.config import ADMINS, AVAILABLE_HOURS, DATE_FORMAT, DATE_FORMAT_HR, TIMEZONE
 from src.database import engine
@@ -74,13 +75,19 @@ def get_todays_schedule(date: datetime, user_id: int, telegram_id: int) -> list[
             lessons = session.query(Lesson).filter(*upcoming_today_filter_args).order_by(Lesson.time).all()
             schedule = "\n".join([f"{lesson.time}-{lesson.end_time}:{lesson.user.name}" for lesson in lessons])
         else:
-            lessons = session.query(Lesson).filter(
-                *upcoming_today_filter_args, Lesson.user_id == user_id,
-            ).order_by(Lesson.time).all()
+            lessons = (
+                session.query(Lesson)
+                .filter(
+                    *upcoming_today_filter_args,
+                    Lesson.user_id == user_id,
+                )
+                .order_by(Lesson.time)
+                .all()
+            )
             schedule = "\n".join([f"{lesson.time} - {lesson.end_time}" for lesson in lessons])
     if not schedule:
-        return "Today's schedule is empty"
-    return "Today's schedule:\n" + schedule
+        return messages.SCHEDULE_EMPTY
+    return messages.SCHEDULE + schedule
 
 
 async def send_message(telegram_id: int, message: str) -> None:

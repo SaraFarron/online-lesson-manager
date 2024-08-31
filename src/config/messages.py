@@ -1,24 +1,26 @@
 BOT_DESCRIPTION = """
-This mod helps teaches to schedule their lessons.
-If you had `user not found` issues, than bot just added you to the database.
+Этот бот помогает учителю планировать занятия.
+Бот запомнил вас, теперь вы можете редактировать свое расписание уроков.
 """
 
 HELP_MESSAGE = """
-If you get `user not found` error, then please use /start at least once.
-Here is a list of available commands:\n
+Если вы получили ошибку `user not found`, тогда введите /start хотя бы раз, чтобы бот вас запомнил.
+Список доступных команд:\n
 """
 GREETINGS = "你好, %s!"
-CANCELED = "Canceled"
-NOT_REGISTERED = "You are not registered. Please use /start command"
-USER_NOT_FOUND = "User %s not found"
+CANCELED = "Отмена"
+NOT_REGISTERED = "Вы не зарегистрированы. Пожалуйста воспользуйтесь командой /start"
+USER_NOT_FOUND = "Пользователь %s не найден"
 
-CHOOSE_DATE = "Choose date"
-CHOOSE_TIME = "Choose time"
-LESSON_ADDED = "Lesson added"
-CHOOSE_LESSON = "Choose lesson to remove"
-NO_LESSONS = "No upcoming lessons"
-NO_LESSON = "Lesson not found"
-NEW_DATE = "Would you like to set a new date?"
-CHOOSE_NEW_DATE = "Choose new date"
-LESSON_CANCELED = "Lesson canceled"
+CHOOSE_DATE = "Выберите дату"
+CHOOSE_TIME = "Выберите время"
+LESSON_ADDED = "Урок добавлен"
+CHOOSE_LESSON = "Выберите урок для отмены"
+NO_LESSONS = "Нет предстоящих уроков"
+NO_LESSON = "Урок не найден"
+NEW_DATE = "Хотите перенести урок на новую дату/время?"
+CHOOSE_NEW_DATE = "Выберите новую дату"
+LESSON_CANCELED = "Урок отменён"
 
+SCHEDULE_EMPTY = "На сегодня занятий нет"
+SCHEDULE = "Занятия на сегодня:\n"
