@@ -1,0 +1,8 @@
+START = "show welcoming message"
+HELP = "show this message"
+ADD_LESSON = "add a lesson"
+REMOVE_LESSON = "remove or reschedule a lesson"
+GET_SCHEDULE = "get schedule for today"
+GET_SCHEDULE_WEEK = "get schedule for the next week"
+CANCEL = "cancel current operation"
+ADMIN_GROUP = "this just shows, that you are in admin group"

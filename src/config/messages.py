@@ -10,6 +10,8 @@ Here is a list of available commands:\n
 GREETINGS = "你好, %s!"
 CANCELED = "Canceled"
 NOT_REGISTERED = "You are not registered. Please use /start command"
+USER_NOT_FOUND = "User %s not found"
+
 CHOOSE_DATE = "Choose date"
 CHOOSE_TIME = "Choose time"
 LESSON_ADDED = "Lesson added"
@@ -19,4 +21,4 @@ NO_LESSON = "Lesson not found"
 NEW_DATE = "Would you like to set a new date?"
 CHOOSE_NEW_DATE = "Choose new date"
 LESSON_CANCELED = "Lesson canceled"
-USER_NOT_FOUND = "User %s not found"
+

@@ -3,6 +3,7 @@ from datetime import datetime
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from src.callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
+from src.config import help
 from src.config.config import ADMINS, MAX_BUTTON_ROWS
 from src.models import Lesson
 from src.utils import get_available_time, get_weeks
@@ -11,15 +12,15 @@ from src.utils import get_available_time, get_weeks
 def available_commands(user_id: int):
     """Create a keyboard with available commands."""
     builder = ReplyKeyboardBuilder()
-    builder.button(text="/start - show welcoming message")
-    builder.button(text="/help - show this message")
-    builder.button(text="/add_lesson - add a lesson")
-    builder.button(text="/remove_lesson - remove or reschedule a lesson")
-    builder.button(text="/get_schedule - get schedule for today")
-    builder.button(text="/get_schedule_week - get schedule for the next week")
-    builder.button(text="/cancel - cancel current operation")
+    builder.button(text=f"/start - {help.START}")
+    builder.button(text=f"/help - {help.HELP}")
+    builder.button(text=f"/add_lesson - {help.ADD_LESSON}")
+    builder.button(text=f"/remove_lesson - {help.REMOVE_LESSON}")
+    builder.button(text=f"/get_schedule - {help.GET_SCHEDULE}")
+    builder.button(text=f"/get_schedule_week - {help.GET_SCHEDULE_WEEK}")
+    builder.button(text=f"/cancel - {help.CANCEL}")
     if user_id in ADMINS:
-        builder.button(text="this just shows, that you are in admin group")
+        builder.button(text=help.ADMIN_GROUP)
     builder.adjust(2, repeat=True)
     return builder.as_markup()
 
