@@ -5,11 +5,11 @@ from datetime import datetime, timedelta
 import aiohttp
 from sqlalchemy.orm import Session
 
-from src.config import messages
-from src.config.base import getenv
-from src.config.config import ADMINS, AVAILABLE_HOURS, DATE_FORMAT, DATE_FORMAT_HR, TIMEZONE
-from src.database import engine
-from src.models import Lesson
+from config import messages
+from config.base import getenv
+from config.config import ADMINS, AVAILABLE_HOURS, DATE_FORMAT, DATE_FORMAT_HR, TIMEZONE
+from database import engine
+from models import Lesson
 
 
 def get_weeks(start_date: datetime | None = None):
