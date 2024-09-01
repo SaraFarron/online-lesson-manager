@@ -6,15 +6,16 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
 
-from src.callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
-from src.config import logs, messages, notifications
-from src.config.config import BOT_DESCRIPTION, DATE_FORMAT, HELP_MESSAGE, TIME_FORMAT, TIMEZONE
-from src.database import engine
-from src.keyborads import available_commands, available_time, calendar, lessons_to_remove, yes_no
-from src.logger import logger
-from src.models import Lesson, User
-from src.states import AddLesson
-from src.utils import get_todays_schedule, notify_admins
+from callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
+from config import logs, messages, notifications
+from config.config import DATE_FORMAT, TIME_FORMAT, TIMEZONE
+from config.messages import BOT_DESCRIPTION, HELP_MESSAGE
+from database import engine
+from keyborads import available_commands, available_time, calendar, lessons_to_remove, yes_no
+from logger import logger
+from models import Lesson, User
+from states import AddLesson
+from utils import get_todays_schedule, notify_admins
 
 router: Router = Router()
 

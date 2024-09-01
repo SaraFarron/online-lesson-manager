@@ -3,10 +3,10 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
-from src.config import logs
-from src.config.config import Config, load_config
-from src.handlers import router
-from src.logger import logger
+from config import logs
+from config.config import Config, load_config
+from handlers import router
+from logger import logger
 
 
 async def main():

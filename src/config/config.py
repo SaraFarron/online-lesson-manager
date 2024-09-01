@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pytz
 from dotenv import load_dotenv
 
-from src.config.base import getenv
+from config.base import getenv
 
 
 @dataclass

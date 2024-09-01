@@ -2,11 +2,11 @@ from datetime import datetime
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from src.callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
-from src.config import help
-from src.config.config import ADMINS, MAX_BUTTON_ROWS
-from src.models import Lesson
-from src.utils import get_available_time, get_weeks
+from callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
+from config import help
+from config.config import ADMINS, MAX_BUTTON_ROWS
+from models import Lesson
+from utils import get_available_time, get_weeks
 
 
 def available_commands(user_id: int):
