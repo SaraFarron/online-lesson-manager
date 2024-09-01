@@ -29,7 +29,7 @@ def calendar():
     """Create a calendar keyboard for the current month."""
     builder = InlineKeyboardBuilder()
 
-    weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+    weekdays = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
     for day in weekdays:
         builder.button(text=day, callback_data=day)
 
