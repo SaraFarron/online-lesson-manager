@@ -15,3 +15,7 @@ class RemoveLessonCallBack(CallbackData, prefix="remove_lesson"):
 
 class YesNoCallBack(CallbackData, prefix="yes_no"):
     answer: str
+
+
+class WeekdayCallBack(CallbackData, prefix="choose_weekday"):
+    weekday: str

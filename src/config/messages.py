@@ -27,3 +27,8 @@ SCHEDULE = "Занятия на сегодня:\n"
 
 SCHEDULE_EMPTY_WEEK = "На этой неделе занятий нет"
 SCHEDULE_WEEK = "Занятия на этой неделе:\n"
+
+SHOW_WORK_SCHEDULE = "Текущее рабочее расписание:\n"
+
+PERMISSION_DENIED = "У вас нет доступа к этой команде"
+NO_DATA = "Нет данных"

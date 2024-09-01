@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Literal
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
+from callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, WeekdayCallBack, YesNoCallBack
 from config import help
 from config.config import ADMINS, MAX_BUTTON_ROWS
 from models import Lesson
-from utils import get_available_time, get_weeks
+from utils import get_available_time, get_weeks, working_hours, working_hours_on_day
 
 
 def available_commands(user_id: int):
@@ -20,6 +23,7 @@ def available_commands(user_id: int):
     builder.button(text=f"{help.GET_SCHEDULE_WEEK}")
     builder.button(text=f"{help.CANCEL}")
     if user_id in ADMINS:
+        builder.button(text=help.EDIT_WORKING_HOURS)
         builder.button(text=help.ADMIN_GROUP)
     builder.adjust(2, repeat=True)
     return builder.as_markup()
@@ -74,3 +78,24 @@ def yes_no():
     builder.button(text="No", callback_data=YesNoCallBack(answer="no"))
     builder.adjust(2)
     return builder.as_markup()
+
+
+def working_hours_keyboard():
+    """Create a keyboard with working hours."""
+    builder = InlineKeyboardBuilder()
+    for weekday, schedule in working_hours().items():
+        builder.button(text=f"{weekday}\n{schedule}schedule", callback_data=WeekdayCallBack(weekday=weekday))
+
+
+def working_hours_on_day_keyboard(weekday: Literal["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]):
+    """Create a keyboard with working hours on the current day."""
+    builder = InlineKeyboardBuilder()
+    data = working_hours_on_day(weekday)
+    builder.button(text="Начало: " + data["start"], callback_data=WeekdayCallBack(weekday=weekday))
+    if "break" in data:
+        builder.button(text="Начало перерыва: " + data["break"]["start"], callback_data=WeekdayCallBack(weekday=weekday))
+        builder.button(text="Конец перерыва: " + data["break"]["end"], callback_data=WeekdayCallBack(weekday=weekday))
+    else:
+        builder.button(text="Перерыв: нет", callback_data=WeekdayCallBack(weekday=weekday))
+    builder.button(text="Перерыв: " + data["break"], callback_data=WeekdayCallBack(weekday=weekday))
+    builder.button(text="Конец: " + data["end"], callback_data=WeekdayCallBack(weekday=weekday))

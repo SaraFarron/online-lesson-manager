@@ -15,3 +15,5 @@ REMOVE_LESSON_CHOICE = "User %s chose %s lesson to remove"
 
 USER_NOT_FOUND = "User %s:%s not found"
 USER_CHOICE = "User %s chose %s"
+
+EDIT_WEEKDAY = "User %s is changing working hours on %s"

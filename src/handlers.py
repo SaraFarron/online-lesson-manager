@@ -6,16 +6,19 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
 
-from callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
+from callbacks import (DateCallBack, RemoveLessonCallBack, TimeCallBack, WeekdayCallBack,
+                       YesNoCallBack)
 from config import help, logs, messages, notifications
-from config.config import DATE_FORMAT, TIME_FORMAT, TIMEZONE
+from config.config import ADMINS, DATE_FORMAT, TIME_FORMAT, TIMEZONE
 from config.messages import BOT_DESCRIPTION, HELP_MESSAGE
 from database import engine
-from keyborads import available_commands, available_time, calendar, lessons_to_remove, yes_no
+from keyborads import (available_commands, available_time, calendar,
+                       lessons_to_remove, yes_no, working_hours_keyboard)
 from logger import logger
 from models import Lesson, User
 from states import AddLesson
-from utils import get_todays_schedule, get_weeks_schedule, notify_admins
+from utils import (get_todays_schedule, get_weeks_schedule, notify_admins,
+                   working_hours)
 
 router: Router = Router()
 
@@ -117,12 +120,13 @@ async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
             await callback.message.answer(messages.USER_NOT_FOUND % state_data["name"])
             logger.info(logs.USER_NOT_FOUND, state_data["user_id"], state_data["name"])
             return
+        end_time = time.replace(hour=time.hour + 1) if time.hour < 23 else time.replace(hour=0, minute=time.minute)
         lesson = Lesson(
             date=state_data["date"],
             time=time,
             user_id=user.id,
             status="upcoming",
-            end_time=time.replace(hour=time.hour + 1) if time.hour < 23 else time.replace(hour=0, minute=time.minute),
+            end_time=end_time,
         )
         session.add(lesson)
         session.commit()
@@ -177,3 +181,19 @@ async def set_new_date(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.answer(messages.CHOOSE_NEW_DATE, reply_markup=calendar())
     else:
         await callback.message.answer(messages.LESSON_CANCELED)
+
+
+@router.message(Command("edit_work_schedule"))
+@router.message(F.text == help.EDIT_WORKING_HOURS)
+async def edit_work_schedule(message: Message) -> None:
+    """Handler receives messages with `/edit_work_schedule` command."""
+    if message.from_user.id not in ADMINS:
+        await message.answer(messages.PERMISSION_DENIED)
+    await message.answer(messages.SHOW_WORK_SCHEDULE, reply_markup=working_hours_keyboard())
+
+
+@router.callback_query(WeekdayCallBack.filter())
+async def choose_weekday(callback: CallbackQuery) -> None:
+    """Handler receives messages with `choose_weekday` state."""
+    logger.info(logs.EDIT_WEEKDAY, callback.from_user.full_name, callback.data)
+    await callback.message.answer(messages.EDIT_WEEKDAY, reply_markup=working_hours_keyboard())

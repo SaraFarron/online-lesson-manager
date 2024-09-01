@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytz
 from dotenv import load_dotenv
@@ -35,3 +36,5 @@ ADMINS = [
     5362724893,  # Pasha
     882315246,  # Sara
 ]
+
+WORK_SCHEDULE_TIMETABLE_PATH = Path("../db/work_schedule.json")
