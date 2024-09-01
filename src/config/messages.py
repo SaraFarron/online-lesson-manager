@@ -25,3 +25,6 @@ LESSON_CANCELED = "Урок отменён"
 
 SCHEDULE_EMPTY = "На сегодня занятий нет"
 SCHEDULE = "Занятия на сегодня:\n"
+
+SCHEDULE_EMPTY_WEEK = "На этой неделе занятий нет"
+SCHEDULE_WEEK = "Занятия на этой неделе:\n"

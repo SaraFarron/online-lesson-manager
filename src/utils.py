@@ -90,6 +90,31 @@ def get_todays_schedule(date: datetime, user_id: int, telegram_id: int) -> list[
     return messages.SCHEDULE + schedule
 
 
+def get_weeks_schedule(date: datetime, user_id: int, telegram_id: int) -> list[dict[str, str]]:
+    """Get lessons for the current week."""
+    with Session(engine) as session:
+        upcoming_week_filter_args = (
+            Lesson.date >= date.date(), Lesson.date < date.date() + timedelta(days=7), Lesson.status == "upcoming",
+        )
+        if telegram_id in ADMINS:
+            lessons = session.query(Lesson).filter(*upcoming_week_filter_args).order_by(Lesson.date).all()
+            schedule = "\n".join([f"{lesson.date} - {lesson.user.name}" for lesson in lessons])
+        else:
+            lessons = (
+                session.query(Lesson)
+                .filter(
+                    *upcoming_week_filter_args,
+                    Lesson.user_id == user_id,
+                )
+                .order_by(Lesson.date)
+                .all()
+            )
+            schedule = "\n".join([f"{lesson.date}" for lesson in lessons])
+    if not schedule:
+        return messages.SCHEDULE_EMPTY_WEEK
+    return messages.SCHEDULE_WEEK + schedule
+
+
 async def send_message(telegram_id: int, message: str) -> None:
     """Send a message to the user."""
     token = getenv("BOT_TOKEN")

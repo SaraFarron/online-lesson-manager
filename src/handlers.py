@@ -15,7 +15,7 @@ from keyborads import available_commands, available_time, calendar, lessons_to_r
 from logger import logger
 from models import Lesson, User
 from states import AddLesson
-from utils import get_todays_schedule, notify_admins
+from utils import get_todays_schedule, get_weeks_schedule, notify_admins
 
 router: Router = Router()
 
@@ -52,13 +52,27 @@ async def cancel_handler(message: Message, state: FSMContext) -> None:
 
 @router.message(Command("get_schedule"))
 async def get_schedule(message: Message) -> None:
-    """Handler receives messages with `/schedule` command."""
+    """Handler receives messages with `/get_schedule` command."""
     today = datetime.now(TIMEZONE)
     with Session(engine) as session:
         user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
         if user:
             logger.info(logs.REQUEST_SCHEDULE, message.from_user.full_name)
             await message.answer(get_todays_schedule(today, user.id, user.telegram_id))
+        else:
+            logger.warn(logs.REQUEST_SCHEDULE_NO_USER, message.from_user.full_name)
+            await message.answer(messages.NOT_REGISTERED)
+
+
+@router.message(Command("get_schedule_week"))
+async def get_schedule_week(message: Message) -> None:
+    """Handler receives messages with `/get_schedule_week` command."""
+    today = datetime.now(TIMEZONE)
+    with Session(engine) as session:
+        user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
+        if user:
+            logger.info(logs.REQUEST_SCHEDULE, message.from_user.full_name)
+            await message.answer(get_weeks_schedule(today, user.id, user.telegram_id))
         else:
             logger.warn(logs.REQUEST_SCHEDULE_NO_USER, message.from_user.full_name)
             await message.answer(messages.NOT_REGISTERED)
