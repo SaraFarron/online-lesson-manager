@@ -54,6 +54,9 @@ def get_available_time(date: datetime) -> list[tuple[int, int]]:
         available_times = []
         for hour in AVAILABLE_HOURS:
             for minute in range(0, 60, 30):
+                # Pasha asked to remove 30s from the list
+                if minute == 30:
+                    continue
                 current_time = datetime(*today_args, hour, minute, tzinfo=TIMEZONE)
                 taken = False
                 for taken_time in taken_times:
@@ -94,7 +97,9 @@ def get_weeks_schedule(date: datetime, user_id: int, telegram_id: int) -> list[d
     """Get lessons for the current week."""
     with Session(engine) as session:
         upcoming_week_filter_args = (
-            Lesson.date >= date.date(), Lesson.date < date.date() + timedelta(days=7), Lesson.status == "upcoming",
+            Lesson.date >= date.date(),
+            Lesson.date < date.date() + timedelta(days=7),
+            Lesson.status == "upcoming",
         )
         if telegram_id in ADMINS:
             lessons = session.query(Lesson).filter(*upcoming_week_filter_args).order_by(Lesson.date).all()
