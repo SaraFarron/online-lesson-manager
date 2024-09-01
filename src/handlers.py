@@ -1,13 +1,13 @@
 from datetime import datetime
 
-from aiogram import Router, html
+from aiogram import F, Router, html
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
 
 from callbacks import DateCallBack, RemoveLessonCallBack, TimeCallBack, YesNoCallBack
-from config import logs, messages, notifications
+from config import help, logs, messages, notifications
 from config.config import DATE_FORMAT, TIME_FORMAT, TIMEZONE
 from config.messages import BOT_DESCRIPTION, HELP_MESSAGE
 from database import engine
@@ -21,12 +21,14 @@ router: Router = Router()
 
 
 @router.message(Command("help"))
+@router.message(F.text == help.HELP)
 async def get_help(message: Message) -> None:
     """Handler receives messages with `/help` command."""
     await message.answer(HELP_MESSAGE, reply_markup=available_commands(message.from_user.id))
 
 
 @router.message(CommandStart())
+@router.message(F.text == help.START)
 async def command_start_handler(message: Message) -> None:
     """Handler receives messages with `/start` command."""
     with Session(engine) as session:
@@ -40,6 +42,7 @@ async def command_start_handler(message: Message) -> None:
 
 
 @router.message(Command("cancel"))
+@router.message(F.text == help.CANCEL)
 async def cancel_handler(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/cancel` command."""
     current_state = await state.get_state()
@@ -51,6 +54,7 @@ async def cancel_handler(message: Message, state: FSMContext) -> None:
 
 
 @router.message(Command("get_schedule"))
+@router.message(F.text == help.GET_SCHEDULE)
 async def get_schedule(message: Message) -> None:
     """Handler receives messages with `/get_schedule` command."""
     today = datetime.now(TIMEZONE)
@@ -65,6 +69,7 @@ async def get_schedule(message: Message) -> None:
 
 
 @router.message(Command("get_schedule_week"))
+@router.message(F.text == help.GET_SCHEDULE_WEEK)
 async def get_schedule_week(message: Message) -> None:
     """Handler receives messages with `/get_schedule_week` command."""
     today = datetime.now(TIMEZONE)
@@ -79,6 +84,7 @@ async def get_schedule_week(message: Message) -> None:
 
 
 @router.message(Command("add_lesson"))
+@router.message(F.text == help.ADD_LESSON)
 async def add_lesson(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/add_lesson` command."""
     logger.info(logs.ADD_LESSON_INTENT, message.from_user.full_name)
@@ -128,6 +134,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(Command("remove_lesson"))
+@router.message(F.text == help.REMOVE_LESSON)
 async def remove_lesson(message: Message) -> None:
     """Handler receives messages with `/remove_lesson` command."""
     logger.info(logs.REMOVE_LESSON_INTENT, message.from_user.full_name)

@@ -12,13 +12,13 @@ from utils import get_available_time, get_weeks
 def available_commands(user_id: int):
     """Create a keyboard with available commands."""
     builder = ReplyKeyboardBuilder()
-    builder.button(text=f"/start - {help.START}")
-    builder.button(text=f"/help - {help.HELP}")
-    builder.button(text=f"/add_lesson - {help.ADD_LESSON}")
-    builder.button(text=f"/remove_lesson - {help.REMOVE_LESSON}")
-    builder.button(text=f"/get_schedule - {help.GET_SCHEDULE}")
-    builder.button(text=f"/get_schedule_week - {help.GET_SCHEDULE_WEEK}")
-    builder.button(text=f"/cancel - {help.CANCEL}")
+    builder.button(text=f"{help.START}")
+    builder.button(text=f"{help.HELP}")
+    builder.button(text=f"{help.ADD_LESSON}")
+    builder.button(text=f"{help.REMOVE_LESSON}")
+    builder.button(text=f"{help.GET_SCHEDULE}")
+    builder.button(text=f"{help.GET_SCHEDULE_WEEK}")
+    builder.button(text=f"{help.CANCEL}")
     if user_id in ADMINS:
         builder.button(text=help.ADMIN_GROUP)
     builder.adjust(2, repeat=True)
