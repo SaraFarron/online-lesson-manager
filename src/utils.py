@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from config import messages
 from config.base import getenv
-from config.config import ADMINS, AVAILABLE_HOURS, DATE_FORMAT, DATE_FORMAT_HR, TIMEZONE, WORK_SCHEDULE_TIMETABLE_PATH
+from config.config import ADMINS, DATE_FORMAT, DATE_FORMAT_HR, TIMEZONE, WORK_SCHEDULE_TIMETABLE_PATH
 from database import engine
 from models import Lesson
 
@@ -58,13 +58,49 @@ def working_hours_on_day(weekday: Literal["ПН", "ВТ", "СР", "ЧТ", "ПТ"
     return {weekday: messages.NO_DATA}
 
 
+def get_weekday(weekday: int) -> Literal["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]:
+    """Get the current day of the week."""
+    with open(WORK_SCHEDULE_TIMETABLE_PATH) as f:
+        data = json.load(f)
+    match weekday:
+        case 0:
+            res = data["ПН"]
+        case 1:
+            res = data["ВТ"]
+        case 2:
+            res = data["СР"]
+        case 3:
+            res = data["ЧТ"]
+        case 4:
+            res = data["ПТ"]
+        case 5:
+            res = data["СБ"]
+        case 6:
+            res = data["ВС"]
+    return res
+
+
 def get_available_hours(date: datetime) -> list[str]:
     """Get a list of available hours for the current day."""
+    schedule = get_weekday(date.weekday())
+    current_time = datetime.strptime(schedule["start"], "%H:%M")  # noqa: DTZ007
+    available_hours = []
+    if "break" in schedule:
+        break_start = datetime.strptime(schedule["break"]["start"], "%H:%M")  # noqa: DTZ007
+        break_end = datetime.strptime(schedule["break"]["end"], "%H:%M")  # noqa: DTZ007
+    else:
+        break_start, break_end = None, None
+    while current_time < datetime.strptime(schedule["end"], "%H:%M"):  # noqa: DTZ007
+        if break_start and not (break_start <= current_time < break_end):
+            available_hours.append((current_time.hour, current_time.minute))
+        current_time += timedelta(hours=1)
+    return available_hours
 
 
 def get_available_time(date: datetime) -> list[tuple[int, int]]:
     """Get a list of available time for the current day."""
     today_args = (date.year, date.month, date.day)
+    available_hours = get_available_hours(date)
     with Session(engine) as session:
         # Get all lessons for the current day
         lessons = session.query(Lesson).filter(Lesson.date == date, Lesson.status == "upcoming").all()
@@ -80,21 +116,17 @@ def get_available_time(date: datetime) -> list[tuple[int, int]]:
 
         # Create a list of available times
         available_times = []
-        for hour in AVAILABLE_HOURS:
-            for minute in range(0, 60, 30):
-                # Pasha asked to remove 30s from the list
-                if minute == 30:
-                    continue
-                current_time = datetime(*today_args, hour, minute, tzinfo=TIMEZONE)
-                taken = False
-                for taken_time in taken_times:
-                    if taken_time[0] <= current_time < taken_time[1]:
-                        taken = True
-                if not taken:
-                    available_times.append((hour, minute))
+        for hour, minute in available_hours:
+            current_time = datetime(*today_args, hour, minute, tzinfo=TIMEZONE)
+            taken = False
+            for taken_time in taken_times:
+                if taken_time[0] <= current_time < taken_time[1]:
+                    taken = True
+            if not taken:
+                available_times.append((hour, minute))
 
-    if (AVAILABLE_HOURS[-1], 30) in available_times:
-        available_times.remove((AVAILABLE_HOURS[-1], 30))
+    if (available_hours[-1][0], 30) in available_times:
+        available_times.remove((available_hours[-1][0], 30))
     return available_times
 
 

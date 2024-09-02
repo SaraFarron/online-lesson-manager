@@ -1,12 +1,13 @@
 import json
 from datetime import datetime
 
+import aiofiles
 from aiogram import F, Router, html
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
-import aiofiles
+
 from callbacks import (
     DateCallBack,
     EditWeekdayCallBack,

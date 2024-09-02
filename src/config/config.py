@@ -29,7 +29,6 @@ DATE_FORMAT_HR = "%d.%m"
 TIME_FORMAT = "%H.%M"
 TIMEZONE = pytz.timezone("Europe/Moscow")
 
-AVAILABLE_HOURS = list(range(9, 21))
 MAX_BUTTON_ROWS = 10
 
 ADMINS = [
