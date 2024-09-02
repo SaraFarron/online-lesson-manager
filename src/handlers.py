@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from aiogram import F, Router, html
@@ -5,20 +6,36 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.orm import Session
-
-from callbacks import (DateCallBack, RemoveLessonCallBack, TimeCallBack, WeekdayCallBack,
-                       YesNoCallBack)
+import aiofiles
+from callbacks import (
+    DateCallBack,
+    EditWeekdayCallBack,
+    RemoveLessonCallBack,
+    TimeCallBack,
+    WeekdayCallBack,
+    YesNoCallBack,
+)
 from config import help, logs, messages, notifications
-from config.config import ADMINS, DATE_FORMAT, TIME_FORMAT, TIMEZONE
+from config.config import ADMINS, DATE_FORMAT, TIME_FORMAT, TIMEZONE, WORK_SCHEDULE_TIMETABLE_PATH
 from config.messages import BOT_DESCRIPTION, HELP_MESSAGE
 from database import engine
-from keyborads import (available_commands, available_time, calendar,
-                       lessons_to_remove, yes_no, working_hours_keyboard)
+from keyborads import (
+    available_commands,
+    available_time,
+    calendar,
+    lessons_to_remove,
+    working_hours_keyboard,
+    working_hours_on_day_keyboard,
+    yes_no,
+)
 from logger import logger
 from models import Lesson, User
-from states import AddLesson
-from utils import (get_todays_schedule, get_weeks_schedule, notify_admins,
-                   working_hours)
+from states import AddLesson, NewTime
+from utils import (
+    get_todays_schedule,
+    get_weeks_schedule,
+    notify_admins,
+)
 
 router: Router = Router()
 
@@ -193,7 +210,77 @@ async def edit_work_schedule(message: Message) -> None:
 
 
 @router.callback_query(WeekdayCallBack.filter())
-async def choose_weekday(callback: CallbackQuery) -> None:
+async def choose_weekday(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_weekday` state."""
     logger.info(logs.EDIT_WEEKDAY, callback.from_user.full_name, callback.data)
-    await callback.message.answer(messages.EDIT_WEEKDAY, reply_markup=working_hours_keyboard())
+    await state.update_data(weekday=callback.data.replace("choose_weekday:", ""))
+    weekday_k6d = working_hours_on_day_keyboard(callback.data.replace("choose_weekday:", ""))
+    await callback.message.answer(messages.EDIT_WEEKDAY, reply_markup=weekday_k6d)
+
+
+@router.callback_query(EditWeekdayCallBack.filter())
+async def edit_weekday(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handler receives messages with `edit_weekday` state."""
+    period = callback.data.replace("edit_weekday:", "")
+    state_data = await state.get_data()
+    weekday = state_data["weekday"]
+    match period:
+        case "daystart":
+            await state.update_data(period="daystart")
+            await callback.message.answer(messages.SEND_NEW_TIME)
+        case "dayend":
+            await state.update_data(period="dayend")
+            await callback.message.answer(messages.SEND_NEW_TIME)
+        case "addbreak":
+            await state.update_data(period="addbreak")
+            await callback.message.answer(messages.SEND_BREAK_TIME)
+        case "rmbreak":
+            await state.update_data(period="rmbreak")
+            async with aiofiles.open(WORK_SCHEDULE_TIMETABLE_PATH) as f:
+                data = json.loads(await f.read())
+            data[weekday].pop("break")
+            async with aiofiles.open(WORK_SCHEDULE_TIMETABLE_PATH, "w") as f:
+                await f.write(json.dumps(data))
+            await callback.message.answer(messages.BREAK_REMOVED)
+        case "breakstart":
+            await state.update_data(period="breakstart")
+            await callback.message.answer(messages.SEND_NEW_TIME)
+        case "breakend":
+            await state.update_data(period="breakend")
+            await callback.message.answer(messages.SEND_NEW_TIME)
+    await state.set_state(NewTime.new_time)
+
+
+@router.message(NewTime.new_time)
+async def new_time(message: Message, state: FSMContext) -> None:
+    """Handler receives messages with `new_time` state."""
+    state_data = await state.get_data()
+    period = state_data["period"]
+    try:
+        if period == "addbreak":
+            start_end = message.text.split("-")
+            datetime.strptime(start_end[0], "%H:%M")  # noqa: DTZ007
+            datetime.strptime(start_end[1], "%H:%M")  # noqa: DTZ007
+        else:
+            datetime.strptime(message.text, "%H:%M")  # noqa: DTZ007
+    except ValueError:
+        await message.answer(messages.INVALID_TIME)
+        return
+    async with aiofiles.open(WORK_SCHEDULE_TIMETABLE_PATH) as f:
+        data = json.loads(await f.read())
+    match period:
+        case "daystart":
+            data[state_data["weekday"]]["start"] = message.text
+        case "dayend":
+            data[state_data["weekday"]]["end"] = message.text
+        case "breakstart":
+            data[state_data["weekday"]]["break"]["start"] = message.text
+        case "breakend":
+            data[state_data["weekday"]]["break"]["end"] = message.text
+        case "addbreak":
+            start_end = message.text.split("-")
+            data[state_data["weekday"]]["break"] = {"start": start_end[0], "end": start_end[1]}
+    async with aiofiles.open(WORK_SCHEDULE_TIMETABLE_PATH, "w") as f:
+        await f.write(json.dumps(data))
+    await message.answer(messages.TIME_UPDATED)
+    await state.clear()

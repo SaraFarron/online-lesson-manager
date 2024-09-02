@@ -19,3 +19,7 @@ class YesNoCallBack(CallbackData, prefix="yes_no"):
 
 class WeekdayCallBack(CallbackData, prefix="choose_weekday"):
     weekday: str
+
+
+class EditWeekdayCallBack(CallbackData, prefix="edit_weekday"):
+    period: str

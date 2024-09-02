@@ -37,4 +37,4 @@ ADMINS = [
     882315246,  # Sara
 ]
 
-WORK_SCHEDULE_TIMETABLE_PATH = Path("../db/work_schedule.json")
+WORK_SCHEDULE_TIMETABLE_PATH = Path(__file__).parent.parent.parent / "db/work_schedule.json"

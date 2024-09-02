@@ -40,12 +40,12 @@ def working_hours() -> dict[str, str]:
     """Get working schedule."""
     with open(WORK_SCHEDULE_TIMETABLE_PATH) as f:
         data: dict[str, str] = json.load(f)
-    days = []
+    days = {}
     for key, day in data.items():
         day_start = f"Начало: {day['start']}\n"
         day_break = f"Перерыв: {day['break']['start']} - {day['break']['end']}\n" if "break" in day else ""
         day_end = f"Конец: {day['end']}"
-        days.append({key: f"{day_start}{day_break}{day_end}"})
+        days[key] = f"{day_start}{day_break}{day_end}"
     return days
 
 

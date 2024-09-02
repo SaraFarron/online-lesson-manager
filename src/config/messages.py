@@ -29,6 +29,12 @@ SCHEDULE_EMPTY_WEEK = "На этой неделе занятий нет"
 SCHEDULE_WEEK = "Занятия на этой неделе:\n"
 
 SHOW_WORK_SCHEDULE = "Текущее рабочее расписание:\n"
+EDIT_WEEKDAY = "Выберите время для редактирования:\n"
+SEND_NEW_TIME = "Напишите новое врем в формате ЧЧ:ММ"
+SEND_BREAK_TIME = "Напишите время перерыва в формате ЧЧ:ММ-ЧЧ:ММ"
+BREAK_REMOVED = "Перерыв удален"
+INVALID_TIME = "Некорректное время"
+TIME_UPDATED = "Время обновлено"
 
 PERMISSION_DENIED = "У вас нет доступа к этой команде"
 NO_DATA = "Нет данных"
