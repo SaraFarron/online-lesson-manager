@@ -14,6 +14,7 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     lessons: Mapped[list[Lesson]] = relationship(back_populates="user")
+    scheduled_lessons: Mapped[list[ScheduledLesson]] = relationship(back_populates="user")
 
     def __repr__(self) -> str:
         """String model represetation."""
@@ -34,3 +35,18 @@ class Lesson(Base):
     def __repr__(self) -> str:
         """String model represetation."""
         return f"Lesson(id={self.id!r}, date={self.date!r}, time={self.time!r}, user_id={self.user_id!r})"
+
+
+class ScheduledLesson(Base):
+    __tablename__ = "scheduled_lesson"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    weekday: Mapped[str] = mapped_column(String(2))
+    time: Mapped[Time] = mapped_column(Time)
+    end_time: Mapped[Time] = mapped_column(Time)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
+    user: Mapped[User] = relationship(back_populates="scheduled_lessons")
+    is_cancelled: Mapped[bool] = mapped_column(default=False)
+
+    def __repr__(self) -> str:
+        """String model represetation."""
+        return f"Lesson(id={self.id!r}, weekday={self.weekday!r}, time={self.time!r}, user_id={self.user_id!r})"

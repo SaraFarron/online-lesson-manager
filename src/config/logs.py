@@ -9,6 +9,7 @@ REQUEST_SCHEDULE_NO_USER = "User %s requested schedule without registration"
 ADD_LESSON_INTENT = "User %s wants to add a lesson"
 ADD_LESSON_DATE = "User %s chose %s date"
 ADD_LESSON_TIME = "User %s chose %s time"
+ADD_SCHEDULED_LESSON_INTENT = "User %s wants to add a scheduled lesson"
 
 REMOVE_LESSON_INTENT = "User %s wants to remove a lesson"
 REMOVE_LESSON_CHOICE = "User %s chose %s lesson to remove"

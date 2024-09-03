@@ -37,3 +37,12 @@ ADMINS = [
 ]
 
 WORK_SCHEDULE_TIMETABLE_PATH = Path(__file__).parent.parent.parent / "db/work_schedule.json"
+WEEKDAYS = {
+    "ПН": "Понедельник",
+    "ВТ": "Вторник",
+    "СР": "Среда",
+    "ЧТ": "Четверг",
+    "ПТ": "Пятница",
+    "СБ": "Суббота",
+    "ВС": "Воскресенье",
+}

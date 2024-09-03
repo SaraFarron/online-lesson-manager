@@ -13,12 +13,15 @@ from lessons.callbacks import (
     DateCallBack,
     RemoveLessonCallBack,
     TimeCallBack,
+    WeekdayCallback,
     YesNoCallBack,
 )
 from lessons.keyboards import (
+    available_schedule_keyboard,
     available_time_keyboard,
     calendar_keyboard,
     lessons_to_remove_keyboard,
+    weekdays_keyboard,
     yes_no_keyboard,
 )
 from lessons.states import AddLesson
@@ -58,6 +61,23 @@ async def get_schedule_week(message: Message) -> None:
         else:
             logger.warn(logs.REQUEST_SCHEDULE_NO_USER, message.from_user.full_name)
             await message.answer(messages.NOT_REGISTERED)
+
+
+@router.message(Command("add_scheduled_lesson"))
+@router.message(F.text == help.ADD_SCHEDULED_LESSON)
+async def add_scheduled_lesson(message: Message) -> None:
+    """Handler receives messages with `/add_scheduled_lesson` command."""
+    logger.info(logs.ADD_SCHEDULED_LESSON_INTENT, message.from_user.full_name)
+    await message.answer(messages.CHOOSE_DATE, reply_markup=weekdays_keyboard())
+
+
+@router.callback_query(WeekdayCallback.filter())
+async def choose_scheduled_time(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handler receives messages with `choose_scheduled_time` state."""
+    logger.info(logs.ADD_SCHEDULED_LESSON_WEEKDAY, callback.from_user.full_name, callback.data)
+    await state.update_data(weekday=callback.data)
+    await state.set_state(AddLesson.choose_date)
+    await callback.answer(messages.CHOOSE_DATE, reply_markup=available_schedule_keyboard())
 
 
 @router.message(Command("add_lesson"))
