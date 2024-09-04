@@ -5,16 +5,15 @@ from typing import Literal
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config.config import MAX_BUTTON_ROWS
-from teacher.callbacks import EditWeekdayCallBack, WeekdayCallBack
+from teacher.callbacks import EditWeekdayCallBack, WorkWeekdayCallBack
 from teacher.utils import working_hours, working_hours_on_day
 
 
 def working_hours_keyboard():
     """Create a keyboard with working hours."""
     builder = InlineKeyboardBuilder()
-    for weekday, schedule in working_hours().items():
-        builder.button(text=f"{weekday}\n{schedule}", callback_data=WeekdayCallBack(weekday=weekday))
-    builder.adjust(1 if len(list(builder.buttons)) <= MAX_BUTTON_ROWS else 2, repeat=True)
+    for weekday in working_hours():  # schedule in working_hours
+        builder.button(text=f"{weekday}", callback_data=WorkWeekdayCallBack(weekday=weekday))
     return builder.as_markup()
 
 

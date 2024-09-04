@@ -34,10 +34,12 @@ def get_weeks(start_date: datetime | None = None):
     return weeks
 
 
-def get_weekday(weekday: int) -> Literal["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]:
+def get_weekday(weekday: int | str) -> Literal["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]:
     """Get the current day of the week."""
     with open(WORK_SCHEDULE_TIMETABLE_PATH) as f:
         data = json.load(f)
+    if isinstance(weekday, str):
+        return data[weekday]
     match weekday:
         case 0:
             res = data["ПН"]

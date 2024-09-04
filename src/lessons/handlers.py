@@ -77,9 +77,10 @@ async def add_scheduled_lesson(message: Message) -> None:
 @log_func
 async def choose_scheduled_time(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_scheduled_time` state."""
-    await state.update_data(weekday=callback.data)
+    weekday = callback.data.replace("choose_weekday:", "")
+    await state.update_data(weekday=weekday)
     await state.set_state(AddLesson.choose_date)
-    await callback.answer(messages.CHOOSE_DATE, reply_markup=available_schedule_keyboard(callback.data))
+    await callback.message.answer(messages.CHOOSE_DATE, reply_markup=available_schedule_keyboard(weekday))
 
 
 @router.message(Command("add_lesson"))

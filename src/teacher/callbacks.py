@@ -1,7 +1,7 @@
 from aiogram.filters.callback_data import CallbackData
 
 
-class WeekdayCallBack(CallbackData, prefix="choose_weekday"):
+class WorkWeekdayCallBack(CallbackData, prefix="choose_work_weekday"):
     weekday: str
 
 

@@ -7,10 +7,10 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from config import help, logs, messages
+from config import help, messages
 from config.config import ADMINS, WORK_SCHEDULE_TIMETABLE_PATH
-from logger import log_func, logger
-from teacher.callbacks import EditWeekdayCallBack, WeekdayCallBack
+from logger import log_func
+from teacher.callbacks import EditWeekdayCallBack, WorkWeekdayCallBack
 from teacher.keyboards import working_hours_keyboard, working_hours_on_day_keyboard
 from teacher.states import NewTime
 
@@ -27,12 +27,12 @@ async def edit_work_schedule(message: Message) -> None:
     await message.answer(messages.SHOW_WORK_SCHEDULE, reply_markup=working_hours_keyboard())
 
 
-@router.callback_query(WeekdayCallBack.filter())
+@router.callback_query(WorkWeekdayCallBack.filter())
 @log_func
 async def choose_weekday(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_weekday` state."""
-    await state.update_data(weekday=callback.data.replace("choose_weekday:", ""))
-    weekday_k6d = working_hours_on_day_keyboard(callback.data.replace("choose_weekday:", ""))
+    await state.update_data(weekday=callback.data.replace("choose_work_weekday:", ""))
+    weekday_k6d = working_hours_on_day_keyboard(callback.data.replace("choose_work_weekday:", ""))
     await callback.message.answer(messages.EDIT_WEEKDAY, reply_markup=weekday_k6d)
 
 

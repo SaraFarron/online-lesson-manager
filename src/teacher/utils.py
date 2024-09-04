@@ -13,10 +13,9 @@ def working_hours() -> dict[str, str]:
         data: dict[str, str] = json.load(f)
     days = {}
     for key, day in data.items():
-        day_start = f"Начало: {day['start']}\n"
-        day_break = f"Перерыв: {day['break']['start']} - {day['break']['end']}\n" if "break" in day else ""
-        day_end = f"Конец: {day['end']}"
-        days[key] = f"{day_start}{day_break}{day_end}"
+        working_hours = f"Рабочее время: {day['start']} - {day['end']}"
+        day_break = f"\nПерерыв: {day['break']['start']} - {day['break']['end']}" if "break" in day else ""
+        days[key] = working_hours + day_break
     return days
 
 

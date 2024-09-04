@@ -16,7 +16,8 @@ def log_func(func: Callable):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
-            logger.info(logs.FUNCTION_CALL, func.__name__, args, kwargs)
+            logger.info(func.__name__)
+            # logger.info(logs.FUNCTION_CALL, func.__name__, args, kwargs)
             return func(*args, **kwargs)
         except Exception as e:
             logger.exception(logs.FUNCTION_EXP, func.__name__)
