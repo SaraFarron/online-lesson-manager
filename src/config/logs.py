@@ -18,3 +18,6 @@ USER_NOT_FOUND = "User %s:%s not found"
 USER_CHOICE = "User %s chose %s"
 
 EDIT_WEEKDAY = "User %s is changing working hours on %s"
+
+FUNCTION_CALL = "Calling %s. args: %s, kwargs: %s"
+FUNCTION_EXP = "Exception raised in %s"

@@ -8,7 +8,7 @@ from config import help, logs, messages
 from config.messages import BOT_DESCRIPTION, HELP_MESSAGE
 from database import engine
 from general.keyboards import all_commands_keyboard
-from logger import logger
+from logger import logger, log_func
 from models import User
 
 router: Router = Router()
@@ -16,6 +16,7 @@ router: Router = Router()
 
 @router.message(Command("help"))
 @router.message(F.text == help.HELP)
+@log_func
 async def get_help(message: Message) -> None:
     """Handler receives messages with `/help` command."""
     await message.answer(HELP_MESSAGE, reply_markup=all_commands_keyboard(message.from_user.id))
@@ -23,6 +24,7 @@ async def get_help(message: Message) -> None:
 
 @router.message(CommandStart())
 @router.message(F.text == help.START)
+@log_func
 async def command_start_handler(message: Message) -> None:
     """Handler receives messages with `/start` command."""
     with Session(engine) as session:
@@ -37,6 +39,7 @@ async def command_start_handler(message: Message) -> None:
 
 @router.message(Command("cancel"))
 @router.message(F.text == help.CANCEL)
+@log_func
 async def cancel_handler(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/cancel` command."""
     current_state = await state.get_state()

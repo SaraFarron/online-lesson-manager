@@ -26,7 +26,7 @@ from lessons.keyboards import (
 )
 from lessons.states import AddLesson
 from lessons.utils import get_todays_schedule, get_weeks_schedule
-from logger import logger
+from logger import log_func, logger
 from models import Lesson, User
 from utils import notify_admins
 
@@ -35,6 +35,7 @@ router: Router = Router()
 
 @router.message(Command("get_schedule"))
 @router.message(F.text == help.GET_SCHEDULE)
+@log_func
 async def get_schedule(message: Message) -> None:
     """Handler receives messages with `/get_schedule` command."""
     today = datetime.now(TIMEZONE)
@@ -50,6 +51,7 @@ async def get_schedule(message: Message) -> None:
 
 @router.message(Command("get_schedule_week"))
 @router.message(F.text == help.GET_SCHEDULE_WEEK)
+@log_func
 async def get_schedule_week(message: Message) -> None:
     """Handler receives messages with `/get_schedule_week` command."""
     today = datetime.now(TIMEZONE)
@@ -65,35 +67,35 @@ async def get_schedule_week(message: Message) -> None:
 
 @router.message(Command("add_scheduled_lesson"))
 @router.message(F.text == help.ADD_SCHEDULED_LESSON)
+@log_func
 async def add_scheduled_lesson(message: Message) -> None:
     """Handler receives messages with `/add_scheduled_lesson` command."""
-    logger.info(logs.ADD_SCHEDULED_LESSON_INTENT, message.from_user.full_name)
     await message.answer(messages.CHOOSE_DATE, reply_markup=weekdays_keyboard())
 
 
 @router.callback_query(WeekdayCallback.filter())
+@log_func
 async def choose_scheduled_time(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_scheduled_time` state."""
-    logger.info(logs.ADD_SCHEDULED_LESSON_WEEKDAY, callback.from_user.full_name, callback.data)
     await state.update_data(weekday=callback.data)
     await state.set_state(AddLesson.choose_date)
-    await callback.answer(messages.CHOOSE_DATE, reply_markup=available_schedule_keyboard())
+    await callback.answer(messages.CHOOSE_DATE, reply_markup=available_schedule_keyboard(callback.data))
 
 
 @router.message(Command("add_lesson"))
 @router.message(F.text == help.ADD_LESSON)
+@log_func
 async def add_lesson(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/add_lesson` command."""
-    logger.info(logs.ADD_LESSON_INTENT, message.from_user.full_name)
     await state.set_state(AddLesson.choose_date)
     await state.update_data(user_id=message.from_user.id, name=message.from_user.full_name)
     await message.answer(messages.CHOOSE_DATE, reply_markup=calendar_keyboard())
 
 
 @router.callback_query(DateCallBack.filter())
+@log_func
 async def choose_date(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_date` state."""
-    logger.info(logs.ADD_LESSON_DATE, callback.from_user.full_name, callback.data)
     day = datetime.strptime(callback.data, f"choose_date:{DATE_FORMAT}").date()  # noqa: DTZ007
     await state.update_data(date=day)
     await state.set_state(AddLesson.choose_time)
@@ -101,10 +103,10 @@ async def choose_date(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(TimeCallBack.filter())
+@log_func
 async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_time` state."""
     state_data = await state.get_data()
-    logger.info(logs.ADD_LESSON_TIME, callback.from_user.full_name, callback.data)
     # Separator symbol ':' can not be used in callback_data
     time = datetime.strptime(callback.data, f"choose_time:{TIME_FORMAT}").time()  # noqa: DTZ007
     await state.update_data(time=time)
@@ -133,9 +135,9 @@ async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(Command("remove_lesson"))
 @router.message(F.text == help.REMOVE_LESSON)
+@log_func
 async def remove_lesson(message: Message) -> None:
     """Handler receives messages with `/remove_lesson` command."""
-    logger.info(logs.REMOVE_LESSON_INTENT, message.from_user.full_name)
     with Session(engine) as session:
         user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
         if user:
@@ -149,9 +151,9 @@ async def remove_lesson(message: Message) -> None:
 
 
 @router.callback_query(RemoveLessonCallBack.filter())
+@log_func
 async def choose_lesson_to_remove(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `choose_lesson_to_remove` state."""
-    logger.info(logs.REMOVE_LESSON_CHOICE, callback.from_user.full_name, callback.data)
     with Session(engine) as session:
         lesson_id = int(callback.data.replace("remove_lesson:", ""))
         lesson = session.query(Lesson).filter(Lesson.id == lesson_id).first()
@@ -167,9 +169,9 @@ async def choose_lesson_to_remove(callback: CallbackQuery, state: FSMContext) ->
 
 
 @router.callback_query(YesNoCallBack.filter())
+@log_func
 async def set_new_date(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `set_new_date` state."""
-    logger.info(logs.USER_CHOICE, callback.from_user.full_name, callback.data)
     if callback.data == "yes_no:yes":
         await state.set_state(AddLesson.choose_date)
         await callback.message.answer(messages.CHOOSE_NEW_DATE, reply_markup=calendar_keyboard())
