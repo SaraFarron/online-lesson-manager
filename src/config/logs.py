@@ -2,6 +2,7 @@ START = "Starting bot"
 STOP = "Bot stopped"
 DB_CONNECTING = "Connecting to database"
 
+TEACHER_REGISTERED = "Teacher %s registered"
 USER_REGISTERED = "User %s registered"
 REQUEST_SCHEDULE = "User %s requested schedule"
 REQUEST_SCHEDULE_NO_USER = "User %s requested schedule without registration"

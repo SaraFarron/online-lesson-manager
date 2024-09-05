@@ -8,14 +8,9 @@ from sqlalchemy.orm import Session
 
 from config.config import MAX_BUTTON_ROWS, WEEKDAYS
 from database import engine
-from lessons.callbacks import (
-    CreateScheduledLessonCallBack,
-    DateCallBack,
-    RemoveLessonCallBack,
-    TimeCallBack,
-    WeekdayCallback,
-    YesNoCallBack,
-)
+from lessons.callbacks import (CreateScheduledLessonCallBack, DateCallBack,
+                               RemoveLessonCallBack, TimeCallBack,
+                               WeekdayCallback, YesNoCallBack)
 from lessons.utils import get_available_time, get_weekday, get_weeks
 from models import Lesson, ScheduledLesson
 
@@ -46,7 +41,7 @@ def available_schedule_keyboard(weekday: Literal["ПН", "ВТ", "СР", "ЧТ",
     if lessons:
         for h in available_hours:
             for lesson in lessons:
-                if lesson.time.hour <= h < lesson.end_time.hour:
+                if lesson.start_time.hour <= h < lesson.end_time.hour:
                     available_hours.remove(h)
                     break
     builder = InlineKeyboardBuilder()

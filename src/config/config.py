@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, time
 from pathlib import Path
 
 import pytz
@@ -35,6 +36,8 @@ ADMINS = [
     5362724893,  # Pasha
     882315246,  # Sara
 ]
+WORK_START = time(hour=9, minute=0, tzinfo=TIMEZONE)
+WORK_END = time(hour=21, minute=0, tzinfo=TIMEZONE)
 
 WORK_SCHEDULE_TIMETABLE_PATH = Path(__file__).parent.parent.parent / "db/work_schedule.json"
 WEEKDAYS = {
