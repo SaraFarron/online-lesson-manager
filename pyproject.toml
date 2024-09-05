@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "online-lesson-manager"
-version = "0.1.1"
+version = "0.2.0"
 description = ""
 authors = ["SaraFarron <sarafarron@gmail.com>"]
 readme = "README.md"
@@ -12,6 +12,7 @@ python-dotenv = "^1.0.1"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.32"}
 pytz = "^2024.1"
 alembic = "^1.13.2"
+sqlalchemy-utils = "^0.41.2"
 
 
 [build-system]
