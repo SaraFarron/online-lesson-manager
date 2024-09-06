@@ -16,7 +16,7 @@ from logger import log_func, logger
 from models import RestrictedTime, ScheduledLesson, User
 from utils import inline_keyboard
 
-COMMAND = "/add_lesson"
+COMMAND = "/add_sl"
 MAX_HOUR = 23
 
 router = Router()

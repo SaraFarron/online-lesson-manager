@@ -8,13 +8,13 @@ from aiogram.types import Message
 from sqlalchemy.orm import Session
 
 from config import logs
-from config.config import TIMEZONE
+from config.config import TIMEZONE, WEEKDAY_MAP
 from database import engine
 from help import Commands
 from logger import log_func, logger
 from models import Lesson, Reschedule, ScheduledLesson, Teacher, User
 
-COMMAND = "get_schedule"
+COMMAND = "today_schedule"
 router: Router = Router()
 
 
@@ -22,17 +22,6 @@ class Messages:
     NOT_REGISTERED = "Вы не зарегистрированы. Пожалуйста воспользуйтесь командой /start"
     SCHEDULE_EMPTY = "На сегодня занятий нет"
     SCHEDULE = "Занятия на сегодня:\n"
-
-
-WEEKDAY_MAP = {
-    0: "ПН",
-    1: "ВТ",
-    2: "СР",
-    3: "ЧТ",
-    4: "ПТ",
-    5: "СБ",
-    6: "ВС",
-}
 
 
 def today_schedule_for_user(date: datetime, user_id: int):
@@ -110,7 +99,7 @@ def get_todays_schedule(date: datetime, telegram_id: int) -> list[dict[str, str]
 
 
 @router.message(Command(COMMAND))
-@router.message(F.text == Commands.GET_SCHEDULE.value)
+@router.message(F.text == Commands.TODAY_SCHEDULE.value)
 @log_func
 async def today_schedule_handler(message: Message) -> None:
     """Handler returns today's schedule."""
