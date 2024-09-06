@@ -8,11 +8,12 @@ from aiogram.types import Message
 from sqlalchemy.orm import Session
 
 from config import logs
-from config.config import TIMEZONE, WEEKDAY_MAP, WEEKDAY_MAP_FULL
+from config.config import TIMEZONE, WEEKDAY_MAP_FULL
 from database import engine
 from help import Commands
 from logger import log_func, logger
-from models import Lesson, Reschedule, ScheduledLesson, Teacher, User
+from models import Teacher, User
+from utils import today_schedule_for_teacher, today_schedule_for_user
 
 COMMAND = "week_schedule"
 router: Router = Router()
@@ -22,67 +23,6 @@ class Messages:
     NOT_REGISTERED = "Вы не зарегистрированы. Пожалуйста воспользуйтесь командой /start"
     SCHEDULE_EMPTY = "Занятий нет"
     SCHEDULE = "Занятия:\n"
-
-
-def today_schedule_for_user(date: datetime, user_id: int):
-    """Gets today's schedule for the user."""
-    schedule = []
-    weekday = WEEKDAY_MAP[date.weekday()]
-    with Session(engine) as session:
-        # Get regular lessons
-        lessons = session.query(Lesson).filter(Lesson.date == date.date(), Lesson.user_id == user_id).all()
-        schedule = [(lesson.time, lesson.end_time) for lesson in lessons]
-
-        # Get reschedules
-        reschedules = (
-            session.query(Reschedule).filter(Reschedule.date == date.date(), Reschedule.user_id == user_id).all()
-        )
-        for reschedule in reschedules:
-            schedule.append((reschedule.start_time, reschedule.end_time))
-        canceled_sls = [rs.source for rs in reschedules]
-
-        # Get scheduled lessons
-        scheduled_lessons = (
-            session.query(ScheduledLesson)
-            .filter(ScheduledLesson.weekday == weekday, ScheduledLesson.user_id == user_id)
-            .all()
-        )
-        for scheduled_lesson in scheduled_lessons:
-            if scheduled_lesson not in canceled_sls:
-                schedule.append((scheduled_lesson.start_time, scheduled_lesson.end_time))
-    schedule.sort(key=lambda x: x[0])
-    return schedule
-
-
-def today_schedule_for_teacher(date: datetime, teacher: Teacher):
-    """Gets today's schedule for the teacher."""
-    schedule = []
-    weekday = WEEKDAY_MAP[date.weekday()]
-    with Session(engine) as session:
-        students = [s.id for s in teacher.students]
-        # Get regular lessons
-        lessons = session.query(Lesson).filter(Lesson.date == date.date(), Lesson.user_id.in_(students)).all()
-        schedule = [(lesson.time, lesson.end_time, lesson.user.name) for lesson in lessons]
-
-        # Get reschedules
-        reschedules = (
-            session.query(Reschedule).filter(Reschedule.date == date.date(), Reschedule.user_id.in_(students)).all()
-        )
-        for reschedule in reschedules:
-            schedule.append((reschedule.start_time, reschedule.end_time, reschedule.user.name))
-        canceled_sls = [rs.source for rs in reschedules]
-
-        # Get scheduled lessons
-        scheduled_lessons = (
-            session.query(ScheduledLesson)
-            .filter(ScheduledLesson.weekday == weekday, ScheduledLesson.user_id.in_(students))
-            .all()
-        )
-        for scheduled_lesson in scheduled_lessons:
-            if scheduled_lesson not in canceled_sls:
-                schedule.append((scheduled_lesson.start_time, scheduled_lesson.end_time, scheduled_lesson.user.name))
-    schedule.sort(key=lambda x: x[0])
-    return schedule
 
 
 def get_todays_schedule(date: datetime, telegram_id: int) -> list[dict[str, str]]:
