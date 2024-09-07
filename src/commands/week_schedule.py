@@ -13,7 +13,7 @@ from database import engine
 from help import Commands
 from logger import log_func, logger
 from models import Teacher, User
-from utils import today_schedule_for_teacher, today_schedule_for_user
+from utils import today_schedule_for_teacher, today_schedule_for_user, this_week
 
 COMMAND = "week_schedule"
 router: Router = Router()
@@ -40,17 +40,7 @@ def get_todays_schedule(date: datetime, telegram_id: int) -> list[dict[str, str]
 
 def get_week_schedule(telegram_id: int) -> list[dict[str, str]]:
     """Get lessons for the current week."""
-    week_schedule = []
-    today = datetime.now(TIMEZONE)
-
-    start_of_week = today - timedelta(days=today.weekday())
-    end_of_week = start_of_week + timedelta(days=7)
-    this_week = [start_of_week + timedelta(n) for n in range(int((end_of_week - start_of_week).days))]
-
-    week_schedule = []
-    for current_day in this_week:
-        week_schedule.append((get_todays_schedule(current_day, telegram_id), current_day))
-    return week_schedule
+    return [(get_todays_schedule(current_day, telegram_id), current_day) for current_day in this_week()]
 
 
 @router.message(Command(COMMAND))

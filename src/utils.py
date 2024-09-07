@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Iterable
 
 import aiohttp
@@ -8,7 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.orm import Session
 
 from config.base import getenv
-from config.config import ADMINS, WEEKDAY_MAP
+from config.config import ADMINS, TIMEZONE, WEEKDAY_MAP
 from database import engine
 from models import Lesson, Reschedule, ScheduledLesson, Teacher
 
@@ -98,3 +98,11 @@ def today_schedule_for_teacher(date: datetime, teacher: Teacher):
                 schedule.append((scheduled_lesson.start_time, scheduled_lesson.end_time, scheduled_lesson.user.name))
     schedule.sort(key=lambda x: x[0])
     return schedule
+
+
+def this_week():
+    """Get dates for the current week."""
+    today = datetime.now(TIMEZONE)
+    start_of_week = today - timedelta(days=today.weekday())
+    end_of_week = start_of_week + timedelta(days=7)
+    return [start_of_week + timedelta(n) for n in range(int((end_of_week - start_of_week).days))]
