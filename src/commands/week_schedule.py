@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -8,12 +8,12 @@ from aiogram.types import Message
 from sqlalchemy.orm import Session
 
 from config import logs
-from config.config import TIMEZONE, WEEKDAY_MAP_FULL
+from config.config import WEEKDAY_MAP_FULL
 from database import engine
 from help import Commands
 from logger import log_func, logger
 from models import Teacher, User
-from utils import today_schedule_for_teacher, today_schedule_for_user, this_week
+from utils import this_week, today_schedule_for_teacher, today_schedule_for_user
 
 COMMAND = "week_schedule"
 router: Router = Router()

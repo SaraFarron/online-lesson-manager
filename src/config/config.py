@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import time
 from pathlib import Path
 
 import pytz
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 from config.base import getenv
 
@@ -68,3 +71,27 @@ WEEKDAY_MAP_FULL = {
     5: "Суббота",
     6: "Воскресенье",
 }
+
+
+class Weekday(BaseModel):
+    number: int
+    short: str
+    long: str
+
+
+WEEKDAYS_MODEL = [
+    Weekday(number=0, short="ПН", long="Понедельник"),
+    Weekday(number=1, short="ВТ", long="Вторник"),
+    Weekday(number=2, short="СР", long="Среда"),
+    Weekday(number=3, short="ЧТ", long="Четверг"),
+    Weekday(number=4, short="ПТ", long="Пятница"),
+    Weekday(number=5, short="СБ", long="Суббота"),
+    Weekday(number=6, short="ВС", long="Воскресенье"),
+]
+
+
+def get_weekday(weekday: int | str):
+    """Get the current day of the week."""
+    if isinstance(weekday, str):
+        return next(w for w in WEEKDAYS_MODEL if weekday in (w.short, w.long))
+    return WEEKDAYS[weekday]
