@@ -33,7 +33,7 @@ class Callbacks:
     CHOOSE_TIME = "add_sl_choose_time:"
 
 
-def possible_weekdays_for_user(user_telegram_id: int) -> list[str]:
+def possible_weekdays_for_user(user_telegram_id: int) -> list[int]:
     """Return a list of available weekdays."""
     result = []
     with Session(engine) as session:
@@ -41,7 +41,7 @@ def possible_weekdays_for_user(user_telegram_id: int) -> list[str]:
         if not user:
             logger.warning("NO USER %s", user_telegram_id)
             return []
-        for weekday in config.WEEKDAYS:
+        for weekday in range(7):
             # Check if any restrictions for this day
             restriced_periods = (
                 session.query(RestrictedTime)
@@ -109,7 +109,8 @@ def possible_time_for_user(
 @log_func
 async def add_lesson_handler(message: Message, state: FSMContext) -> None:
     """First handler, gives a list of available weekdays."""
-    weekdays = [(d, Callbacks.CHOOSE_WEEKDAY + d) for d in possible_weekdays_for_user(message.from_user.id)]
+    available_weekdays = possible_weekdays_for_user(message.from_user.id)
+    weekdays = [(config.WEEKDAY_MAP[d], Callbacks.CHOOSE_WEEKDAY + str(d)) for d in available_weekdays]
     keyboard = inline_keyboard(weekdays)
     await state.update_data(user_id=message.from_user.id)
     await message.answer(Messages.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup())
@@ -119,7 +120,7 @@ async def add_lesson_handler(message: Message, state: FSMContext) -> None:
 @log_func
 async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Second handler, gives a list of available times."""
-    weekday = callback.data.split(":")[1]
+    weekday = int(callback.data.split(":")[1])
     await state.update_data(weekday=weekday)
     state_data = await state.get_data()
     available_time = possible_time_for_user(state_data["user_id"], weekday)

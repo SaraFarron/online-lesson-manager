@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, String, Time
+from sqlalchemy import Date, ForeignKey, Integer, String, Time
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy_utils.types.choice import ChoiceType
 
 from config import config
 
@@ -27,10 +26,9 @@ class Teacher(Base):
 
 class Weekend(Base):
     __tablename__ = "weekend"
-    WEEKDAYS = list(config.WEEKDAYS.items())
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    weekday: Mapped[str] = mapped_column(ChoiceType(WEEKDAYS, impl=String(2)))
+    weekday: Mapped[int] = mapped_column(Integer)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
     teacher: Mapped[Teacher] = relationship(back_populates="weekends")
 
@@ -72,12 +70,11 @@ class Lesson(Base):
 
 class ScheduledLesson(Base):
     __tablename__ = "scheduled_lesson"
-    WEEKDAYS = list(config.WEEKDAYS.items())
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
     user: Mapped[User] = relationship(back_populates="scheduled_lessons")
-    weekday: Mapped[str] = mapped_column(ChoiceType(WEEKDAYS, impl=String(2)))
+    weekday: Mapped[int] = mapped_column(Integer)
     start_time: Mapped[Time] = mapped_column(Time)
     end_time: Mapped[Time] = mapped_column(Time)
     # expires: Mapped[DateTime] = mapped_column(DateTime, nullable=True, default=None)
@@ -103,12 +100,11 @@ class Reschedule(Base):
 
 class RestrictedTime(Base):
     __tablename__ = "restricted_time"
-    WEEKDAYS = list(config.WEEKDAYS.items())
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
     user: Mapped[User] = relationship(back_populates="restricted_times")
-    weekday: Mapped[str] = mapped_column(ChoiceType(WEEKDAYS, impl=String(2)))
+    weekday: Mapped[int] = mapped_column(Integer)
     whole_day_restricted: Mapped[bool] = mapped_column(default=False)
     start_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)
     end_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)

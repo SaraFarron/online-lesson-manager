@@ -25,7 +25,7 @@ class Messages:
     SCHEDULE = "Занятия:\n"
 
 
-def get_todays_schedule(date: datetime, telegram_id: int) -> list[dict[str, str]]:
+def get_todays_schedule(date: datetime, telegram_id: int):
     """Gets schedule string depending on the date and user status."""
     with Session(engine) as session:
         teacher = session.query(Teacher).filter(Teacher.telegram_id == telegram_id).first()
@@ -38,7 +38,7 @@ def get_todays_schedule(date: datetime, telegram_id: int) -> list[dict[str, str]
     return Messages.SCHEDULE + schedule
 
 
-def get_week_schedule(telegram_id: int) -> list[dict[str, str]]:
+def get_week_schedule(telegram_id: int):
     """Get lessons for the current week."""
     return [(get_todays_schedule(current_day, telegram_id), current_day) for current_day in this_week()]
 

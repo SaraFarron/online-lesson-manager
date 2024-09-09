@@ -32,7 +32,7 @@ async def notify_admins(message: str) -> None:
         await send_message(admin, message)
 
 
-def inline_keyboard(buttons: dict[str, str] | Iterable[tuple[str, str]]):
+def inline_keyboard(buttons: dict[str | int, str] | Iterable[tuple[str, str | int]]):
     """Create an inline keyboard."""
     builder = InlineKeyboardBuilder()
     if isinstance(buttons, dict):
@@ -47,7 +47,7 @@ def inline_keyboard(buttons: dict[str, str] | Iterable[tuple[str, str]]):
 def today_schedule_for_user(date: datetime, user_id: int):
     """Gets today's schedule for the user."""
     schedule = []
-    weekday = WEEKDAY_MAP[date.weekday()]
+    weekday = date.weekday()
     with Session(engine) as session:
         # Get regular lessons
         lessons = session.query(Lesson).filter(Lesson.date == date.date(), Lesson.user_id == user_id).all()
@@ -77,7 +77,7 @@ def today_schedule_for_user(date: datetime, user_id: int):
 def today_schedule_for_teacher(date: datetime, teacher: Teacher):
     """Gets today's schedule for the teacher."""
     schedule = []
-    weekday = WEEKDAY_MAP[date.weekday()]
+    weekday = date.weekday()
     with Session(engine) as session:
         students = [s.id for s in teacher.students]
         # Get regular lessons
