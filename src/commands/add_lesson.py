@@ -13,7 +13,7 @@ from database import engine
 from help import Commands
 from logger import log_func
 from models import ScheduledLesson
-from utils import StudentSchedule, TeacherSchedule, get_user, inline_keyboard
+from utils import get_schedule, get_user, inline_keyboard
 
 COMMAND = "/add_sl"
 MAX_HOUR = 23
@@ -38,8 +38,7 @@ class Callbacks:
 async def add_lesson_handler(message: Message, state: FSMContext) -> None:
     """First handler, gives a list of available weekdays."""
     with Session(engine):
-        user = get_user(message.from_user.id)
-        schedule = TeacherSchedule(user) if user.teacher_id else StudentSchedule(user)
+        schedule = get_schedule(message.from_user.id)
         available_weekdays = schedule.available_weekdays()
 
     weekdays = [(config.WEEKDAY_MAP[d], Callbacks.CHOOSE_WEEKDAY + str(d)) for d in available_weekdays]
@@ -58,8 +57,7 @@ async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMC
     state_data = await state.get_data()
 
     with Session(engine):
-        user = get_user(state_data["user_id"])
-        schedule = TeacherSchedule(user) if user.teacher_id else StudentSchedule(user)
+        schedule = get_schedule(state_data["user_id"])
         available_time = schedule.available_time_weekday(weekday)
 
     keyboard = inline_keyboard([(t, Callbacks.CHOOSE_TIME + t) for t in available_time])

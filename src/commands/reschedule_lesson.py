@@ -14,7 +14,7 @@ from database import engine
 from help import Commands
 from logger import log_func
 from models import Reschedule, ScheduledLesson, User
-from utils import MAX_HOUR, StudentSchedule, TeacherSchedule, inline_keyboard, this_week
+from utils import MAX_HOUR, get_schedule, inline_keyboard, this_week
 
 COMMAND = "/reschedule"
 
@@ -113,9 +113,8 @@ async def reschedule_lesson_confirm(callback: CallbackQuery, state: FSMContext) 
 async def reschedule_lesson_choose_date(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschedule_lesson_choose_date` state."""
     state_data = await state.get_data()
-    with Session(engine) as session:
-        user: User = session.query(User).get(state_data["user_id"])
-        schedule = TeacherSchedule(user) if user.teacher_id else StudentSchedule(user)
+    with Session(engine):
+        schedule = get_schedule(state_data["user_id"])
         weekends_str = ", ".join([config.WEEKDAY_MAP_FULL[w] for w in schedule.available_weekdays()])
     await state.set_state(ChooseNewDateTime.choose_date)
     await callback.message.answer(Messages.CHOOSE_DATE % weekends_str)
@@ -127,9 +126,8 @@ async def reschedule_lesson_choose_time(message: Message, state: FSMContext) -> 
     """Handler receives messages with `reschedule_lesson_choose_time` state."""
     date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
     state_data = await state.get_data()
-    with Session(engine) as session:
-        user: User = session.query(User).get(state_data["user_id"])
-        schedule = TeacherSchedule(user) if user.teacher_id else StudentSchedule(user)
+    with Session(engine):
+        schedule = get_schedule(state_data["user_id"])
         if date.weekday() not in schedule.available_weekdays():
             await message.answer(Messages.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[date.weekday()])
             return

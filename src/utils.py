@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from config.base import getenv
 from config.config import ADMINS, TIMEZONE
 from database import engine
-from models import Reschedule, RestrictedTime, ScheduledLesson, User
+from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User
 
 MAX_HOUR = 23
 
@@ -67,6 +67,14 @@ def get_user(telegram_id: int):
     """Get user by telegram id."""
     with Session(engine) as session:
         return session.query(User).filter(User.telegram_id == telegram_id).first()
+
+
+def get_schedule(telegram_id: int):
+    """Get schedule by telegram id."""
+    with Session(engine) as session:
+        if session.query(Teacher).filter(Teacher.telegram_id == telegram_id).first():
+            return TeacherSchedule(get_user(telegram_id))
+        return StudentSchedule(get_user(telegram_id))
 
 
 class BaseSchedule(ABC):
