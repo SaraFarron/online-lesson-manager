@@ -51,6 +51,24 @@ def this_week():
     return [start_of_week + timedelta(n) for n in range(int((end_of_week - start_of_week).days))]
 
 
+def daterange(start: datetime, end: datetime, step: int = 1) -> Iterable[datetime]:
+    """Get dates between two dates."""
+    date_range = []
+    current_date = start
+
+    while current_date <= end:
+        date_range.append(current_date)
+        current_date += timedelta(days=step)
+
+    return date_range
+
+
+def get_user(telegram_id: int):
+    """Get user by telegram id."""
+    with Session(engine) as session:
+        return session.query(User).filter(User.telegram_id == telegram_id).first()
+
+
 class BaseSchedule(ABC):
     def __init__(self, user: User) -> None:
         """Base schedule class containing basic methods."""
@@ -115,6 +133,14 @@ class BaseSchedule(ABC):
         if not self.filter_by_user:
             filters.pop(-1)
         return session.query(ScheduledLesson).filter(*filters).all()
+
+    def available_weekdays(self):
+        """Get available weekdays."""
+        return [weekday for weekday in range(7) if self.available_time_weekday(weekday)]
+
+    def available_date(self, start: datetime, end: datetime) -> list[datetime]:
+        """Get available dates."""
+        return [date for date in daterange(start, end) if self.available_time_day(date)]
 
 
 class TeacherSchedule(BaseSchedule):
