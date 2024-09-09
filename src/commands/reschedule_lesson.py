@@ -14,7 +14,7 @@ from database import engine
 from help import Commands
 from logger import log_func
 from models import Reschedule, ScheduledLesson, User, Weekend
-from utils import MAX_HOUR, StudentSchedule, inline_keyboard, this_week
+from utils import MAX_HOUR, Schedule, inline_keyboard, this_week
 
 COMMAND = "/reschedule"
 
@@ -139,7 +139,7 @@ async def reschedule_lesson_choose_time(message: Message, state: FSMContext) -> 
             return
         await state.update_data(date=date)
         await state.set_state(ChooseNewDateTime.choose_time)
-        schedule = StudentSchedule(user)
+        schedule = Schedule(user)
         buttons = [
             (t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M"))
             for t in schedule.available_times_for_date(date)
