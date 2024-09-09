@@ -60,7 +60,9 @@ async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMC
         schedule = get_schedule(state_data["user_id"])
         available_time = schedule.available_time_weekday(weekday)
 
-    keyboard = inline_keyboard([(t, Callbacks.CHOOSE_TIME + t) for t in available_time])
+    keyboard = inline_keyboard([
+        (t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M")) for t in available_time
+    ])
     keyboard.adjust(1, repeat=True)
 
     await callback.message.answer(Messages.CHOOSE_TIME, reply_markup=keyboard.as_markup())

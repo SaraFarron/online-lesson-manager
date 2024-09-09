@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from config.base import getenv
 from config.config import ADMINS, TIMEZONE
 from database import engine
-from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User
+from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Weekend
 
 MAX_HOUR = 23
 
@@ -77,7 +77,7 @@ def get_schedule(telegram_id: int):
         return StudentSchedule(get_user(telegram_id))
 
 
-class BaseSchedule(ABC):
+class Schedule(ABC):
     def __init__(self, user: User) -> None:
         """Base schedule class containing basic methods."""
         self.user = user
@@ -86,20 +86,22 @@ class BaseSchedule(ABC):
     def available_time(self, taken_times: list[tuple[time, time]]) -> list[time]:
         """Get available times without taken time."""
         available = []
-        current_time: time = self.user.teacher.work_start
-        while current_time < self.user.teacher.work_end:
-            taken = False
-            for taken_time in taken_times:
-                if taken_time[0] <= current_time < taken_time[1]:
-                    taken = True
-                    break
-            if not taken:
-                available.append(current_time)
-            current_time = (
-                current_time.replace(hour=current_time.hour + 1)
-                if current_time.hour < MAX_HOUR
-                else current_time.replace(hour=0)
-            )
+        with Session(engine) as session:
+            teacher = session.query(Teacher).filter(Teacher.id == self.user.teacher_id).first()
+            current_time: time = teacher.work_start
+            while current_time < teacher.work_end:
+                taken = False
+                for taken_time in taken_times:
+                    if taken_time[0] <= current_time < taken_time[1]:
+                        taken = True
+                        break
+                if not taken:
+                    available.append(current_time)
+                current_time = (
+                    current_time.replace(hour=current_time.hour + 1)
+                    if current_time.hour < MAX_HOUR
+                    else current_time.replace(hour=0)
+                )
         return available
 
     @abstractmethod
@@ -151,15 +153,19 @@ class BaseSchedule(ABC):
         return [date for date in daterange(start, end) if self.available_time_day(date)]
 
 
-class TeacherSchedule(BaseSchedule):
+class TeacherSchedule(Schedule):
     def schedule_day(self, day: datetime) -> list[tuple[time, time, str]]:
         """Schedule for the day."""
         with Session(engine) as session:
-            return list(
+            cancellations = [
+                x.source_id for x in session.query(Reschedule).filter(Reschedule.source_date == day.date()).all()
+            ]
+            schedule = list(
                 chain(
                     [
                         (lesson.start_time, lesson.end_time, lesson.user.name)
                         for lesson in self.scheduled_lessons(session, day)
+                        if lesson.id not in cancellations
                     ],
                     [
                         (reschedule.start_time, reschedule.end_time, reschedule.user.name)
@@ -167,11 +173,13 @@ class TeacherSchedule(BaseSchedule):
                     ],
                 ),
             )
+            schedule.sort(key=lambda x: x[0])
+            return schedule
 
     def schedule_weekday(self, weekday: int) -> list[tuple[time, time, str]]:
         """Schedule for the weekday."""
         with Session(engine) as session:
-            return list(
+            schedule = list(
                 chain(
                     [
                         (lesson.start_time, lesson.end_time, lesson.user.name)
@@ -179,9 +187,11 @@ class TeacherSchedule(BaseSchedule):
                     ],
                 ),
             )
+            schedule.sort(key=lambda x: x[0])
+            return schedule
 
 
-class StudentSchedule(BaseSchedule):
+class StudentSchedule(Schedule):
     def __init__(self, user: User) -> None:  # noqa: D107
         super().__init__(user)
         self.filter_by_user = True
@@ -189,18 +199,47 @@ class StudentSchedule(BaseSchedule):
     def schedule_day(self, day: datetime) -> list[tuple[time, time]]:
         """Schedule for the day."""
         with Session(engine) as session:
-            return list(
+            cancellations = [
+                x.source_id
+                for x in session.query(Reschedule)
+                .filter(Reschedule.user == self.user, Reschedule.date == str(day.date()))
+                .all()
+            ]
+            schedule = list(
                 chain(
-                    [(lesson.start_time, lesson.end_time) for lesson in self.scheduled_lessons(session, day)],
+                    [
+                        (lesson.start_time, lesson.end_time)
+                        for lesson in self.scheduled_lessons(session, day)
+                        if lesson.id not in cancellations
+                    ],
                     [(reschedule.start_time, reschedule.end_time) for reschedule in self.reschedules(session, day)],
                 ),
             )
+            schedule.sort(key=lambda x: x[0])
+            return schedule
 
     def schedule_weekday(self, weekday: int) -> list[tuple[time, time]]:
         """Schedule for the weekday."""
         with Session(engine) as session:
-            return list(
+            schedule = list(
                 chain(
                     [(lesson.start_time, lesson.end_time) for lesson in self.scheduled_lessons(session, weekday)],
                 ),
             )
+            schedule.sort(key=lambda x: x[0])
+            return schedule
+
+    def available_weekdays(self):
+        """Get available weekdays."""
+        with Session(engine) as session:
+            restriced_weekdays = (
+                session.query(RestrictedTime.weekday)
+                .filter(
+                    RestrictedTime.user == self.user,
+                    RestrictedTime.whole_day_restricted == True,  # noqa: E712
+                )
+                .all()
+            )
+            teacher_weekends = session.query(Weekend.weekday).filter(Weekend.teacher_id == self.user.teacher_id).all()
+        na_weekdays = list(chain(restriced_weekdays, teacher_weekends))
+        return [weekday for weekday in range(7) if self.available_time_weekday(weekday) and weekday not in na_weekdays]

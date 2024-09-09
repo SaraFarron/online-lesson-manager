@@ -77,7 +77,6 @@ class ScheduledLesson(Base):
     weekday: Mapped[int] = mapped_column(Integer)
     start_time: Mapped[Time] = mapped_column(Time)
     end_time: Mapped[Time] = mapped_column(Time)
-    # expires: Mapped[DateTime] = mapped_column(DateTime, nullable=True, default=None)
 
     def __repr__(self) -> str:
         """String model represetation."""
@@ -93,9 +92,9 @@ class Reschedule(Base):
     source_id: Mapped[int] = mapped_column(ForeignKey("scheduled_lesson.id"))
     source: Mapped[ScheduledLesson] = relationship()
     source_date: Mapped[Date] = mapped_column(Date)
-    date: Mapped[Optional[Date]] = mapped_column(Date, nullable=True, default=None)
-    start_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)
-    end_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)
+    date: Mapped[Optional[Date]] = mapped_column(Date, nullable=True, default=None)  # noqa: UP007
+    start_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
+    end_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
 
 
 class RestrictedTime(Base):
@@ -106,5 +105,5 @@ class RestrictedTime(Base):
     user: Mapped[User] = relationship(back_populates="restricted_times")
     weekday: Mapped[int] = mapped_column(Integer)
     whole_day_restricted: Mapped[bool] = mapped_column(default=False)
-    start_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)
-    end_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)
+    start_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
+    end_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007

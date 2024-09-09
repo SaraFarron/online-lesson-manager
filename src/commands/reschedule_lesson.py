@@ -25,8 +25,13 @@ class Messages:
     CHOOSE_LESSON = "Выберите занятие"
     NO_LESSONS = "Нет предстоящих занятий"
     CONFRIM = "Вы можете назначить новое время, чтобы перенести урок"
+    CANCEL_LESSON = "Отменить урок"
+    CHOOSE_NEW_DATE = "Перенести на новую дату"
+    ALREADY_CANCELED = "Этот урок на эту дату уже отменён"
+    CHOOSE_RIGHT_WEEKDAY = "Нельзя выбрать %s, подходят только даты на выбранный день недели - %s"
+    TYPE_NEW_DATE = "Введите дату, в которую занятия не будет в формате ДД-ММ-ГГГГ"
     CANCELED = "Урок отменён"
-    CHOOSE_DATE = "Введите дату в формате ДД-ММ-ГГГГ, нельзя выбрать %s"
+    CHOOSE_DATE = "Введите дату в формате ДД-ММ-ГГГГ, можно выбрать следующие дни недели: %s"
     WRONG_WEEKDAY = "Нельзя выбрать %s"
     CHOOSE_TIME = "Выберите время"
     LESSON_ADDED = "Урок добавлен"
@@ -35,14 +40,16 @@ class Messages:
 
 class Callbacks:
     CHOOSE_SL = "reschesule_lesson_choose_sl:"
+    CHOOSE_SL_DATE = "reschesule_lesson_choose_date_sl:"
     CONFIRM = "reschesule_lesson_confirm:"
     CHOOSE_DATE = "reschesule_lesson_choose_date:"
     CHOOSE_TIME = "reschesule_lesson_choose_time:"
 
 
 class ChooseNewDateTime(StatesGroup):
-    choose_date = State()
-    choose_time = State()
+    lesson_date = State()
+    date = State()
+    time = State()
 
 
 @router.message(Command(COMMAND))
@@ -53,13 +60,18 @@ async def reschedule_lesson_handler(message: Message) -> None:
     with Session(engine) as session:
         user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
         if user:
-            lessons = session.query(ScheduledLesson).filter(ScheduledLesson.user_id == user.id).all()
+            lessons = (
+                session.query(ScheduledLesson)
+                .filter(ScheduledLesson.user_id == user.id)
+                .order_by(ScheduledLesson.weekday, ScheduledLesson.start_time)
+                .all()
+            )
             if lessons:
                 weekdays = {d.weekday(): config.WEEKDAY_MAP_FULL[d.weekday()] for d in this_week()}
                 buttons = [
                     (
                         f"{weekdays[lesson.weekday]} {lesson.start_time}",
-                        Callbacks.CHOOSE_SL + str(lesson.id),
+                        Callbacks.CHOOSE_SL_DATE + str(lesson.id),
                     )
                     for lesson in lessons
                 ]
@@ -72,22 +84,47 @@ async def reschedule_lesson_handler(message: Message) -> None:
             await message.answer(Messages.NOT_REGISTERED)
 
 
-@router.callback_query(F.data.startswith(Callbacks.CHOOSE_SL))
+@router.callback_query(F.data.startswith(Callbacks.CHOOSE_SL_DATE))
 @log_func
-async def reschesule_lesson_choose_sl_handler(callback: CallbackQuery, state: FSMContext) -> None:
+async def reschedule_lesson_choose_sl_date_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     lesson_id = int(callback.data.split(":")[1])
     with Session(engine) as session:
         lesson: ScheduledLesson = session.query(ScheduledLesson).get(lesson_id)
         if lesson:
-            await state.update_data(lesson=lesson_id, user_id=lesson.user_id)
-            keyboard = inline_keyboard(
-                [
-                    ("Отменить урок", Callbacks.CONFIRM),
-                    ("Перенести на новую дату", Callbacks.CHOOSE_DATE),
-                ],
-            ).as_markup()
-            await callback.message.answer(Messages.CONFRIM, reply_markup=keyboard)
+            await state.update_data(lesson=lesson_id, user_id=lesson.user_id, user_telegram_id=lesson.user.telegram_id)
+            await state.set_state(ChooseNewDateTime.lesson_date)
+            await callback.message.answer(Messages.TYPE_NEW_DATE)
+
+
+@router.message(ChooseNewDateTime.lesson_date)
+@log_func
+async def reschesule_lesson_choose_sl_handler(message: Message, state: FSMContext) -> None:
+    """Handler receives messages with `reschesule_lesson_choose_sl` state."""
+    date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
+    state_data = await state.get_data()
+    with Session(engine) as session:
+        reschedules = session.query(Reschedule).filter(Reschedule.source_date == date.date()).all()
+        if state_data["lesson"] in [r.source.id for r in reschedules]:
+            await message.answer(Messages.ALREADY_CANCELED)
+            await state.clear()
+            return
+        right_weekday = session.query(ScheduledLesson).get(state_data["lesson"]).weekday
+        if date.weekday() != right_weekday:
+            await state.set_state(ChooseNewDateTime.lesson_date)
+            await message.answer(
+                Messages.CHOOSE_RIGHT_WEEKDAY
+                % (config.WEEKDAY_MAP_FULL[date.weekday()], config.WEEKDAY_MAP_FULL[right_weekday]),
+            )
+
+    await state.update_data(date=date)
+    keyboard = inline_keyboard(
+        [
+            (Messages.CANCEL_LESSON, Callbacks.CONFIRM),
+            (Messages.CHOOSE_NEW_DATE, Callbacks.CHOOSE_DATE),
+        ],
+    ).as_markup()
+    await message.answer(Messages.CONFRIM, reply_markup=keyboard)
 
 
 @router.callback_query(F.data == Callbacks.CONFIRM)
@@ -95,13 +132,12 @@ async def reschesule_lesson_choose_sl_handler(callback: CallbackQuery, state: FS
 async def reschedule_lesson_confirm(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschedule_lesson_confirm` state."""
     state_data = await state.get_data()
-    weekdays = {d.weekday(): d for d in this_week()}
     with Session(engine) as session:
         sl: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
         reschedule = Reschedule(
             user=session.query(User).get(state_data["user_id"]),
             source=sl,
-            source_date=weekdays[sl.weekday],
+            source_date=state_data["date"],
         )
         session.add(reschedule)
         session.commit()
@@ -114,25 +150,25 @@ async def reschedule_lesson_choose_date(callback: CallbackQuery, state: FSMConte
     """Handler receives messages with `reschedule_lesson_choose_date` state."""
     state_data = await state.get_data()
     with Session(engine):
-        schedule = get_schedule(state_data["user_id"])
+        schedule = get_schedule(state_data["user_telegram_id"])
         weekends_str = ", ".join([config.WEEKDAY_MAP_FULL[w] for w in schedule.available_weekdays()])
-    await state.set_state(ChooseNewDateTime.choose_date)
+    await state.set_state(ChooseNewDateTime.date)
     await callback.message.answer(Messages.CHOOSE_DATE % weekends_str)
 
 
-@router.message(ChooseNewDateTime.choose_date)
+@router.message(ChooseNewDateTime.date)
 @log_func
 async def reschedule_lesson_choose_time(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `reschedule_lesson_choose_time` state."""
     date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
     state_data = await state.get_data()
     with Session(engine):
-        schedule = get_schedule(state_data["user_id"])
+        schedule = get_schedule(state_data["user_telegram_id"])
         if date.weekday() not in schedule.available_weekdays():
             await message.answer(Messages.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[date.weekday()])
             return
-        await state.update_data(date=date)
-        await state.set_state(ChooseNewDateTime.choose_time)
+        await state.update_data(new_date=date)
+        await state.set_state(ChooseNewDateTime.time)
         buttons = [
             (t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M"))
             for t in schedule.available_time_day(date)
@@ -151,7 +187,7 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
             user=session.query(User).get(state_data["user_id"]),
             source=session.query(ScheduledLesson).get(state_data["lesson"]),
             source_date=state_data["date"],
-            date=state_data["date"],
+            date=state_data["new_date"],
             start_time=time,
             end_time=time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0),
         )
