@@ -13,8 +13,8 @@ from config import config
 from database import engine
 from help import Commands
 from logger import log_func
-from models import Reschedule, ScheduledLesson, User, Weekend
-from utils import MAX_HOUR, Schedule, inline_keyboard, this_week
+from models import Reschedule, ScheduledLesson, User
+from utils import MAX_HOUR, StudentSchedule, TeacherSchedule, inline_keyboard, this_week
 
 COMMAND = "/reschedule"
 
@@ -53,19 +53,15 @@ async def reschedule_lesson_handler(message: Message) -> None:
     with Session(engine) as session:
         user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
         if user:
-            lessons = (
-                session.query(ScheduledLesson)
-                .filter(
-                    ScheduledLesson.user_id == user.id,
-                )
-                .all()
-            )
+            lessons = session.query(ScheduledLesson).filter(ScheduledLesson.user_id == user.id).all()
             if lessons:
                 weekdays = {d.weekday(): config.WEEKDAY_MAP_FULL[d.weekday()] for d in this_week()}
                 buttons = [
                     (
-                        f"{weekdays[lesson.weekday]} {lesson.start_time}", Callbacks.CHOOSE_SL + str(lesson.id),
-                    ) for lesson in lessons
+                        f"{weekdays[lesson.weekday]} {lesson.start_time}",
+                        Callbacks.CHOOSE_SL + str(lesson.id),
+                    )
+                    for lesson in lessons
                 ]
                 keyboard = inline_keyboard(buttons)
                 keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
@@ -119,8 +115,8 @@ async def reschedule_lesson_choose_date(callback: CallbackQuery, state: FSMConte
     state_data = await state.get_data()
     with Session(engine) as session:
         user: User = session.query(User).get(state_data["user_id"])
-        weekends = session.query(Weekend).filter(Weekend.teacher_id == user.teacher_id).all()
-        weekends_str = ", ".join([config.WEEKDAY_MAP_FULL[w.weekday] for w in weekends])
+        schedule = TeacherSchedule(user) if user.teacher_id else StudentSchedule(user)
+        weekends_str = ", ".join([config.WEEKDAY_MAP_FULL[w] for w in schedule.available_weekdays()])
     await state.set_state(ChooseNewDateTime.choose_date)
     await callback.message.answer(Messages.CHOOSE_DATE % weekends_str)
 
@@ -133,16 +129,15 @@ async def reschedule_lesson_choose_time(message: Message, state: FSMContext) -> 
     state_data = await state.get_data()
     with Session(engine) as session:
         user: User = session.query(User).get(state_data["user_id"])
-        teacher_weekends = session.query(Weekend).filter(Weekend.teacher_id == user.teacher_id).all()
-        if date.weekday() in [w.weekday for w in teacher_weekends]:
+        schedule = TeacherSchedule(user) if user.teacher_id else StudentSchedule(user)
+        if date.weekday() not in schedule.available_weekdays():
             await message.answer(Messages.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[date.weekday()])
             return
         await state.update_data(date=date)
         await state.set_state(ChooseNewDateTime.choose_time)
-        schedule = Schedule(user)
         buttons = [
             (t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M"))
-            for t in schedule.available_times_for_date(date)
+            for t in schedule.available_time_day(date)
         ]
         await message.answer(Messages.CHOOSE_TIME, reply_markup=inline_keyboard(buttons).as_markup())
 
