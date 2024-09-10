@@ -24,7 +24,7 @@ router = Router()
 
 class Messages:
     CHOOSE_WEEKDAY = "Выберите день недели"
-    CHOOSE_TIME = "Выберите время"
+    CHOOSE_TIME = "Выберите время (по МСК)"
     LESSON_ADDED = "Урок добавлен"
 
 

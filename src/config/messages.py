@@ -13,7 +13,7 @@ NOT_REGISTERED = "Вы не зарегистрированы. Пожалуйст
 USER_NOT_FOUND = "Пользователь %s не найден"
 
 CHOOSE_DATE = "Выберите дату"
-CHOOSE_TIME = "Выберите время"
+CHOOSE_TIME = "Выберите время (по МСК)"
 LESSON_ADDED = "Урок добавлен"
 CHOOSE_LESSON = "Выберите урок для отмены"
 NO_LESSONS = "Нет предстоящих уроков"

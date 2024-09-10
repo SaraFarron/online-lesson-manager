@@ -4,12 +4,12 @@ from enum import Enum
 class Commands(Enum):
     START = "Приветственное сообщение"
     HELP = "Помощь"
-    CANCEL = "Отмена"
+    ADD_SCHEDULED_LESSON = "Добавить урок в расписание"
+    RESCHEDULE = "Отменить/перенести урок"
     TODAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
-    ADD_SCHEDULED_LESSON = "Добавить урок в расписание"
-    RESCHEDULE = "Отменить урок"
-    ADD_LESSON = "Добавить урок на дату"
+    # ADD_LESSON = "Добавить урок на дату"
+    CANCEL = "Отмена"
 
 
 class AdminCommands(Enum):
