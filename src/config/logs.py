@@ -22,3 +22,7 @@ EDIT_WEEKDAY = "User %s is changing working hours on %s"
 
 FUNCTION_CALL = "Calling %s. args: %s, kwargs: %s"
 FUNCTION_EXP = "Exception raised in %s"
+
+SCHEDULER_START = "Scheduler started"
+NOTIFICATIONS_START = "Sending notifications"
+NOTIFICATIONS_SENT = "Notifications sent to %s"

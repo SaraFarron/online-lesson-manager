@@ -123,9 +123,9 @@ class Schedule(ABC):
     def restrictions(self, session: Session, date_or_weekday: datetime | int):
         """Get restrictions for the date or weekday."""
         if isinstance(date_or_weekday, int):
-            filters = [RestrictedTime.weekday == date_or_weekday, RestrictedTime.user == self.user]
+            filters = [RestrictedTime.weekday == date_or_weekday, RestrictedTime.user_id == self.user.id]
         else:
-            filters = [RestrictedTime.weekday == date_or_weekday.weekday(), RestrictedTime.user == self.user]
+            filters = [RestrictedTime.weekday == date_or_weekday.weekday(), RestrictedTime.user_id == self.user.id]
         if not self.filter_by_user:
             filters.pop(-1)
         return session.query(RestrictedTime).filter(*filters).all()
@@ -137,9 +137,9 @@ class Schedule(ABC):
     def scheduled_lessons(self, session: Session, date_or_wekday: datetime | int):
         """Get scheduled lessons for the date or weekday."""
         if isinstance(date_or_wekday, int):
-            filters = [ScheduledLesson.weekday == date_or_wekday, ScheduledLesson.user == self.user]
+            filters = [ScheduledLesson.weekday == date_or_wekday, ScheduledLesson.user_id == self.user.id]
         else:
-            filters = [ScheduledLesson.weekday == date_or_wekday.weekday(), ScheduledLesson.user == self.user]
+            filters = [ScheduledLesson.weekday == date_or_wekday.weekday(), ScheduledLesson.user_id == self.user.id]
         if not self.filter_by_user:
             filters.pop(-1)
         return session.query(ScheduledLesson).filter(*filters).all()
@@ -154,7 +154,7 @@ class Schedule(ABC):
 
 
 class TeacherSchedule(Schedule):
-    def schedule_day(self, day: datetime) -> list[tuple[time, time, str]]:
+    def schedule_day(self, day: datetime) -> list[tuple[time, time, str, int]]:
         """Schedule for the day."""
         with Session(engine) as session:
             cancellations = [
@@ -163,12 +163,12 @@ class TeacherSchedule(Schedule):
             schedule = list(
                 chain(
                     [
-                        (lesson.start_time, lesson.end_time, lesson.user.name)
+                        (lesson.start_time, lesson.end_time, lesson.user.name, lesson.user.telegram_id)
                         for lesson in self.scheduled_lessons(session, day)
                         if lesson.id not in cancellations
                     ],
                     [
-                        (reschedule.start_time, reschedule.end_time, reschedule.user.name)
+                        (reschedule.start_time, reschedule.end_time, reschedule.user.name, reschedule.user.telegram_id)
                         for reschedule in self.reschedules(session, day)
                     ],
                 ),
@@ -202,7 +202,7 @@ class StudentSchedule(Schedule):
             cancellations = [
                 x.source_id
                 for x in session.query(Reschedule)
-                .filter(Reschedule.user == self.user, Reschedule.date == str(day.date()))
+                .filter(Reschedule.user_id == self.user.id, Reschedule.date == str(day.date()))
                 .all()
             ]
             schedule = list(
@@ -235,7 +235,7 @@ class StudentSchedule(Schedule):
             restriced_weekdays = (
                 session.query(RestrictedTime.weekday)
                 .filter(
-                    RestrictedTime.user == self.user,
+                    RestrictedTime.user_id == self.user.id,
                     RestrictedTime.whole_day_restricted == True,  # noqa: E712
                 )
                 .all()
