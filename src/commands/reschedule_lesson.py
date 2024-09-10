@@ -31,6 +31,7 @@ class Messages:
     ALREADY_CANCELED = "Этот урок на эту дату уже отменён"
     CHOOSE_RIGHT_WEEKDAY = "Нельзя выбрать %s, подходят только даты на выбранный день недели - %s"
     TYPE_NEW_DATE = "Введите дату, в которую занятия не будет в формате ДД-ММ-ГГГГ"
+    WRONG_DATE = "Неправильный формат даты, введите дату в формате ДД-ММ-ГГГГ, например 01-01-2024"
     CANCELED = "Урок отменён"
     CHOOSE_DATE = "Введите дату в формате ДД-ММ-ГГГГ, можно выбрать следующие дни недели: %s"
     WRONG_WEEKDAY = "Нельзя выбрать %s"
@@ -102,7 +103,12 @@ async def reschedule_lesson_choose_sl_date_handler(callback: CallbackQuery, stat
 @log_func
 async def reschesule_lesson_choose_sl_handler(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
-    date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
+    try:
+        date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
+    except ValueError:
+        await state.set_state(ChooseNewDateTime.lesson_date)
+        await message.answer(Messages.WRONG_DATE)
+        return
     state_data = await state.get_data()
     with Session(engine) as session:
         reschedules = session.query(Reschedule).filter(Reschedule.source_date == date.date()).all()
@@ -167,7 +173,13 @@ async def reschedule_lesson_choose_date(callback: CallbackQuery, state: FSMConte
 @log_func
 async def reschedule_lesson_choose_time(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `reschedule_lesson_choose_time` state."""
-    date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
+    try:
+        date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
+    except ValueError:
+        await state.set_state(ChooseNewDateTime.date)
+        await message.answer(Messages.WRONG_DATE)
+        return
+
     state_data = await state.get_data()
     with Session(engine):
         schedule = get_schedule(state_data["user_telegram_id"])
