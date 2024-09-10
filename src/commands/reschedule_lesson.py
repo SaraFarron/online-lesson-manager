@@ -9,12 +9,13 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
+import messages
 from config import config
 from database import engine
 from help import Commands
 from logger import log_func
 from models import Reschedule, ScheduledLesson, User
-from utils import MAX_HOUR, get_schedule, inline_keyboard, this_week
+from utils import MAX_HOUR, get_schedule, inline_keyboard, send_message, this_week
 
 COMMAND = "/reschedule"
 
@@ -134,13 +135,19 @@ async def reschedule_lesson_confirm(callback: CallbackQuery, state: FSMContext) 
     state_data = await state.get_data()
     with Session(engine) as session:
         sl: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
+        user: User = session.query(User).get(state_data["user_id"])
         reschedule = Reschedule(
-            user=session.query(User).get(state_data["user_id"]),
+            user=user,
             source=sl,
             source_date=state_data["date"],
         )
         session.add(reschedule)
         session.commit()
+        await send_message(
+            user.teacher.telegram_id,
+            messages.USER_CANCELED_SL
+            % (user.name, state_data["date"].strftime("%d-%m-%Y"), sl.start_time.strftime("%H:%M")),
+        )
     await callback.message.answer(Messages.CANCELED)
 
 
@@ -183,9 +190,11 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
     state_data = await state.get_data()
     time = datetime.strptime(callback.data.split(":")[1], "%H.%M").time()  # noqa: DTZ007
     with Session(engine) as session:
+        user: User = session.query(User).get(state_data["user_id"])
+        sl: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
         reschedule = Reschedule(
-            user=session.query(User).get(state_data["user_id"]),
-            source=session.query(ScheduledLesson).get(state_data["lesson"]),
+            user=user,
+            source=sl,
             source_date=state_data["date"],
             date=state_data["new_date"],
             start_time=time,
@@ -193,4 +202,15 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
         )
         session.add(reschedule)
         session.commit()
+        await send_message(
+            user.teacher.telegram_id,
+            messages.USER_MOVED_SL
+            % (
+                user.name,
+                reschedule.source_date.strftime("%d-%m-%Y"),
+                sl.start_time.strftime("%H:%M"),
+                state_data["new_date"].strftime("%d-%m-%Y"),
+                time.strftime("%H:%M"),
+            ),
+        )
     await callback.message.answer(Messages.LESSON_ADDED)
