@@ -20,7 +20,7 @@ USER_CHOICE = "User %s chose %s"
 
 EDIT_WEEKDAY = "User %s is changing working hours on %s"
 
-FUNCTION_CALL = "Calling %s. args: %s, kwargs: %s"
+FUNCTION_CALL = "Calling %s. args: %s"
 FUNCTION_EXP = "Exception raised in %s"
 
 SCHEDULER_START = "Scheduler started"
