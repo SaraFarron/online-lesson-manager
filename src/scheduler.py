@@ -21,10 +21,15 @@ async def lessons_notifications(timeout: float):
         for teacher in teachers:
             notifees = []
             user = session.query(User).filter(User.telegram_id == teacher.telegram_id).first()
-            schedule = TeacherSchedule(user).schedule_day(datetime.now(TIMEZONE))
+            now = datetime.now(TIMEZONE)
+            schedule = TeacherSchedule(user).schedule_day(now)
             for s in schedule:
-                time_before_lesson = datetime.now(TIMEZONE).time() - s[0]
-                if time_before_lesson <= timedelta(hours=1):
+                lesson_start = datetime.now(TIMEZONE).replace(
+                    hour=s[0].hour,
+                    minute=s[0].minute,
+                )
+                time_before_lesson = now - lesson_start
+                if lesson_start > now and time_before_lesson <= timedelta(hours=1):
                     await send_message(
                         teacher.telegram_id,
                         messages.LESSON_IS_COMING_TEACHER % (s[2], s[0].strftime("%H:%M")),
@@ -39,12 +44,12 @@ async def lessons_notifications(timeout: float):
 
 async def start_scheduler():
     """Start scheduler."""
-    timeout = 3600
+    timeout = 15
     logger.info(logs.SCHEDULER_START)
     async with aiojobs.Scheduler() as scheduler:
-        await scheduler.spawn(lessons_notifications(timeout))
-
-        await asyncio.sleep(timeout)
+        while True:
+            await scheduler.spawn(lessons_notifications(timeout))
+            await asyncio.sleep(timeout)
 
 
 if __name__ == "__main__":
