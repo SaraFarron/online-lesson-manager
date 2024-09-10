@@ -21,6 +21,7 @@ class Teacher(Base):
     work_start: Mapped[Time] = mapped_column(Time, default=config.WORK_START)
     work_end: Mapped[Time] = mapped_column(Time, default=config.WORK_END)
     weekends: Mapped[list[Weekend]] = relationship(back_populates="teacher")
+    breaks: Mapped[list[WorkBreak]] = relationship(back_populates="teacher")
     students: Mapped[list[User]] = relationship(back_populates="teacher")
 
 
@@ -31,6 +32,17 @@ class Weekend(Base):
     weekday: Mapped[int] = mapped_column(Integer)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
     teacher: Mapped[Teacher] = relationship(back_populates="weekends")
+
+
+class WorkBreak(Base):
+    __tablename__ = "work_break"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
+    teacher: Mapped[Teacher] = relationship(back_populates="breaks")
+    weekday: Mapped[int] = mapped_column(Integer)
+    start_time: Mapped[Time] = mapped_column(Time)
+    end_time: Mapped[Time] = mapped_column(Time)
 
 
 class User(Base):

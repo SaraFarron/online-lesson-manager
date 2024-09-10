@@ -16,6 +16,9 @@ from utils import TeacherSchedule, send_message
 async def lessons_notifications(timeout: float):
     """Send notifications about lessons."""
     logger.info(logs.NOTIFICATIONS_START)
+    if datetime.now(TIMEZONE).hour != 8:
+        logger.info(logs.NO_NEED_TO_SEND)
+        return
     with Session(engine) as session:
         teachers = session.query(Teacher).all()
         for teacher in teachers:
@@ -28,8 +31,9 @@ async def lessons_notifications(timeout: float):
                     hour=s[0].hour,
                     minute=s[0].minute,
                 )
-                time_before_lesson = now - lesson_start
-                if lesson_start > now and time_before_lesson <= timedelta(hours=1):
+                # time_before_lesson = now - lesson_start
+                #  and time_before_lesson <= timedelta(hours=12)
+                if lesson_start > now:
                     await send_message(
                         teacher.telegram_id,
                         messages.LESSON_IS_COMING_TEACHER % (s[2], s[0].strftime("%H:%M")),
@@ -44,7 +48,7 @@ async def lessons_notifications(timeout: float):
 
 async def start_scheduler():
     """Start scheduler."""
-    timeout = 15
+    timeout = 1800
     logger.info(logs.SCHEDULER_START)
     async with aiojobs.Scheduler() as scheduler:
         while True:
