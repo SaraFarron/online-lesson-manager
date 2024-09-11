@@ -4,13 +4,14 @@ import os
 class ImproperlyConfiguredError(Exception):
     """Raises when a environment variable is missing."""
 
-    def __init__(self, variable_name: str, *args, **kwargs):
+    def __init__(self, variable_name: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+        """Constructor."""
         self.variable_name = variable_name
         self.message = f"Set the {variable_name} environment variable."
         super().__init__(self.message, *args, **kwargs)
 
 
-def getenv(var_name: str, cast_to=str) -> str:
+def getenv(var_name: str, cast_to=str) -> str:  # noqa: ANN001
     """
     Gets an environment variable or raises an exception.
 
