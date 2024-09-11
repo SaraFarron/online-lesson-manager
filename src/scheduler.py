@@ -31,8 +31,6 @@ async def lessons_notifications(timeout: float):
                     hour=s[0].hour,
                     minute=s[0].minute,
                 )
-                # time_before_lesson = now - lesson_start
-                #  and time_before_lesson <= timedelta(hours=12)
                 if lesson_start > now:
                     await send_message(
                         teacher.telegram_id,
