@@ -14,7 +14,7 @@ from config import config
 from database import engine
 from help import AdminCommands
 from logger import log_func
-from models import Teacher, User
+from models import Teacher, User, Weekend
 from utils import inline_keyboard
 
 COMMAND = "/reschedule"
@@ -27,6 +27,9 @@ class Messages:
     WRONG_TIME_FORMAT = "Неправильный формат времени, введите время в формате ЧЧ:ММ (МСК)"
     TIME_UPDATED = "Время обновлено"
     ERROR = "Произошла ошибка"
+    WEEKEND_REMOVED = "Выходной убран"
+    CHOOSE_WEEKDAY = "Выберите день недели"
+    WEEKEND_ADDED = "Выходной добавлен"
 
 
 class SetWorkingHoursState(StatesGroup):
@@ -50,7 +53,7 @@ async def set_working_hours_handler(message: Message) -> None:
             (f"Изменить начало рабочего дня: {teacher.work_start.strftime('%H:%M')}", "swh:start"),
             (f"Изменить конец рабочего дня: {teacher.work_end.strftime('%H:%M')}", "swh:end"),
             *[
-                (f"Убрать выходной: {config.WEEKDAY_MAP_FULL[weekend.weekday]}", f"swh:rm_weekend_{weekend.weekday}")
+                (f"Убрать выходной: {config.WEEKDAY_MAP_FULL[weekend.weekday]}", f"swh:rm_weekend_{weekend.id}")
                 for weekend in teacher.weekends
             ],
             ("Добавить выходной", "swh:add_weekend"),
@@ -108,18 +111,56 @@ async def set_work_start_handler(message: Message, state: FSMContext) -> None:
 @log_func
 async def remove_weekend(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler for removing a weekend."""
-    # TODO
+    with Session(engine) as session:
+        teacher = session.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
+        weekend_id = int(callback.data.replace("swh:rm_weekend_", ""))
+        weekend = session.query(teacher.Weekend).get(weekend_id)
+        if weekend:
+            session.delete(weekend)
+            session.commit()
+    await callback.message.answer(Messages.WEEKEND_REMOVED)
 
 
 @router.callback_query(F.data == "swh:add_weekend")
 @log_func
 async def add_weekend(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler for adding a weekend."""
-    # TODO
+    with Session(engine) as session:
+        teacher = session.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
+        existing_weekends = [w.weekday for w in teacher.weekends]
+        buttons = [(config.WEEKDAY_MAP_FULL[d], f"swh:add_weekend_{d}") for d in range(7) if d not in existing_weekends]
+        keyboard = inline_keyboard(buttons)
+        keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
+        await callback.message.answer(Messages.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup())
+
+
+@router.callback_query(F.data.startswith("swh:add_weekend_"))
+@log_func
+async def add_weekend_finish(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handler for finishing adding a weekend."""
+    with Session(engine) as session:
+        teacher = session.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
+        weekend = Weekend(
+            teacher_id=teacher.id,
+            teacher=teacher,
+            weekday=int(callback.data.replace("swh:add_weekend_", "")),
+        )
+        session.add(weekend)
+        session.commit()
+    await callback.message.answer(Messages.WEEKEND_ADDED)
 
 
 @router.callback_query(F.data == "swh:edit_breaks")
 @log_func
 async def edit_breaks(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler for editing breaks."""
-    # TODO
+    # with Session(engine) as session:
+    #     teacher = session.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
+    #     keyboard = inline_keyboard(
+    #         [
+    #             (f"{config.WEEKDAY_MAP_FULL[b.weekday]} {b.start_time} - {b.end_time}", f"swh:edit_break_{b.id}")
+    #             for b in teacher.breaks
+    #         ],
+    #         1 if len(teacher.breaks) <= config.MAX_BUTTON_ROWS else 2,
+    #     )
+    #     await callback.message.answer(Messages.EDIT_BREAKS, reply_markup=keyboard.as_markup())
