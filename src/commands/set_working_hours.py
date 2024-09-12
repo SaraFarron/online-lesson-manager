@@ -84,7 +84,7 @@ async def set_work_end(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(SetWorkingHoursState.edit_work_hours)
 @log_func
-async def set_work_start_handler(message: Message, state: FSMContext) -> None:
+async def set_work_border_handler(message: Message, state: FSMContext) -> None:
     """Handler for changing the start of the work day."""
     try:
         time = datetime.strptime(message.text, "%H:%M").time()  # noqa: DTZ007
@@ -94,7 +94,7 @@ async def set_work_start_handler(message: Message, state: FSMContext) -> None:
         return
     state_data = await state.get_data()
     with Session(engine) as session:
-        teacher: Teacher = session.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
+        teacher = session.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
         if state_data["scene"] == "start":
             teacher.work_start = time
         elif state_data["scene"] == "end":

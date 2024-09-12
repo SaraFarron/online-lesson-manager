@@ -25,6 +25,9 @@ router = Router()
 class Messages:
     CHOOSE_LESSON = "Выберите занятие"
     NO_LESSONS = "Нет предстоящих занятий"
+    CANCEL_TYPE = "Вы можете отменить/перенести занятие навсегда или только в какую-то дату"
+    DELETE_TYPE = "Навсегда"
+    ONE_TYPE = "Только на одну дату"
     CONFRIM = "Вы можете перенести урок на другое время или отменить его"
     CANCEL_LESSON = "Отменить урок"
     CHOOSE_NEW_DATE = "Перенести на новую дату"
@@ -42,6 +45,8 @@ class Messages:
 
 class Callbacks:
     CHOOSE_SL = "reschesule_lesson_choose_sl:"
+    CHOOSE_CANCEL_TYPE = "reschesule_lesson_choose_cancel_type:"
+    DELETE = "reschesule_lesson_delete:"
     CHOOSE_SL_DATE = "reschesule_lesson_choose_date_sl:"
     CONFIRM = "reschesule_lesson_confirm:"
     CHOOSE_DATE = "reschesule_lesson_choose_date:"
@@ -73,7 +78,7 @@ async def reschedule_lesson_handler(message: Message) -> None:
                 buttons = [
                     (
                         f"{weekdays[lesson.weekday]} {lesson.start_time}",
-                        Callbacks.CHOOSE_SL_DATE + str(lesson.id),
+                        Callbacks.CHOOSE_CANCEL_TYPE + str(lesson.id),
                     )
                     for lesson in lessons
                 ]
@@ -86,15 +91,46 @@ async def reschedule_lesson_handler(message: Message) -> None:
             await message.answer(Messages.NOT_REGISTERED)
 
 
-@router.callback_query(F.data.startswith(Callbacks.CHOOSE_SL_DATE))
+@router.callback_query(F.data.startswith(Callbacks.CHOOSE_CANCEL_TYPE))
+@log_func
+async def reschedule_lesson_choose_cancel_type_handler(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handler receives messages with `reschesule_lesson_choose_sl` state."""
+    lesson_id = int(callback.data.split(":")[1])
+    await state.update_data(lesson=lesson_id)
+    buttons = [
+            (Messages.ONE_TYPE, Callbacks.CHOOSE_SL_DATE),
+            (Messages.DELETE_TYPE, Callbacks.DELETE),
+        ]
+    keyboard = inline_keyboard(buttons)
+    keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
+    await callback.message.answer(Messages.CANCEL_TYPE, reply_markup=keyboard.as_markup())
+
+
+@router.callback_query(F.data == Callbacks.DELETE)
+@log_func
+async def reschedule_lesson_delete_handler(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handler receives messages with `reschesule_lesson_choose_sl` state."""
+    state_data = await state.get_data()
+    with Session(engine) as session:
+        lesson: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
+        if lesson:
+            session.delete(lesson)
+            session.commit()
+    await state.clear()
+    await callback.message.answer(Messages.CANCELED)
+
+
+@router.callback_query(F.data == Callbacks.CHOOSE_SL_DATE)
 @log_func
 async def reschedule_lesson_choose_sl_date_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
-    lesson_id = int(callback.data.split(":")[1])
+    state_data = await state.get_data()
     with Session(engine) as session:
-        lesson: ScheduledLesson = session.query(ScheduledLesson).get(lesson_id)
+        lesson: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
         if lesson:
-            await state.update_data(lesson=lesson_id, user_id=lesson.user_id, user_telegram_id=lesson.user.telegram_id)
+            await state.update_data(
+                lesson=state_data["lesson"], user_id=lesson.user_id, user_telegram_id=lesson.user.telegram_id
+            )
             await state.set_state(ChooseNewDateTime.lesson_date)
             await callback.message.answer(Messages.TYPE_NEW_DATE)
 
