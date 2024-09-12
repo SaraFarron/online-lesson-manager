@@ -159,6 +159,7 @@ async def reschesule_lesson_choose_sl_handler(message: Message, state: FSMContex
                 Messages.CHOOSE_RIGHT_WEEKDAY
                 % (config.WEEKDAY_MAP_FULL[date.weekday()], config.WEEKDAY_MAP_FULL[right_weekday]),
             )
+            return
 
     await state.update_data(date=date)
     keyboard = inline_keyboard(
