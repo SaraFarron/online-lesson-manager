@@ -97,13 +97,12 @@ async def reschedule_lesson_choose_cancel_type_handler(callback: CallbackQuery, 
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     lesson_id = int(callback.data.split(":")[1])
     await state.update_data(lesson=lesson_id)
-    keyboard = inline_keyboard(
-        [
+    buttons = [
             (Messages.ONE_TYPE, Callbacks.CHOOSE_SL_DATE),
             (Messages.DELETE_TYPE, Callbacks.DELETE),
         ]
-    )
-    keyboard.adjust(1 if len(keyboard) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
+    keyboard = inline_keyboard(buttons)
+    keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
     await callback.message.answer(Messages.CANCEL_TYPE, reply_markup=keyboard.as_markup())
 
 
