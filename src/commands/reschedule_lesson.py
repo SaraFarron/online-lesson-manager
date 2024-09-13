@@ -237,7 +237,9 @@ async def reschedule_lesson_choose_time(message: Message, state: FSMContext) -> 
             (t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M"))
             for t in schedule.available_time_day(date)
         ]
-        await message.answer(Messages.CHOOSE_TIME, reply_markup=inline_keyboard(buttons).as_markup())
+        keyboard = inline_keyboard(buttons)
+        keyboard.adjust(2, repeat=True)
+        await message.answer(Messages.CHOOSE_TIME, reply_markup=keyboard.as_markup())
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_TIME))
