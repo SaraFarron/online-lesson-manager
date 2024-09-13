@@ -118,6 +118,13 @@ class Schedule(ABC):
 
     def available_time_weekday(self, weekday: int) -> list[time]:
         """Free time for the weekday."""
+        with Session(engine) as session:
+            teacher_weekends: list[Weekend] = (
+                session.query(Weekend.weekday).filter(Weekend.teacher_id == self.user.teacher_id).all()
+            )
+        na_weekdays = [w.weekday for w in teacher_weekends]
+        if weekday in na_weekdays:
+            return []
         return self.available_time(self.schedule_weekday(weekday))
 
     def restrictions(self, session: Session, date_or_weekday: datetime | int):
@@ -179,6 +186,9 @@ class TeacherSchedule(Schedule):
     def schedule_weekday(self, weekday: int) -> list[tuple[time, time, str]]:
         """Schedule for the weekday."""
         with Session(engine) as session:
+            teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            if weekday in [w.weekday for w in teacher.weekends]:
+                return [(teacher.work_start, teacher.work_end, teacher.name)]
             schedule = list(
                 chain(
                     [

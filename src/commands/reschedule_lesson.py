@@ -41,6 +41,7 @@ class Messages:
     CHOOSE_TIME = "Выберите время (по МСК)"
     LESSON_ADDED = "Урок добавлен"
     NOT_REGISTERED = "Вы не зарегистрированы. Пожалуйста воспользуйтесь командой /start"
+    LESSON_DELETED = "%s убрал занятие на %s в %s из расписания"
 
 
 class Callbacks:
@@ -98,9 +99,9 @@ async def reschedule_lesson_choose_cancel_type_handler(callback: CallbackQuery, 
     lesson_id = int(callback.data.split(":")[1])
     await state.update_data(lesson=lesson_id)
     buttons = [
-            (Messages.ONE_TYPE, Callbacks.CHOOSE_SL_DATE),
-            (Messages.DELETE_TYPE, Callbacks.DELETE),
-        ]
+        (Messages.ONE_TYPE, Callbacks.CHOOSE_SL_DATE),
+        (Messages.DELETE_TYPE, Callbacks.DELETE),
+    ]
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
     await callback.message.answer(Messages.CANCEL_TYPE, reply_markup=keyboard.as_markup())
@@ -115,6 +116,11 @@ async def reschedule_lesson_delete_handler(callback: CallbackQuery, state: FSMCo
         lesson: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
         if lesson:
             session.delete(lesson)
+            await send_message(
+                lesson.user.teacher.telegram_id,
+                Messages.LESSON_DELETED
+                % (lesson.user.name, config.WEEKDAY_MAP_FULL[lesson.weekday], lesson.start_time.strftime("%H:%M")),
+            )
             session.commit()
     await state.clear()
     await callback.message.answer(Messages.CANCELED)
@@ -129,7 +135,9 @@ async def reschedule_lesson_choose_sl_date_handler(callback: CallbackQuery, stat
         lesson: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
         if lesson:
             await state.update_data(
-                lesson=state_data["lesson"], user_id=lesson.user_id, user_telegram_id=lesson.user.telegram_id
+                lesson=state_data["lesson"],
+                user_id=lesson.user_id,
+                user_telegram_id=lesson.user.telegram_id,
             )
             await state.set_state(ChooseNewDateTime.lesson_date)
             await callback.message.answer(Messages.TYPE_NEW_DATE)
@@ -229,7 +237,9 @@ async def reschedule_lesson_choose_time(message: Message, state: FSMContext) -> 
             (t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M"))
             for t in schedule.available_time_day(date)
         ]
-        await message.answer(Messages.CHOOSE_TIME, reply_markup=inline_keyboard(buttons).as_markup())
+        keyboard = inline_keyboard(buttons)
+        keyboard.adjust(2, repeat=True)
+        await message.answer(Messages.CHOOSE_TIME, reply_markup=keyboard.as_markup())
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_TIME))
