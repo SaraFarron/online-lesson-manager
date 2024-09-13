@@ -46,7 +46,7 @@ async def lessons_notifications(timeout: float):
 
 async def start_scheduler():
     """Start scheduler."""
-    timeout = 1800
+    timeout = 3599
     logger.info(logs.SCHEDULER_START)
     async with aiojobs.Scheduler() as scheduler:
         while True:
