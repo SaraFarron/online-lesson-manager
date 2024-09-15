@@ -43,7 +43,9 @@ async def start_handler(message: Message) -> None:
             if not user_to_register.telegram_username:
                 user_to_register.telegram_username = message.from_user.username
             if user_to_register.teacher.telegram_id != pasha_tid:
-                user_to_register.teacher = session.query(Teacher).filter(Teacher.telegram_id == pasha_tid).first()
+                teacher = session.query(Teacher).filter(Teacher.telegram_id == pasha_tid).first()
+                user_to_register.teacher = teacher
+                user_to_register.teacher_id = teacher.id
             session.commit()
 
     await message.answer(Messages.GREETINGS % html.bold(message.from_user.full_name))
