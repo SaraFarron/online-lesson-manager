@@ -44,8 +44,7 @@ class SetWorkingHoursState(StatesGroup):
 async def set_working_hours_handler(message: Message) -> None:
     """Handler receives messages with `/reschedule` command."""
     with Session(engine) as session:
-        user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
-        teacher: Teacher | None = session.query(Teacher).get(user.teacher_id)
+        teacher = session.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
         if not teacher:
             await message.answer(messages.PERMISSION_DENIED)
             return
