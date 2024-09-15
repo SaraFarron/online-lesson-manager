@@ -14,7 +14,7 @@ from config import config
 from database import engine
 from help import AdminCommands
 from logger import log_func
-from models import Teacher, User, Weekend
+from models import Teacher, Weekend
 from utils import inline_keyboard
 
 COMMAND = "/reschedule"

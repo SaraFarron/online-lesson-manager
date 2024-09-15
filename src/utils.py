@@ -170,13 +170,13 @@ class TeacherSchedule(Schedule):
             schedule = list(
                 chain(
                     [
-                        (lesson.start_time, lesson.end_time, lesson.user.name, lesson.user.telegram_id)
+                        (lesson.start_time, lesson.end_time, lesson.user.username_dog, lesson.user.telegram_id)
                         for lesson in self.scheduled_lessons(session, day)
                         if lesson.id not in cancellations
                     ],
                     [
-                        (reschedule.start_time, reschedule.end_time, reschedule.user.name, reschedule.user.telegram_id)
-                        for reschedule in self.reschedules(session, day)
+                        (rs.start_time, rs.end_time, rs.user.username_dog, rs.user.telegram_id)
+                        for rs in self.reschedules(session, day)
                     ],
                 ),
             )
@@ -192,7 +192,7 @@ class TeacherSchedule(Schedule):
             schedule = list(
                 chain(
                     [
-                        (lesson.start_time, lesson.end_time, lesson.user.name)
+                        (lesson.start_time, lesson.end_time, lesson.user.username_dog)
                         for lesson in self.scheduled_lessons(session, weekday)
                     ],
                 ),

@@ -51,12 +51,23 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
+    telegram_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
     teacher: Mapped[Teacher] = relationship(back_populates="students")
     lessons: Mapped[list[Lesson]] = relationship(back_populates="user")
     scheduled_lessons: Mapped[list[ScheduledLesson]] = relationship(back_populates="user")
     reschedules: Mapped[list[Reschedule]] = relationship(back_populates="user")
     restricted_times: Mapped[list[RestrictedTime]] = relationship(back_populates="user")
+
+    @property
+    def username_dog(self) -> str:
+        """Telegram username dog."""
+        return f"@{self.telegram_username}"
+
+    @property
+    def username_link(self) -> str:
+        """Telegram username link."""
+        return f"https://t.me/{self.telegram_username}"
 
     def __repr__(self) -> str:
         """String model represetation."""
