@@ -1,9 +1,9 @@
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from alembic import context
-from src.models import Base
+from database import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -73,6 +73,11 @@ def run_migrations_online() -> None:
 
         with context.begin_transaction():
             context.run_migrations()
+
+
+alembic_config = config.get_section(config.config_ini_section)
+alembic_config["sqlalchemy.url"] = "sqlite:///db/db.sqlite"
+engine = engine_from_config(alembic_config, prefix="sqlalchemy.", poolclass=pool.NullPool)
 
 
 if context.is_offline_mode():
