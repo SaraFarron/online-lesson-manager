@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import aiojobs
 from sqlalchemy.orm import Session
@@ -9,8 +9,8 @@ from config import logs
 from config.config import TIMEZONE
 from database import engine
 from logger import logger
-from models import Teacher, User
-from utils import TeacherSchedule, send_message
+from models import User
+from utils import TeacherSchedule, get_schedule, send_message
 
 
 async def lessons_notifications(timeout: float):
@@ -20,26 +20,29 @@ async def lessons_notifications(timeout: float):
         logger.info(logs.NO_NEED_TO_SEND)
         return
     with Session(engine) as session:
-        teachers = session.query(Teacher).all()
-        for teacher in teachers:
-            notifees = []
-            user = session.query(User).filter(User.telegram_id == teacher.telegram_id).first()
-            now = datetime.now(TIMEZONE)
-            schedule = TeacherSchedule(user).schedule_day(now)
+        now = datetime.now(TIMEZONE)
+        notifees = []
+        users = session.query(User).all()
+        for user in users:
+            schedule = get_schedule(user.telegram_id).schedule_day(datetime.now(TIMEZONE))
+            text = []
             for s in schedule:
                 lesson_start = datetime.now(TIMEZONE).replace(
                     hour=s[0].hour,
                     minute=s[0].minute,
                 )
                 if lesson_start > now:
-                    await send_message(
-                        teacher.telegram_id,
-                        messages.LESSON_IS_COMING_TEACHER % (s[2], s[0].strftime("%H:%M")),
-                    )
-                    await send_message(s[3], messages.LESSON_IS_COMING_STUDENT % s[0].strftime("%H:%M"))
+                    if isinstance(schedule, TeacherSchedule):
+                        text.append(messages.LESSON_IS_COMING_TEACHER % (s[2], s[0].strftime("%H:%M")))
+                    else:
+                        text.append(messages.LESSON_IS_COMING_STUDENT % s[0].strftime("%H:%M"))
                     if not notifees:
-                        notifees.append(teacher.name)
+                        notifees.append(user.username_dog)
                     notifees.append(s[2])
+            if text:
+                message = messages.LESSONS_ARE_COMING + "%0A".join(text)
+                await send_message(user.telegram_id, message)
+
             logger.info(logs.NOTIFICATIONS_SENT, ", ".join(notifees))
     await asyncio.sleep(timeout)
 
