@@ -119,7 +119,11 @@ async def reschedule_lesson_delete_handler(callback: CallbackQuery, state: FSMCo
             await send_message(
                 lesson.user.teacher.telegram_id,
                 Messages.LESSON_DELETED
-                % (lesson.user.name, config.WEEKDAY_MAP_FULL[lesson.weekday], lesson.start_time.strftime("%H:%M")),
+                % (
+                    lesson.user.username_dog,
+                    config.WEEKDAY_MAP_FULL[lesson.weekday],
+                    lesson.start_time.strftime("%H:%M"),
+                ),
             )
             session.commit()
     await state.clear()
@@ -197,7 +201,7 @@ async def reschedule_lesson_confirm(callback: CallbackQuery, state: FSMContext) 
         await send_message(
             user.teacher.telegram_id,
             messages.USER_CANCELED_SL
-            % (user.name, state_data["date"].strftime("%d-%m-%Y"), sl.start_time.strftime("%H:%M")),
+            % (user.username_dog, state_data["date"].strftime("%d-%m-%Y"), sl.start_time.strftime("%H:%M")),
         )
     await callback.message.answer(Messages.CANCELED)
 
@@ -265,7 +269,7 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
             user.teacher.telegram_id,
             messages.USER_MOVED_SL
             % (
-                user.name,
+                user.username_dog,
                 reschedule.source_date.strftime("%d-%m-%Y"),
                 sl.start_time.strftime("%H:%M"),
                 state_data["new_date"].strftime("%d-%m-%Y"),
