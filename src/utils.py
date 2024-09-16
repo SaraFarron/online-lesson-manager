@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from config.base import getenv
 from config.config import ADMINS, TIMEZONE
 from database import engine
-from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Weekend
+from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Weekend, WorkBreak
 
 MAX_HOUR = 23
 
@@ -114,7 +114,13 @@ class Schedule(ABC):
 
     def available_time_day(self, day: datetime) -> list[time]:
         """Free time for the day."""
-        return self.available_time(self.schedule_day(day))
+        with Session(engine) as session:
+            teacher_breaks = session.query(WorkBreak).filter(
+                WorkBreak.teacher_id == self.user.teacher_id,
+                WorkBreak.weekday == day.weekday(),
+            ).all()
+            taken_breaks = [(b.start_time, b.end_time) for b in teacher_breaks]
+        return self.available_time(self.schedule_day(day) + taken_breaks)
 
     def available_time_weekday(self, weekday: int) -> list[time]:
         """Free time for the weekday."""
@@ -122,10 +128,15 @@ class Schedule(ABC):
             teacher_weekends: list[Weekend] = (
                 session.query(Weekend.weekday).filter(Weekend.teacher_id == self.user.teacher_id).all()
             )
-        na_weekdays = [w.weekday for w in teacher_weekends]
-        if weekday in na_weekdays:
-            return []
-        return self.available_time(self.schedule_weekday(weekday))
+            na_weekdays = [w.weekday for w in teacher_weekends]
+            if weekday in na_weekdays:
+                return []
+            teacher_breaks = session.query(WorkBreak).filter(
+                WorkBreak.teacher_id == self.user.teacher_id,
+                WorkBreak.weekday == weekday,
+            ).all()
+            taken_breaks = [(b.start_time, b.end_time) for b in teacher_breaks]
+        return self.available_time(self.schedule_weekday(weekday) + taken_breaks)
 
     def restrictions(self, session: Session, date_or_weekday: datetime | int):
         """Get restrictions for the date or weekday."""
