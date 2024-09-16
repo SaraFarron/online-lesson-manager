@@ -111,9 +111,8 @@ async def set_work_border_handler(message: Message, state: FSMContext) -> None:
 async def remove_weekend(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler for removing a weekend."""
     with Session(engine) as session:
-        teacher = session.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
         weekend_id = int(callback.data.replace("swh:rm_weekend_", ""))
-        weekend = session.query(teacher.Weekend).get(weekend_id)
+        weekend = session.query(Weekend).get(weekend_id)
         if weekend:
             session.delete(weekend)
             session.commit()

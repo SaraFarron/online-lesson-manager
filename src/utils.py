@@ -20,7 +20,7 @@ MAX_HOUR = 23
 async def send_message(telegram_id: int, message: str) -> None:
     """Send a message to the user."""
     token = getenv("BOT_TOKEN")
-    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={telegram_id}&text={message}"
+    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={telegram_id}&text={message}&parse_mode=HTML"
     async with aiohttp.ClientSession() as session, session.get(url) as resp:
         await resp.text()
 

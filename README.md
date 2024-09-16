@@ -10,3 +10,14 @@ poetry run python src/main.py
 
 PYTHONPATH=/YOUR_PATH/online-lesson-manager/src/
 BOT_TOKEN=
+
+Создать миграцию
+alembic revision --autogenerate -m '...'
+
+Применить миграцию
+alembic upgrade head
+
+Миграции на проде
+
+docker compose exec bot sh
+PYTHONPATH=./src poetry run alembic upgrade head
