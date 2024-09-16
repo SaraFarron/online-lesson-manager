@@ -35,7 +35,12 @@ async def start_handler(message: Message) -> None:
                 session.add(teacher)
                 logger.info(logs.TEACHER_REGISTERED, message.from_user.full_name)
             teacher = session.query(Teacher).filter(Teacher.telegram_id == pasha_tid).first()
-            user = User(name=message.from_user.full_name, telegram_id=message.from_user.id, teacher=teacher)
+            user = User(
+                name=message.from_user.full_name,
+                telegram_id=message.from_user.id,
+                teacher=teacher,
+                telegram_username=message.from_user.username,
+            )
             session.add(user)
             session.commit()
             logger.info(logs.USER_REGISTERED, message.from_user.full_name)
