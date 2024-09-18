@@ -8,6 +8,7 @@ from database import engine
 from help import Commands
 from logger import log_func, logger
 from models import Teacher, User
+from utils import get_teacher
 
 router: Router = Router()
 
@@ -34,7 +35,8 @@ async def start_handler(message: Message) -> None:
                 teacher = Teacher(name=message.from_user.full_name, telegram_id=message.from_user.id)
                 session.add(teacher)
                 logger.info(logs.TEACHER_REGISTERED, message.from_user.full_name)
-            teacher = session.query(Teacher).filter(Teacher.telegram_id == pasha_tid).first()
+            else:
+                teacher = get_teacher()
             user = User(
                 name=message.from_user.full_name,
                 telegram_id=message.from_user.id,
@@ -48,9 +50,7 @@ async def start_handler(message: Message) -> None:
             if not user_to_register.telegram_username:
                 user_to_register.telegram_username = message.from_user.username
             if user_to_register.teacher.telegram_id != pasha_tid:
-                teacher = session.query(Teacher).filter(Teacher.telegram_id == pasha_tid).first()
-                if not teacher:
-                    teacher = session.query(Teacher).filter(Teacher.telegram_id == config.ADMINS[1]).first()
+                teacher = get_teacher()
                 user_to_register.teacher = teacher
                 user_to_register.teacher_id = teacher.id
             session.commit()
