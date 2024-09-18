@@ -17,6 +17,15 @@ from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, W
 MAX_HOUR = 23
 
 
+def get_teacher():
+    """Get the right teacher from the database."""
+    with Session(engine) as session:
+        teacher = session.query(Teacher).filter(Teacher.telegram_id == ADMINS[0]).first()
+        if not teacher:
+            teacher = session.query(Teacher).filter(Teacher.telegram_id == ADMINS[1]).first()
+    return teacher
+
+
 async def send_message(telegram_id: int, message: str) -> None:
     """Send a message to the user."""
     token = getenv("BOT_TOKEN")
@@ -136,7 +145,11 @@ class Schedule(ABC):
                 WorkBreak.weekday == weekday,
             ).all()
             taken_breaks = [(b.start_time, b.end_time) for b in teacher_breaks]
-        return self.available_time(self.schedule_weekday(weekday) + taken_breaks)
+        fbu = self.filter_by_user
+        self.filter_by_user = False
+        avail_time = self.available_time(self.schedule_weekday(weekday) + taken_breaks)
+        self.filter_by_user = fbu
+        return avail_time
 
     def restrictions(self, session: Session, date_or_weekday: datetime | int):
         """Get restrictions for the date or weekday."""
