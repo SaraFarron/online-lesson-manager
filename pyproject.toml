@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "online-lesson-manager"
-version = "0.3.9"
+version = "0.3.10"
 description = ""
 authors = ["SaraFarron <sarafarron@gmail.com>"]
 readme = "README.md"
