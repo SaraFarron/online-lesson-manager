@@ -54,9 +54,9 @@ async def week_schedule_handler(message: Message) -> None:
             logger.info(logs.REQUEST_SCHEDULE, message.from_user.full_name)
             week_schedule = "\n\n".join(
                 WEEKDAY_MAP_FULL[date.weekday()] + f" {date.strftime('%d-%m-%Y')}:\n" + day_schedule
-                for day_schedule, date in get_week_schedule(user)
+                for day_schedule, date in get_week_schedule(user) if day_schedule != Messages.SCHEDULE_EMPTY
             )
             await message.answer(week_schedule)
         else:
-            logger.warn(logs.REQUEST_SCHEDULE_NO_USER, message.from_user.full_name)
+            logger.warning(logs.REQUEST_SCHEDULE_NO_USER, message.from_user.full_name)
             await message.answer(Messages.NOT_REGISTERED)
