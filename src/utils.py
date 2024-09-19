@@ -124,10 +124,14 @@ class Schedule(ABC):
     def available_time_day(self, day: datetime) -> list[time]:
         """Free time for the day."""
         with Session(engine) as session:
-            teacher_breaks = session.query(WorkBreak).filter(
-                WorkBreak.teacher_id == self.user.teacher_id,
-                WorkBreak.weekday == day.weekday(),
-            ).all()
+            teacher_breaks = (
+                session.query(WorkBreak)
+                .filter(
+                    WorkBreak.teacher_id == self.user.teacher_id,
+                    WorkBreak.weekday == day.weekday(),
+                )
+                .all()
+            )
             taken_breaks = [(b.start_time, b.end_time) for b in teacher_breaks]
         return self.available_time(self.schedule_day(day) + taken_breaks)
 
@@ -140,10 +144,14 @@ class Schedule(ABC):
             na_weekdays = [w.weekday for w in teacher_weekends]
             if weekday in na_weekdays:
                 return []
-            teacher_breaks = session.query(WorkBreak).filter(
-                WorkBreak.teacher_id == self.user.teacher_id,
-                WorkBreak.weekday == weekday,
-            ).all()
+            teacher_breaks = (
+                session.query(WorkBreak)
+                .filter(
+                    WorkBreak.teacher_id == self.user.teacher_id,
+                    WorkBreak.weekday == weekday,
+                )
+                .all()
+            )
             taken_breaks = [(b.start_time, b.end_time) for b in teacher_breaks]
         fbu = self.filter_by_user
         self.filter_by_user = False
@@ -229,6 +237,12 @@ class StudentSchedule(Schedule):
     def __init__(self, user: User) -> None:  # noqa: D107
         super().__init__(user)
         self.filter_by_user = True
+
+    def reschedules(self, session: Session, date: datetime):
+        """Get reschedules for the date."""
+        return (
+            session.query(Reschedule).filter(Reschedule.date == date.date(), Reschedule.user_id == self.user.id).all()
+        )
 
     def schedule_day(self, day: datetime) -> list[tuple[time, time]]:
         """Schedule for the day."""
