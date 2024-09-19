@@ -43,5 +43,5 @@ async def today_schedule_handler(message: Message) -> None:
                 answer = "\n".join([f"{s[0]}-{s[1]}" for s in schedule])
             await message.answer(Messages.SCHEDULE + answer if answer else Messages.SCHEDULE_EMPTY)
         else:
-            logger.warn(logs.REQUEST_SCHEDULE_NO_USER, message.from_user.full_name)
+            logger.warning(logs.REQUEST_SCHEDULE_NO_USER, message.from_user.full_name)
             await message.answer(Messages.NOT_REGISTERED)
