@@ -238,6 +238,7 @@ async def reschedule_lesson_choose_time(message: Message | CallbackQuery, state:
             await state.set_state(ChooseNewDateTime.date)
             await message.answer(Messages.WRONG_DATE)
             return
+        await state.update_data(date=date)
     else:
         date = int(message.data.split(":")[1])
 
@@ -291,13 +292,14 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
                 time.strftime("%H:%M"),
             )
         else:
+            old_w, old_t = sl.weekday, sl.start_time
             sl.weekday = state_data["new_date"]
             sl.start_time = time
             sl.end_time = time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0)
             message = messages.USER_MOVED_SL % (
                 user.username_dog,
-                config.WEEKDAY_MAP_FULL[sl.weekday],
-                sl.start_time.strftime("%H:%M"),
+                config.WEEKDAY_MAP_FULL[old_w],
+                old_t.strftime("%H:%M"),
                 config.WEEKDAY_MAP_FULL[state_data["new_date"]],
                 time.strftime("%H:%M"),
             )
