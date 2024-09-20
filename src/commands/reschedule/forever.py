@@ -12,7 +12,7 @@ from commands.reschedule.config import FRL_START_CALLBACK, router
 from config import config
 from database import engine
 from logger import log_func
-from models import ScheduledLesson, User
+from models import Reschedule, ScheduledLesson, User
 from utils import MAX_HOUR, get_schedule, inline_keyboard, send_message
 
 
@@ -71,6 +71,11 @@ async def frl_delete_sl(callback: CallbackQuery, state: FSMContext) -> None:
             config.WEEKDAY_MAP_FULL[sl.weekday],
             sl.start_time.strftime("%H:%M"),
         )
+        # Delete all reschedules for this lesson in order to prevent errors
+        reschedules_to_delete = session.query(Reschedule).filter_by(source=sl).all()
+        for reschedule in reschedules_to_delete:
+            session.delete(reschedule)
+
         session.delete(sl)
         session.commit()
         await send_message(user.teacher.telegram_id, message)

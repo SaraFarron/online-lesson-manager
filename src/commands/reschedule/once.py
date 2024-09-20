@@ -76,7 +76,13 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext) -> None:
     state_data = await state.get_data()
     with Session(engine) as session:
         reschedules = session.query(Reschedule).filter(Reschedule.source_date == date.date()).all()
-        if state_data["lesson"] in [r.source.id for r in reschedules]:
+        rshs: list[Reschedule] = []
+        for r in reschedules:
+            if r.source is None:
+                session.delete(r)
+                session.commit()
+            rshs.append(r)
+        if state_data["lesson"] in [r.source.id for r in rshs]:
             await message.answer(Messages.ALREADY_CANCELED)
             await state.clear()
             return

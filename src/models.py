@@ -54,9 +54,9 @@ class User(Base):
     telegram_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
     teacher: Mapped[Teacher] = relationship(back_populates="students")
-    lessons: Mapped[list[Lesson]] = relationship(back_populates="user")
-    scheduled_lessons: Mapped[list[ScheduledLesson]] = relationship(back_populates="user")
-    reschedules: Mapped[list[Reschedule]] = relationship(back_populates="user")
+    lessons: Mapped[list[Lesson]] = relationship(back_populates="user", cascade="all, delete")
+    scheduled_lessons: Mapped[list[ScheduledLesson]] = relationship(back_populates="user", cascade="all, delete")
+    reschedules: Mapped[list[Reschedule]] = relationship(back_populates="user", cascade="all, delete")
     restricted_times: Mapped[list[RestrictedTime]] = relationship(back_populates="user")
 
     @property
