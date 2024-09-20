@@ -22,7 +22,6 @@ router: Router = Router()
 class Messages:
     NOT_REGISTERED = "Вы не зарегистрированы. Пожалуйста воспользуйтесь командой /start"
     SCHEDULE_EMPTY = "Занятий нет"
-    SCHEDULE = "Занятия:\n"
 
 
 def get_todays_schedule(date: datetime, user: User):
@@ -30,12 +29,22 @@ def get_todays_schedule(date: datetime, user: User):
     with Session(engine) as session:
         teacher = session.query(Teacher).filter(Teacher.telegram_id == user.telegram_id).first()
         if teacher:
-            schedule = "\n".join([f"{s[0]}-{s[1]}: {s[2]}" for s in TeacherSchedule(user).schedule_day(date)])
+            schedule = "\n".join(
+                [
+                    f"{s[0].strftime('%H:%M')}-{s[1].strftime('%H:%M')}: {s[2]}"
+                    for s in TeacherSchedule(user).schedule_day(date)
+                ],
+            )
         else:
-            schedule = "\n".join([f"{s[0]}-{s[1]}" for s in StudentSchedule(user).schedule_day(date)])
+            schedule = "\n".join(
+                [
+                    f"{s[0].strftime('%H:%M')}-{s[1].strftime('%H:%M')}"
+                    for s in StudentSchedule(user).schedule_day(date)
+                ],
+            )
     if not schedule:
         return Messages.SCHEDULE_EMPTY
-    return Messages.SCHEDULE + schedule
+    return schedule
 
 
 def get_week_schedule(user: User):
@@ -54,7 +63,8 @@ async def week_schedule_handler(message: Message) -> None:
             logger.info(logs.REQUEST_SCHEDULE, message.from_user.full_name)
             week_schedule = "\n\n".join(
                 html.bold(WEEKDAY_MAP_FULL[date.weekday()]) + f" {date.strftime('%d.%m.%Y')}:\n" + day_schedule
-                for day_schedule, date in get_week_schedule(user) if day_schedule != Messages.SCHEDULE_EMPTY
+                for day_schedule, date in get_week_schedule(user)
+                if day_schedule != Messages.SCHEDULE_EMPTY
             )
             if not week_schedule:
                 week_schedule = Messages.SCHEDULE_EMPTY
