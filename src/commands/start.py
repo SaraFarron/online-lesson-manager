@@ -37,11 +37,12 @@ async def start_handler(message: Message) -> None:
                 logger.info(logs.TEACHER_REGISTERED, message.from_user.full_name)
             else:
                 teacher = get_teacher()
+            username = message.from_user.username if message.from_user.username else message.from_user.full_name
             user = User(
                 name=message.from_user.full_name,
                 telegram_id=message.from_user.id,
                 teacher=teacher,
-                telegram_username=message.from_user.username,
+                telegram_username=username,
             )
             session.add(user)
             session.commit()
