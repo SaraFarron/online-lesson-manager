@@ -166,7 +166,7 @@ async def edit_breaks(callback: CallbackQuery, state: FSMContext) -> None:
         breaks = session.query(WorkBreak).filter(WorkBreak.teacher_id == teacher.id).all()
         breaks = [
             (
-                f"Убрать перерыв: {config.WEEKDAY_MAP_FULL[b.weekday]} {b.start_time} - {b.end_time}",
+                f"Убрать: {config.WEEKDAY_MAP[b.weekday]} {b.start_time.strftime('%H:%M')}-{b.end_time.strftime('%H:%M')}",
                 f"swh:rm_break_{b.id}",
             )
             for b in breaks
