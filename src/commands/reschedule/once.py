@@ -18,7 +18,6 @@ from utils import MAX_HOUR, get_schedule, inline_keyboard, send_message
 
 
 class ChooseNewDateTime(StatesGroup):
-    lesson_date = State()
     date = State()
     time = State()
 
@@ -70,7 +69,7 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext) -> None:
     try:
         date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
     except ValueError:
-        await state.set_state(ChooseNewDateTime.lesson_date)
+        await state.set_state(ChooseNewDateTime.date)
         await message.answer(Messages.WRONG_DATE)
         return
     state_data = await state.get_data()
@@ -88,7 +87,7 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext) -> None:
             return
         right_weekday = session.query(ScheduledLesson).get(state_data["lesson"]).weekday
         if date.weekday() != right_weekday:
-            await state.set_state(ChooseNewDateTime.lesson_date)
+            await state.set_state(ChooseNewDateTime.date)
             await message.answer(
                 Messages.CHOOSE_RIGHT_WEEKDAY
                 % (config.WEEKDAY_MAP_FULL[date.weekday()], config.WEEKDAY_MAP_FULL[right_weekday]),
