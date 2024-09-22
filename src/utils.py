@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from datetime import datetime, time, timedelta
 from itertools import chain
 from typing import Iterable
@@ -12,7 +11,7 @@ from sqlalchemy.orm import Session
 from config.base import getenv
 from config.config import ADMINS, TIMEZONE
 from database import engine
-from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Weekend, WorkBreak
+from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, WorkBreak
 
 MAX_HOUR = 23
 
@@ -86,208 +85,194 @@ def get_schedule(telegram_id: int):
         return StudentSchedule(get_user(telegram_id))
 
 
-class Schedule(ABC):
+def get_cancellations_day(session: Session, day: datetime, user: User | None = None):
+    """Get cancellations from the database."""
+    if user is None:
+        return session.query(Reschedule).filter(Reschedule.source_date == day.date()).all()
+    return session.query(Reschedule).filter(Reschedule.source_date == day.date(), Reschedule.user_id == user.id).all()
+
+
+def get_events_day(session: Session, day: datetime, user: User | None = None):
+    """Get events from the database."""
+    sl_query = session.query(ScheduledLesson)
+    rs_query = session.query(Reschedule)
+    cancellations = [x.source_id for x in get_cancellations_day(session, day, user)]
+
+    if user:
+        sl_query = sl_query.filter(ScheduledLesson.user_id == user.id)
+        rs_query = rs_query.filter(Reschedule.user_id == user.id)
+
+    sl_query = sl_query.filter(ScheduledLesson.weekday == day.weekday(), ScheduledLesson.id.not_in(cancellations))
+    rs_query = rs_query.filter(Reschedule.date == day.date())
+
+    return list(chain(sl_query.all(), rs_query.all()))
+
+
+def get_events_weekday(session: Session, weekday: int, user: User | None = None):
+    """Get events from the database."""
+    sl_query = session.query(ScheduledLesson)
+    rs_query = session.query(Reschedule)
+
+    if user:
+        sl_query = sl_query.filter(ScheduledLesson.user_id == user.id)
+        rs_query = rs_query.filter(Reschedule.user_id == user.id)
+
+    sl_query = sl_query.filter(ScheduledLesson.weekday == weekday)
+
+    return list(chain(sl_query.all(), rs_query.all()))
+
+
+def get_events(session: Session, day_or_weekday: datetime | int, user: User | None = None):
+    """Get events from the database."""
+    if isinstance(day_or_weekday, datetime):
+        return get_events_day(session, day_or_weekday, user)
+    return get_events_weekday(session, day_or_weekday, user)
+
+
+def model_list_adapter_user(models: list[ScheduledLesson | Reschedule | RestrictedTime | WorkBreak]):
+    """Convert list of models to list of dicts."""
+    result = [model.edges for model in models if model.edges[0]]
+    result.sort(key=lambda x: x[0])
+    return result
+
+def model_list_adapter_teacher(models: list[ScheduledLesson | Reschedule | RestrictedTime | WorkBreak]):
+    """Convert list of models to list of dicts."""
+    result = [(*model.edges, model.user.username_dog, model.user.telegram_id) for model in models]
+    result.sort(key=lambda x: x[0])
+    return result
+
+
+def get_avaiable_time(start: time, end: time, taken_times: list[tuple[time, time]]):
+    """Get available time from start to end without taken times."""
+    available = []
+    current_time: time = start
+    while current_time < end:
+        taken = False
+        for taken_time in taken_times:
+            if taken_time[0] <= current_time < taken_time[1]:
+                taken = True
+                break
+        if not taken:
+            available.append(current_time)
+        current_time = (
+            current_time.replace(hour=current_time.hour + 1)
+            if current_time.hour < MAX_HOUR
+            else current_time.replace(hour=0)
+        )
+    return available
+
+
+def get_unavailable_weekdays(user_id: int):
+    """Get unavailable weekdays."""
+    with Session(engine) as session:
+        user: User | None = session.query(User).get(user_id)
+        if user is None:
+            return []
+        weekends = [w.weekday for w in user.teacher.weekends]
+        restricted = [r.weekday for r in user.restricted_times if r.whole_day_restricted]
+        return weekends + restricted
+
+def get_available_weekdays(session: Session, user: User):
+    """Get available weekdays."""
+    teacher: Teacher = session.query(Teacher).get(user.teacher_id)
+    na_weekdays = get_unavailable_weekdays(user.id)
+    result = []
+    for wd in range(7):
+        if wd in na_weekdays:
+            continue
+        events = get_events_weekday(session, wd, None)
+        if get_avaiable_time(teacher.work_start, teacher.work_end, model_list_adapter_user(events)):
+            result.append(wd)
+    return result
+
+
+def get_available_days(session: Session, user: User) -> list[datetime]:
+    """Get available days."""
+    teacher: Teacher = session.query(Teacher).get(user.teacher_id)
+    na_weekdays = [w.weekday for w in teacher.weekends] + [
+        r.weekday for r in user.restricted_times if r.whole_day_restricted
+    ]
+    result = []
+    for wd in range(7):
+        if wd in na_weekdays:
+            continue
+        if get_avaiable_time(teacher.work_start, teacher.work_end, get_events_day(session, wd, None)):
+            result.append(wd)
+    return result
+
+
+class TeacherSchedule:
     def __init__(self, user: User) -> None:
         """Base schedule class containing basic methods."""
         self.user = user
-        self.filter_by_user = False
 
-    def available_time(self, taken_times: list[tuple[time, time]]) -> list[time]:
-        """Get available times without taken time."""
-        available = []
+    def schedule_day(self, day: datetime):
+        """Get schedule for the day."""
         with Session(engine) as session:
-            teacher = session.query(Teacher).filter(Teacher.id == self.user.teacher_id).first()
-            current_time: time = teacher.work_start
-            while current_time < teacher.work_end:
-                taken = False
-                for taken_time in taken_times:
-                    if taken_time[0] <= current_time < taken_time[1]:
-                        taken = True
-                        break
-                if not taken:
-                    available.append(current_time)
-                current_time = (
-                    current_time.replace(hour=current_time.hour + 1)
-                    if current_time.hour < MAX_HOUR
-                    else current_time.replace(hour=0)
-                )
-        return available
-
-    @abstractmethod
-    def schedule_day(self, day: datetime) -> list[tuple[time, time]]:  # noqa: D102
-        pass
-
-    @abstractmethod
-    def schedule_weekday(self, weekday: int) -> list[tuple[time, time]]:  # noqa: D102
-        pass
-
-    def available_time_day(self, day: datetime) -> list[time]:
-        """Free time for the day."""
-        with Session(engine) as session:
-            teacher_breaks = (
-                session.query(WorkBreak)
-                .filter(
-                    WorkBreak.teacher_id == self.user.teacher_id,
-                    WorkBreak.weekday == day.weekday(),
-                )
-                .all()
-            )
-            taken_breaks = [(b.start_time, b.end_time) for b in teacher_breaks]
-        return self.available_time(self.schedule_day(day) + taken_breaks)
-
-    def available_time_weekday(self, weekday: int) -> list[time]:
-        """Free time for the weekday."""
-        with Session(engine) as session:
-            teacher_weekends: list[Weekend] = (
-                session.query(Weekend.weekday).filter(Weekend.teacher_id == self.user.teacher_id).all()
-            )
-            na_weekdays = [w.weekday for w in teacher_weekends]
-            if weekday in na_weekdays:
-                return []
-            teacher_breaks = (
-                session.query(WorkBreak)
-                .filter(
-                    WorkBreak.teacher_id == self.user.teacher_id,
-                    WorkBreak.weekday == weekday,
-                )
-                .all()
-            )
-            taken_breaks = [(b.start_time, b.end_time) for b in teacher_breaks]
-        fbu = self.filter_by_user
-        self.filter_by_user = False
-        avail_time = self.available_time(self.schedule_weekday(weekday) + taken_breaks)
-        self.filter_by_user = fbu
-        return avail_time
-
-    def restrictions(self, session: Session, date_or_weekday: datetime | int):
-        """Get restrictions for the date or weekday."""
-        if isinstance(date_or_weekday, int):
-            filters = [RestrictedTime.weekday == date_or_weekday, RestrictedTime.user_id == self.user.id]
-        else:
-            filters = [RestrictedTime.weekday == date_or_weekday.weekday(), RestrictedTime.user_id == self.user.id]
-        if not self.filter_by_user:
-            filters.pop(-1)
-        return session.query(RestrictedTime).filter(*filters).all()
-
-    def reschedules(self, session: Session, date: datetime):
-        """Get reschedules for the date."""
-        return session.query(Reschedule).filter(Reschedule.date == date.date()).all()
-
-    def scheduled_lessons(self, session: Session, date_or_wekday: datetime | int):
-        """Get scheduled lessons for the date or weekday."""
-        if isinstance(date_or_wekday, int):
-            filters = [ScheduledLesson.weekday == date_or_wekday, ScheduledLesson.user_id == self.user.id]
-        else:
-            filters = [ScheduledLesson.weekday == date_or_wekday.weekday(), ScheduledLesson.user_id == self.user.id]
-        if not self.filter_by_user:
-            filters.pop(-1)
-        return session.query(ScheduledLesson).filter(*filters).all()
+            events = get_events_day(session, day)
+            return model_list_adapter_teacher(events)
 
     def available_weekdays(self):
         """Get available weekdays."""
-        return [weekday for weekday in range(7) if self.available_time_weekday(weekday)]
-
-    def available_date(self, start: datetime, end: datetime) -> list[datetime]:
-        """Get available dates."""
-        return [date for date in daterange(start, end) if self.available_time_day(date)]
-
-
-class TeacherSchedule(Schedule):
-    def schedule_day(self, day: datetime) -> list[tuple[time, time, str, int]]:
-        """Schedule for the day."""
         with Session(engine) as session:
-            cancellations = [
-                x.source_id for x in session.query(Reschedule).filter(Reschedule.source_date == day.date()).all()
-            ]
-            schedule = list(
-                chain(
-                    [
-                        (lesson.start_time, lesson.end_time, lesson.user.username_dog, lesson.user.telegram_id)
-                        for lesson in self.scheduled_lessons(session, day)
-                        if lesson.id not in cancellations
-                    ],
-                    [
-                        (rs.start_time, rs.end_time, rs.user.username_dog, rs.user.telegram_id)
-                        for rs in self.reschedules(session, day)
-                    ],
-                ),
-            )
-            schedule.sort(key=lambda x: x[0])
-            return schedule
+            return get_available_weekdays(session, self.user)
 
-    def schedule_weekday(self, weekday: int) -> list[tuple[time, time, str]]:
-        """Schedule for the weekday."""
+    def available_time_weekday(self, weekday: int):
+        """Get available time for the weekday."""
         with Session(engine) as session:
+            events = get_events_weekday(session, weekday)
             teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
-            if weekday in [w.weekday for w in teacher.weekends]:
-                return [(teacher.work_start, teacher.work_end, teacher.name)]
-            schedule = list(
-                chain(
-                    [
-                        (lesson.start_time, lesson.end_time, lesson.user.username_dog)
-                        for lesson in self.scheduled_lessons(session, weekday)
-                    ],
-                ),
+            return get_avaiable_time(
+                teacher.work_start,
+                teacher.work_end,
+                model_list_adapter_teacher(events),
             )
-            schedule.sort(key=lambda x: x[0])
-            return schedule
 
-
-class StudentSchedule(Schedule):
-    def __init__(self, user: User) -> None:  # noqa: D107
-        super().__init__(user)
-        self.filter_by_user = True
-
-    def reschedules(self, session: Session, date: datetime):
-        """Get reschedules for the date."""
-        return (
-            session.query(Reschedule).filter(Reschedule.date == date.date(), Reschedule.user_id == self.user.id).all()
-        )
-
-    def schedule_day(self, day: datetime) -> list[tuple[time, time]]:
-        """Schedule for the day."""
+    def available_time_day(self, day: datetime):
+        """Get available time for the day."""
         with Session(engine) as session:
-            cancellations = [
-                x.source_id
-                for x in session.query(Reschedule)
-                .filter(Reschedule.user_id == self.user.id, Reschedule.date == str(day.date()))
-                .all()
-            ]
-            schedule = list(
-                chain(
-                    [
-                        (lesson.start_time, lesson.end_time)
-                        for lesson in self.scheduled_lessons(session, day)
-                        if lesson.id not in cancellations
-                    ],
-                    [(reschedule.start_time, reschedule.end_time) for reschedule in self.reschedules(session, day)],
-                ),
+            events = get_events_day(session, day)
+            teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            return get_avaiable_time(
+                teacher.work_start,
+                teacher.work_end,
+                model_list_adapter_teacher(events),
             )
-            schedule.sort(key=lambda x: x[0])
-            return schedule
 
-    def schedule_weekday(self, weekday: int) -> list[tuple[time, time]]:
-        """Schedule for the weekday."""
+
+class StudentSchedule:
+    def __init__(self, user: User) -> None:
+        """Base schedule class containing basic methods."""
+        self.user = user
+
+    def schedule_day(self, day: datetime):
+        """Get schedule for the day."""
         with Session(engine) as session:
-            schedule = list(
-                chain(
-                    [(lesson.start_time, lesson.end_time) for lesson in self.scheduled_lessons(session, weekday)],
-                ),
-            )
-            schedule.sort(key=lambda x: x[0])
-            return schedule
+            return model_list_adapter_user(get_events_day(session, day, self.user))
 
     def available_weekdays(self):
         """Get available weekdays."""
         with Session(engine) as session:
-            restriced_weekdays = (
-                session.query(RestrictedTime.weekday)
-                .filter(
-                    RestrictedTime.user_id == self.user.id,
-                    RestrictedTime.whole_day_restricted == True,  # noqa: E712
-                )
-                .all()
+            return get_available_weekdays(session, self.user)
+
+    def available_time_weekday(self, weekday: int):
+        """Get available time for the weekday."""
+        with Session(engine) as session:
+            events = get_events_weekday(session, weekday)
+            teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            return get_avaiable_time(
+                teacher.work_start,
+                teacher.work_end,
+                model_list_adapter_user(events),
             )
-            teacher_weekends = session.query(Weekend.weekday).filter(Weekend.teacher_id == self.user.teacher_id).all()
-        na_weekdays = list(chain(restriced_weekdays, teacher_weekends))
-        return [weekday for weekday in range(7) if self.available_time_weekday(weekday) and weekday not in na_weekdays]
+
+    def available_time_day(self, day: datetime):
+        """Get available time for the day."""
+        with Session(engine) as session:
+            events = get_events_day(session, day)
+            teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            return get_avaiable_time(
+                teacher.work_start,
+                teacher.work_end,
+                model_list_adapter_user(events),
+            )
