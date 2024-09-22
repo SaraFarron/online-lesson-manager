@@ -37,10 +37,10 @@ async def today_schedule_handler(message: Message) -> None:
             logger.info(logs.REQUEST_SCHEDULE, message.from_user.full_name)
             if session.query(Teacher).filter(Teacher.telegram_id == user.telegram_id).first():
                 schedule = TeacherSchedule(user).schedule_day(today)
-                answer = "\n".join([f"{s[0]}-{s[1]}: {s[2]}" for s in schedule])
+                answer = "\n".join([f"{s[0].strftime('%H:%M')}-{s[1].strftime('%H:%M')}: {s[2]}" for s in schedule])
             else:
                 schedule = StudentSchedule(user).schedule_day(today)
-                answer = "\n".join([f"{s[0]}-{s[1]}" for s in schedule])
+                answer = "\n".join([f"{s[0].strftime('%H:%M')}-{s[1].strftime('%H:%M')}" for s in schedule])
             await message.answer(Messages.SCHEDULE + answer if answer else Messages.SCHEDULE_EMPTY)
         else:
             logger.warning(logs.REQUEST_SCHEDULE_NO_USER, message.from_user.full_name)

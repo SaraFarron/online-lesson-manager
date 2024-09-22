@@ -227,6 +227,7 @@ async def add_break_finish(message: Message, state: FSMContext) -> None:
             end_time = datetime.strptime(message.text.split(" - ")[1], "%H:%M").time()  # noqa: DTZ007
         except ValueError:
             await message.answer(Messages.INVALID_TIME_PERIOD)
+            return
         work_break = WorkBreak(
             teacher_id=teacher.id,
             teacher=teacher,

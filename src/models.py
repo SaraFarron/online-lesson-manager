@@ -44,6 +44,11 @@ class WorkBreak(Base):
     start_time: Mapped[Time] = mapped_column(Time)
     end_time: Mapped[Time] = mapped_column(Time)
 
+    @property
+    def edges(self):
+        """Start and end time as a tuple."""
+        return (self.start_time, self.end_time)
+
 
 class User(Base):
     __tablename__ = "user_account"
@@ -51,7 +56,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    telegram_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    telegram_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)  # noqa: UP007
     teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
     teacher: Mapped[Teacher] = relationship(back_populates="students")
     lessons: Mapped[list[Lesson]] = relationship(back_populates="user", cascade="all, delete")
@@ -86,6 +91,11 @@ class Lesson(Base):
     # statuses: upcoming, canceled, completed
     status: Mapped[str] = mapped_column(String(10), default="upcoming")
 
+    @property
+    def edges(self):
+        """Start and end time as a tuple."""
+        return (self.time, self.end_time)
+
     def __repr__(self) -> str:
         """String model represetation."""
         return f"Lesson(id={self.id!r}, date={self.date!r}, time={self.time!r}, user_id={self.user_id!r})"
@@ -100,6 +110,11 @@ class ScheduledLesson(Base):
     weekday: Mapped[int] = mapped_column(Integer)
     start_time: Mapped[Time] = mapped_column(Time)
     end_time: Mapped[Time] = mapped_column(Time)
+
+    @property
+    def edges(self):
+        """Start and end time as a tuple."""
+        return (self.start_time, self.end_time)
 
     def __repr__(self) -> str:
         """String model represetation."""
@@ -119,6 +134,11 @@ class Reschedule(Base):
     start_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
     end_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
 
+    @property
+    def edges(self):
+        """Start and end time as a tuple."""
+        return (self.start_time, self.end_time)
+
 
 class RestrictedTime(Base):
     __tablename__ = "restricted_time"
@@ -130,3 +150,8 @@ class RestrictedTime(Base):
     whole_day_restricted: Mapped[bool] = mapped_column(default=False)
     start_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
     end_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
+
+    @property
+    def edges(self):
+        """Start and end time as a tuple."""
+        return (self.start_time, self.end_time)
