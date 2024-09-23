@@ -34,20 +34,33 @@ class Weekend(Base):
     teacher: Mapped[Teacher] = relationship(back_populates="weekends")
 
 
-class WorkBreak(Base):
+class BordersMixin:
+    start_time: Mapped[Time] = mapped_column(Time)
+    end_time: Mapped[Time] = mapped_column(Time)
+
+    @property
+    def st_str(self):
+        """Start time as a string."""
+        return self.start_time.strftime("%H:%M")
+
+    @property
+    def et_str(self):
+        """End time as a string."""
+        return self.end_time.strftime("%H:%M")
+
+    @property
+    def edges(self):
+        """Start and end time as a tuple."""
+        return (self.start_time, self.end_time)
+
+
+class WorkBreak(BordersMixin, Base):
     __tablename__ = "work_break"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
     teacher: Mapped[Teacher] = relationship(back_populates="breaks")
     weekday: Mapped[int] = mapped_column(Integer)
-    start_time: Mapped[Time] = mapped_column(Time)
-    end_time: Mapped[Time] = mapped_column(Time)
-
-    @property
-    def edges(self):
-        """Start and end time as a tuple."""
-        return (self.start_time, self.end_time)
 
 
 class User(Base):
@@ -79,49 +92,35 @@ class User(Base):
         return f"User(id={self.id!r}, name={self.name!r})"
 
 
-class Lesson(Base):
+class Lesson(BordersMixin, Base):
     __tablename__ = "lesson"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
     user: Mapped[User] = relationship(back_populates="lessons")
     date: Mapped[Date] = mapped_column(Date)
-    time: Mapped[Time] = mapped_column(Time)
-    end_time: Mapped[Time] = mapped_column(Time)
     # statuses: upcoming, canceled, completed
     status: Mapped[str] = mapped_column(String(10), default="upcoming")
-
-    @property
-    def edges(self):
-        """Start and end time as a tuple."""
-        return (self.time, self.end_time)
 
     def __repr__(self) -> str:
         """String model represetation."""
         return f"Lesson(id={self.id!r}, date={self.date!r}, time={self.time!r}, user_id={self.user_id!r})"
 
 
-class ScheduledLesson(Base):
+class ScheduledLesson(BordersMixin, Base):
     __tablename__ = "scheduled_lesson"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
     user: Mapped[User] = relationship(back_populates="scheduled_lessons")
     weekday: Mapped[int] = mapped_column(Integer)
-    start_time: Mapped[Time] = mapped_column(Time)
-    end_time: Mapped[Time] = mapped_column(Time)
-
-    @property
-    def edges(self):
-        """Start and end time as a tuple."""
-        return (self.start_time, self.end_time)
 
     def __repr__(self) -> str:
         """String model represetation."""
         return f"Lesson(id={self.id!r}, weekday={self.weekday!r}, time={self.start_time!r}, user_id={self.user_id!r})"
 
 
-class Reschedule(Base):
+class Reschedule(BordersMixin, Base):
     __tablename__ = "reschedule"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -131,16 +130,9 @@ class Reschedule(Base):
     source: Mapped[ScheduledLesson] = relationship()
     source_date: Mapped[Date] = mapped_column(Date)
     date: Mapped[Optional[Date]] = mapped_column(Date, nullable=True, default=None)  # noqa: UP007
-    start_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
-    end_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
-
-    @property
-    def edges(self):
-        """Start and end time as a tuple."""
-        return (self.start_time, self.end_time)
 
 
-class RestrictedTime(Base):
+class RestrictedTime(BordersMixin, Base):
     __tablename__ = "restricted_time"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -148,10 +140,3 @@ class RestrictedTime(Base):
     user: Mapped[User] = relationship(back_populates="restricted_times")
     weekday: Mapped[int] = mapped_column(Integer)
     whole_day_restricted: Mapped[bool] = mapped_column(default=False)
-    start_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
-    end_time: Mapped[Optional[Time]] = mapped_column(Time, nullable=True, default=None)  # noqa: UP007
-
-    @property
-    def edges(self):
-        """Start and end time as a tuple."""
-        return (self.start_time, self.end_time)
