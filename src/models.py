@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, time
 from typing import Optional
 
 from sqlalchemy import Date, ForeignKey, Integer, String, Time
@@ -18,8 +19,8 @@ class Teacher(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     telegram_id: Mapped[int] = mapped_column(unique=True, nullable=False)
-    work_start: Mapped[Time] = mapped_column(Time, default=config.WORK_START)
-    work_end: Mapped[Time] = mapped_column(Time, default=config.WORK_END)
+    work_start: Mapped[time] = mapped_column(Time, default=config.WORK_START)
+    work_end: Mapped[time] = mapped_column(Time, default=config.WORK_END)
     weekends: Mapped[list[Weekend]] = relationship(back_populates="teacher")
     breaks: Mapped[list[WorkBreak]] = relationship(back_populates="teacher")
     students: Mapped[list[User]] = relationship(back_populates="teacher")
@@ -35,8 +36,8 @@ class Weekend(Base):
 
 
 class BordersMixin:
-    start_time: Mapped[Time] = mapped_column(Time)
-    end_time: Mapped[Time] = mapped_column(Time)
+    start_time: Mapped[time] = mapped_column(Time)
+    end_time: Mapped[time] = mapped_column(Time)
 
     @property
     def st_str(self):
@@ -128,8 +129,8 @@ class Reschedule(BordersMixin, Base):
     user: Mapped[User] = relationship(back_populates="reschedules")
     source_id: Mapped[int] = mapped_column(ForeignKey("scheduled_lesson.id"))
     source: Mapped[ScheduledLesson] = relationship()
-    source_date: Mapped[Date] = mapped_column(Date)
-    date: Mapped[Optional[Date]] = mapped_column(Date, nullable=True, default=None)  # noqa: UP007
+    source_date: Mapped[date] = mapped_column(Date)
+    date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, default=None)  # noqa: UP007
 
 
 class RestrictedTime(BordersMixin, Base):
