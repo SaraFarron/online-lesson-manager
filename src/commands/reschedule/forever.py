@@ -69,7 +69,7 @@ async def frl_delete_sl(callback: CallbackQuery, state: FSMContext) -> None:
         message = messages.USER_DELETED_SL % (
             user.username_dog,
             config.WEEKDAY_MAP_FULL[sl.weekday],
-            sl.start_time.strftime("%H:%M"),
+            sl.st_str,
         )
         # Delete all reschedules for this lesson in order to prevent errors
         reschedules_to_delete = session.query(Reschedule).filter_by(source=sl).all()

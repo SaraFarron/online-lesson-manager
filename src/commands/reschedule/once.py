@@ -121,7 +121,7 @@ async def orl_cancel_lesson(callback: CallbackQuery, state: FSMContext) -> None:
         message = messages.USER_CANCELED_SL % (
             user.username_dog,
             state_data["date"].strftime("%d-%m-%Y"),
-            sl.start_time.strftime("%H:%M"),
+            sl.st_str,
         )
         session.commit()
         await send_message(user.teacher.telegram_id, message)
@@ -193,7 +193,7 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
         message = messages.USER_MOVED_SL % (
             user.username_dog,
             reschedule.source_date.strftime("%d-%m-%Y"),
-            sl.start_time.strftime("%H:%M"),
+            sl.st_str,
             state_data["new_date"].strftime("%d-%m-%Y"),
             time.strftime("%H:%M"),
         )
