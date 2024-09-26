@@ -49,8 +49,10 @@ class Callbacks:
 async def orl_type_date(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     state_data = await state.get_data()
-    await state.update_data(change_type=callback.data.split(":")[1])
+    cb_data = callback.data.split(":")
     with Session(engine) as session:
+        if len(cb_data) == 3:
+            pass
         lesson: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
         if lesson:
             await state.update_data(
@@ -153,7 +155,7 @@ async def orl_choose_time(message: Message, state: FSMContext) -> None:
         await state.set_state(ChooseNewDateTime.time)
         await message.answer(Messages.WRONG_DATE)
         return
-    await state.update_data(date=date)
+    await state.update_data(new_date=date)
 
     with Session(engine):
         schedule = get_schedule(state_data["user_telegram_id"])
