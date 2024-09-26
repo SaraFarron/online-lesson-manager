@@ -135,9 +135,10 @@ def model_list_adapter_user(models: list[ScheduledLesson | Reschedule | Restrict
     result.sort(key=lambda x: x[0])
     return result
 
+
 def model_list_adapter_teacher(models: list[ScheduledLesson | Reschedule | RestrictedTime | WorkBreak]):
     """Convert list of models to list of dicts."""
-    result = [(*model.edges, model.user.username_dog, model.user.telegram_id) for model in models]
+    result = [(*model.edges, model.user.username_dog, model.user.telegram_id) for model in models if model.edges[0]]
     result.sort(key=lambda x: x[0])
     return result
 
@@ -171,6 +172,7 @@ def get_unavailable_weekdays(user_id: int):
         weekends = [w.weekday for w in user.teacher.weekends]
         restricted = [r.weekday for r in user.restricted_times if r.whole_day_restricted]
         return weekends + restricted
+
 
 def get_available_weekdays(session: Session, user: User):
     """Get available weekdays."""
