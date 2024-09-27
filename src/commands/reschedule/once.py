@@ -9,12 +9,12 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 import messages
-from commands.reschedule.config import ORL_START_CALLBACK, router
+from commands.reschedule.config import ORL_RS_CALLBACK, ORL_START_CALLBACK, router
 from config import config
 from database import engine
 from logger import log_func
 from models import Reschedule, ScheduledLesson, User
-from utils import MAX_HOUR, get_schedule, inline_keyboard, send_message
+from utils import calc_end_time, get_schedule, inline_keyboard, send_message
 
 
 class ChooseNewDateTime(StatesGroup):
@@ -49,17 +49,35 @@ class Callbacks:
 async def orl_type_date(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     state_data = await state.get_data()
-    await state.update_data(change_type=callback.data.split(":")[1])
     with Session(engine) as session:
-        lesson: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
+        lesson: ScheduledLesson | None = session.query(ScheduledLesson).get(state_data["lesson"])
         if lesson:
             await state.update_data(
-                lesson=state_data["lesson"],
+                event=lesson,
                 user_id=lesson.user_id,
                 user_telegram_id=lesson.user.telegram_id,
             )
             await state.set_state(ChooseNewDateTime.date)
             await callback.message.answer(Messages.TYPE_NEW_DATE)
+        else:
+            await state.clear()
+            await callback.message.answer("Произошла непредвиденная ошибка")
+
+
+@router.callback_query(F.data.startswith(ORL_RS_CALLBACK))
+@log_func
+async def orl_rs_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handler receives messages with `reschesule_lesson_choose_sl` state."""
+    with Session(engine) as session:
+        event: Reschedule = session.query(Reschedule).get(int(callback.data.split(":")[2]))
+        await state.update_data(date=event.source_date, event=event, user_telegram_id=event.user.telegram_id)
+    keyboard = inline_keyboard(
+        [
+            (Messages.CANCEL_LESSON, Callbacks.CONFIRM),
+            (Messages.CHOOSE_NEW_DATE, Callbacks.CHOOSE_DATE),
+        ],
+    ).as_markup()
+    await callback.message.answer(Messages.CONFRIM, reply_markup=keyboard)
 
 
 @router.message(ChooseNewDateTime.date)
@@ -81,18 +99,20 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext) -> None:
                 session.delete(r)
                 session.commit()
             rshs.append(r)
-        if state_data["lesson"] in [r.source.id for r in rshs]:
+        event = state_data["event"]
+        if isinstance(event, ScheduledLesson) and event.id in [r.source.id for r in rshs]:
             await message.answer(Messages.ALREADY_CANCELED)
             await state.clear()
             return
-        right_weekday = session.query(ScheduledLesson).get(state_data["lesson"]).weekday
-        if date.weekday() != right_weekday:
-            await state.set_state(ChooseNewDateTime.date)
-            await message.answer(
-                Messages.CHOOSE_RIGHT_WEEKDAY
-                % (config.WEEKDAY_MAP_FULL[date.weekday()], config.WEEKDAY_MAP_FULL[right_weekday]),
-            )
-            return
+        if isinstance(event, ScheduledLesson):
+            right_weekday = session.query(ScheduledLesson).get(state_data["lesson"]).weekday
+            if date.weekday() != right_weekday:
+                await state.set_state(ChooseNewDateTime.date)
+                await message.answer(
+                    Messages.CHOOSE_RIGHT_WEEKDAY
+                    % (config.WEEKDAY_MAP_FULL[date.weekday()], config.WEEKDAY_MAP_FULL[right_weekday]),
+                )
+                return
 
     await state.update_data(date=date)
     keyboard = inline_keyboard(
@@ -110,18 +130,22 @@ async def orl_cancel_lesson(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschedule_lesson_confirm` state."""
     state_data = await state.get_data()
     with Session(engine) as session:
-        sl: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
         user: User = session.query(User).get(state_data["user_id"])
-        reschedule = Reschedule(
-            user=user,
-            source=sl,
-            source_date=state_data["date"],
-        )
-        session.add(reschedule)
+        if isinstance(state_data["event"], Reschedule):
+            event = session.query(Reschedule).get(state_data["event"].id)
+            session.delete(event)
+        else:
+            event: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
+            reschedule = Reschedule(
+                user=user,
+                source=event,
+                source_date=state_data["date"],
+            )
+            session.add(reschedule)
         message = messages.USER_CANCELED_SL % (
             user.username_dog,
             state_data["date"].strftime("%d-%m-%Y"),
-            sl.start_time.strftime("%H:%M"),
+            event.st_str,
         )
         session.commit()
         await send_message(user.teacher.telegram_id, message)
@@ -153,7 +177,7 @@ async def orl_choose_time(message: Message, state: FSMContext) -> None:
         await state.set_state(ChooseNewDateTime.time)
         await message.answer(Messages.WRONG_DATE)
         return
-    await state.update_data(date=date)
+    await state.update_data(new_date=date)
 
     with Session(engine):
         schedule = get_schedule(state_data["user_telegram_id"])
@@ -180,20 +204,29 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
     time = datetime.strptime(callback.data.split(":")[1], "%H.%M").time()  # noqa: DTZ007
     with Session(engine) as session:
         user: User = session.query(User).get(state_data["user_id"])
-        sl: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
-        reschedule = Reschedule(
-            user=user,
-            source=sl,
-            source_date=state_data["date"],
-            date=state_data["new_date"],
-            start_time=time,
-            end_time=time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0),
-        )
-        session.add(reschedule)
+        event = state_data["event"]
+        if isinstance(event, Reschedule):
+            event: Reschedule = session.query(Reschedule).get(event.id)
+            old_date, old_time = event.source_date, event.start_time
+            event.date = state_data["new_date"]
+            event.start_time = time
+            event.end_time = calc_end_time(time)
+        else:
+            sl: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
+            reschedule = Reschedule(
+                user=user,
+                source=sl,
+                source_date=state_data["date"],
+                date=state_data["new_date"],
+                start_time=time,
+                end_time=calc_end_time(time),
+            )
+            old_date, old_time = reschedule.source_date.strftime("%d-%m-%Y"), sl.st_str
+            session.add(reschedule)
         message = messages.USER_MOVED_SL % (
             user.username_dog,
-            reschedule.source_date.strftime("%d-%m-%Y"),
-            sl.start_time.strftime("%H:%M"),
+            old_date,
+            old_time,
             state_data["new_date"].strftime("%d-%m-%Y"),
             time.strftime("%H:%M"),
         )

@@ -9,8 +9,8 @@ from config import logs
 from config.config import TIMEZONE
 from database import engine
 from logger import logger
-from models import User
-from utils import TeacherSchedule, get_schedule, send_message
+from models import Teacher, User
+from utils import TeacherSchedule, get_events_day, model_list_adapter_teacher, send_message
 
 
 async def lessons_notifications(timeout: float):
@@ -24,7 +24,9 @@ async def lessons_notifications(timeout: float):
         notifees = []
         users = session.query(User).all()
         for user in users:
-            schedule = get_schedule(user.telegram_id).schedule_day(datetime.now(TIMEZONE))
+            teacher: Teacher | None = session.query(Teacher).filter(Teacher.telegram_id == user.telegram_id)
+            sargs = (session, now) if teacher else (session, now, user)
+            schedule = model_list_adapter_teacher(get_events_day(*sargs))
             text = []
             for s in schedule:
                 lesson_start = datetime.now(TIMEZONE).replace(

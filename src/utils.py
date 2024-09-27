@@ -16,6 +16,11 @@ from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, W
 MAX_HOUR = 23
 
 
+def calc_end_time(time: time):
+    """Calculate end time."""
+    return time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0)
+
+
 def get_teacher():
     """Get the right teacher from the database."""
     with Session(engine) as session:
@@ -135,9 +140,10 @@ def model_list_adapter_user(models: list[ScheduledLesson | Reschedule | Restrict
     result.sort(key=lambda x: x[0])
     return result
 
+
 def model_list_adapter_teacher(models: list[ScheduledLesson | Reschedule | RestrictedTime | WorkBreak]):
     """Convert list of models to list of dicts."""
-    result = [(*model.edges, model.user.username_dog, model.user.telegram_id) for model in models]
+    result = [(*model.edges, model.user.username_dog, model.user.telegram_id) for model in models if model.edges[0]]
     result.sort(key=lambda x: x[0])
     return result
 
@@ -171,6 +177,7 @@ def get_unavailable_weekdays(user_id: int):
         weekends = [w.weekday for w in user.teacher.weekends]
         restricted = [r.weekday for r in user.restricted_times if r.whole_day_restricted]
         return weekends + restricted
+
 
 def get_available_weekdays(session: Session, user: User):
     """Get available weekdays."""
@@ -222,10 +229,11 @@ class TeacherSchedule:
         with Session(engine) as session:
             events = get_events_weekday(session, weekday)
             teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            breaks = [wb.edges for wb in teacher.breaks if wb.weekday == weekday]
             return get_avaiable_time(
                 teacher.work_start,
                 teacher.work_end,
-                model_list_adapter_teacher(events),
+                model_list_adapter_teacher(events) + breaks,
             )
 
     def available_time_day(self, day: datetime):
@@ -233,10 +241,11 @@ class TeacherSchedule:
         with Session(engine) as session:
             events = get_events_day(session, day)
             teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            breaks = [wb.edges for wb in teacher.breaks if wb.weekday == day.weekday()]
             return get_avaiable_time(
                 teacher.work_start,
                 teacher.work_end,
-                model_list_adapter_teacher(events),
+                model_list_adapter_teacher(events) + breaks,
             )
 
 
@@ -260,10 +269,11 @@ class StudentSchedule:
         with Session(engine) as session:
             events = get_events_weekday(session, weekday)
             teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            breaks = [wb.edges for wb in teacher.breaks if wb.weekday == weekday]
             return get_avaiable_time(
                 teacher.work_start,
                 teacher.work_end,
-                model_list_adapter_user(events),
+                model_list_adapter_user(events) + breaks,
             )
 
     def available_time_day(self, day: datetime):
@@ -271,8 +281,9 @@ class StudentSchedule:
         with Session(engine) as session:
             events = get_events_day(session, day)
             teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            breaks = [wb.edges for wb in teacher.breaks if wb.weekday == day.weekday()]
             return get_avaiable_time(
                 teacher.work_start,
                 teacher.work_end,
-                model_list_adapter_user(events),
+                model_list_adapter_user(events) + breaks,
             )
