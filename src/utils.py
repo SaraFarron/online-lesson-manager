@@ -229,10 +229,11 @@ class TeacherSchedule:
         with Session(engine) as session:
             events = get_events_weekday(session, weekday)
             teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            breaks = [wb.edges for wb in teacher.breaks if wb.weekday == weekday]
             return get_avaiable_time(
                 teacher.work_start,
                 teacher.work_end,
-                model_list_adapter_teacher(events),
+                model_list_adapter_teacher(events) + breaks,
             )
 
     def available_time_day(self, day: datetime):
@@ -240,10 +241,11 @@ class TeacherSchedule:
         with Session(engine) as session:
             events = get_events_day(session, day)
             teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            breaks = [wb.edges for wb in teacher.breaks if wb.weekday == day.weekday()]
             return get_avaiable_time(
                 teacher.work_start,
                 teacher.work_end,
-                model_list_adapter_teacher(events),
+                model_list_adapter_teacher(events) + breaks,
             )
 
 
@@ -267,10 +269,11 @@ class StudentSchedule:
         with Session(engine) as session:
             events = get_events_weekday(session, weekday)
             teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            breaks = [wb.edges for wb in teacher.breaks if wb.weekday == weekday]
             return get_avaiable_time(
                 teacher.work_start,
                 teacher.work_end,
-                model_list_adapter_user(events),
+                model_list_adapter_user(events) + breaks,
             )
 
     def available_time_day(self, day: datetime):
@@ -278,8 +281,9 @@ class StudentSchedule:
         with Session(engine) as session:
             events = get_events_day(session, day)
             teacher: Teacher = session.query(Teacher).get(self.user.teacher_id)
+            breaks = [wb.edges for wb in teacher.breaks if wb.weekday == day.weekday()]
             return get_avaiable_time(
                 teacher.work_start,
                 teacher.work_end,
-                model_list_adapter_user(events),
+                model_list_adapter_user(events) + breaks,
             )
