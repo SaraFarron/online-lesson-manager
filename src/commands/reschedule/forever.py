@@ -100,18 +100,15 @@ async def frl_choose_weekday(callback: CallbackQuery, state: FSMContext) -> None
 async def frl_choose_time(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschedule_lesson_choose_time` state."""
     state_data = await state.get_data()
-    date = int(callback.data.split(":")[1])
+    weekday = int(callback.data.split(":")[1])
 
     with Session(engine):
         schedule = get_schedule(state_data["user_telegram_id"])
-        weekday = date if isinstance(date, int) else date.weekday()
         if weekday not in schedule.available_weekdays():
             await callback.message.answer(Messages.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[weekday])
             return
-        await state.update_data(new_date=date)
-        available_time = (
-            schedule.available_time_weekday(date) if isinstance(date, int) else schedule.available_time_day(date)
-        )
+        await state.update_data(new_date=weekday)
+        available_time = schedule.available_time_weekday(weekday)
         buttons = [(t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M")) for t in available_time]
         keyboard = inline_keyboard(buttons)
         keyboard.adjust(2, repeat=True)

@@ -16,6 +16,11 @@ from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, W
 MAX_HOUR = 23
 
 
+def calc_end_time(time: time):
+    """Calculate end time."""
+    return time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0)
+
+
 def get_teacher():
     """Get the right teacher from the database."""
     with Session(engine) as session:
