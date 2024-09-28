@@ -47,7 +47,7 @@ async def check_notify_handler(message: Message) -> None:
                 if lesson.start_time >= b.start_time and lesson.start_time < b.end_time:
                     wd = config.WEEKDAY_MAP_FULL[lesson.weekday]
                     text += f"Урок {wd}-{lesson.start_time} у {lesson.user.username_dog} стоит в перерыве\n"
-            
+
             reschedules = session.query(Reschedule).filter(Reschedule.date == b.date).all()  # TODO
 
         await message.answer(text)
