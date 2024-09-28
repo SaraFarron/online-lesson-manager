@@ -6,7 +6,6 @@ import messages
 from config import config
 from database import engine
 from models import Reschedule, ScheduledLesson, Teacher
-from utils import get_weekday_dates
 
 router: Router = Router()
 
@@ -20,34 +19,32 @@ async def check_notify_handler(message: Message) -> None:
             return
         text = ""
         weekends = [we.weekday for we in teacher.weekends]
+        breaks = {b.weekday: b for b in teacher.breaks}
         students = [s.id for s in teacher.students]
-        lessons = (
-            session.query(ScheduledLesson)
-            .filter(ScheduledLesson.weekday.in_(weekends), ScheduledLesson.user_id.in_(students))
-            .all()
-        )
-        for lesson in lessons:
-            wd = config.WEEKDAY_MAP_FULL[lesson.weekday]
-            text += f"Урок {lesson.start_time} у {lesson.user.username_dog} стоит в выходной ({wd})\n"
-        text += "\n"
-        weekend_dates = []
-        for we in weekends:
-            weekend_dates.extend(list(get_weekday_dates(1, we)))
-        reschedules = session.query(Reschedule).filter(Reschedule.date.in_(weekend_dates)).all()
-        for rs in reschedules:
-            text += f"Перенос {rs.date} {rs.st_str} у {rs.user.username_dog} стоит в выходной ({wd})\n"
 
-        for b in teacher.breaks:
-            lessons = (
-                session.query(ScheduledLesson)
-                .filter(ScheduledLesson.weekday == b.weekday, ScheduledLesson.user_id.in_(students))
-                .all()
-            )
-            for lesson in lessons:
-                if lesson.start_time >= b.start_time and lesson.start_time < b.end_time:
-                    wd = config.WEEKDAY_MAP_FULL[lesson.weekday]
-                    text += f"Урок {wd}-{lesson.start_time} у {lesson.user.username_dog} стоит в перерыве\n"
+        wrong_time_events = []
+        sls = session.query(ScheduledLesson).filter(ScheduledLesson.user_id.in_(students)).all()
+        for sl in sls:
+            wb = breaks.get(sl.weekday)
+            if sl.weekday in weekends:
+                wd = config.WEEKDAY_MAP_FULL[sl.weekday]
+                text += f"Урок {wd}-{sl.start_time} у {sl.user.username_dog} стоит в выходной\n"
+                wrong_time_events.append(sl)
+            elif wb and sl.start_time >= wb.start_time and sl.start_time < wb.end_time:
+                wd = config.WEEKDAY_MAP_FULL[sl.weekday]
+                text += f"Урок {wd}-{sl.start_time} у {sl.user.username_dog} стоит в перерыве\n"
+                wrong_time_events.append(sl)
 
-            reschedules = session.query(Reschedule).filter(Reschedule.date == b.date).all()  # TODO
+        rss = session.query(Reschedule).filter(Reschedule.user_id.in_(students), Reschedule.date.is_not(None)).all()
+        for rs in rss:
+            rsw = rs.date.weekday()
+            wb = breaks.get(rsw)
+            if rsw in weekends:
+                wd = config.WEEKDAY_MAP_FULL[rsw]
+                text += f"Перенос {rs.date} {rs.st_str} у {rs.user.username_dog} стоит в выходной ({wd})\n"
+                wrong_time_events.append(rs)
+            elif rsw in breaks and rs.start_time >= breaks[rsw].start_time and rs.start_time < breaks[rsw].end_time:
+                text += f"Перенос {rs.date} {rs.st_str} у {rs.user.username_dog} стоит в перерыве\n"
+                wrong_time_events.append(rs)
 
         await message.answer(text)
