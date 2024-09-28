@@ -1,15 +1,21 @@
-from aiogram import Router
+from aiogram import F, Router
+from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
 import messages
 from config import config
 from database import engine
+from help import AdminCommands
 from models import Reschedule, ScheduledLesson, Teacher
 
 router: Router = Router()
 
+COMMAND = "/check_notify"
 
+
+@router.message(Command(COMMAND))
+@router.message(F.text == AdminCommands.CHECK_SCHEDULE.value)
 async def check_notify_handler(message: Message) -> None:
     """Handler receives messages with `/check_notify` command."""
     with Session(engine) as session:
