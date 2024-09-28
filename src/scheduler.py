@@ -16,7 +16,7 @@ from utils import TeacherSchedule, get_events_day, model_list_adapter_teacher, s
 async def lessons_notifications(timeout: float):
     """Send notifications about lessons."""
     logger.info(logs.NOTIFICATIONS_START)
-    if datetime.now(TIMEZONE).hour != 20-4:
+    if datetime.now(TIMEZONE).hour != 8:
         logger.info(logs.NO_NEED_TO_SEND)
         return
     with Session(engine) as session:
