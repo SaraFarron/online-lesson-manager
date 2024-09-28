@@ -15,3 +15,4 @@ class Commands(Enum):
 class AdminCommands(Enum):
     ADMIN_GROUP = "О, админ!"
     EDIT_WORKING_HOURS = "Редактировать рабочие часы"
+    CHECK_SCHEDULE = "Проверить расписание"
