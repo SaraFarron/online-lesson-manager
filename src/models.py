@@ -26,11 +26,19 @@ class Teacher(Base):
     students: Mapped[list[User]] = relationship(back_populates="teacher")
 
 
-class Weekend(Base):
+class WeekdayMixin:
+    weekday: Mapped[int] = mapped_column(Integer)
+
+    @property
+    def weekday_str(self) -> str:
+        """Weekday as a string."""
+        return config.WEEKDAY_MAP_FULL[self.weekday]
+
+
+class Weekend(WeekdayMixin, Base):
     __tablename__ = "weekend"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    weekday: Mapped[int] = mapped_column(Integer)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
     teacher: Mapped[Teacher] = relationship(back_populates="weekends")
 
@@ -55,13 +63,12 @@ class BordersMixin:
         return (self.start_time, self.end_time)
 
 
-class WorkBreak(BordersMixin, Base):
+class WorkBreak(WeekdayMixin, BordersMixin, Base):
     __tablename__ = "work_break"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
     teacher: Mapped[Teacher] = relationship(back_populates="breaks")
-    weekday: Mapped[int] = mapped_column(Integer)
 
 
 class User(Base):
@@ -105,16 +112,15 @@ class Lesson(BordersMixin, Base):
 
     def __repr__(self) -> str:
         """String model represetation."""
-        return f"Lesson(id={self.id!r}, date={self.date!r}, time={self.time!r}, user_id={self.user_id!r})"
+        return f"Lesson(id={self.id!r}, date={self.date!r}, time={self.start_time!r}, user_id={self.user_id!r})"
 
 
-class ScheduledLesson(BordersMixin, Base):
+class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
     __tablename__ = "scheduled_lesson"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
     user: Mapped[User] = relationship(back_populates="scheduled_lessons")
-    weekday: Mapped[int] = mapped_column(Integer)
 
     def __repr__(self) -> str:
         """String model represetation."""
@@ -133,11 +139,10 @@ class Reschedule(BordersMixin, Base):
     date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, default=None)  # noqa: UP007
 
 
-class RestrictedTime(BordersMixin, Base):
+class RestrictedTime(WeekdayMixin, BordersMixin, Base):
     __tablename__ = "restricted_time"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
     user: Mapped[User] = relationship(back_populates="restricted_times")
-    weekday: Mapped[int] = mapped_column(Integer)
     whole_day_restricted: Mapped[bool] = mapped_column(default=False)
