@@ -66,11 +66,7 @@ async def frl_delete_sl(callback: CallbackQuery, state: FSMContext) -> None:
     with Session(engine) as session:
         sl: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
         user: User = session.query(User).get(state_data["user_id"])
-        message = messages.USER_DELETED_SL % (
-            user.username_dog,
-            config.WEEKDAY_MAP_FULL[sl.weekday],
-            sl.st_str,
-        )
+        message = messages.USER_DELETED_SL % (user.username_dog, sl.weekday_full_str, sl.st_str)
         # Delete all reschedules for this lesson in order to prevent errors
         reschedules_to_delete = session.query(Reschedule).filter_by(source=sl).all()
         for reschedule in reschedules_to_delete:
@@ -124,14 +120,14 @@ async def frl_update_sl(callback: CallbackQuery, state: FSMContext) -> None:
     with Session(engine) as session:
         user: User = session.query(User).get(state_data["user_id"])
         sl: ScheduledLesson = session.query(ScheduledLesson).get(state_data["lesson"])
-        old_w, old_t = sl.weekday, sl.start_time
+        old_w, old_t = sl.weekday_full_str, sl.st_str
         sl.weekday = state_data["new_date"]
         sl.start_time = time
         sl.end_time = time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0)
         message = messages.USER_MOVED_SL % (
             user.username_dog,
-            config.WEEKDAY_MAP_FULL[old_w],
-            old_t.strftime("%H:%M"),
+            old_w,
+            old_t,
             config.WEEKDAY_MAP_FULL[state_data["new_date"]],
             time.strftime("%H:%M"),
         )

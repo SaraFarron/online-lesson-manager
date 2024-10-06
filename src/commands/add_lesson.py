@@ -87,10 +87,6 @@ async def add_lesson_choose_time_handler(callback: CallbackQuery, state: FSMCont
         )
         session.add(sl)
         session.commit()
-        message = messages.USER_ADDED_SL % (
-            user.username_dog,
-            config.WEEKDAY_MAP_FULL[sl.weekday],
-            sl.st_str,
-        )
+        message = messages.USER_ADDED_SL % (user.username_dog, sl.weekday_full_str, sl.st_str)
         await send_message(user.teacher.telegram_id, message)
     await callback.message.answer(Messages.LESSON_ADDED)

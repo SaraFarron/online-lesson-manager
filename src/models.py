@@ -30,9 +30,14 @@ class WeekdayMixin:
     weekday: Mapped[int] = mapped_column(Integer)
 
     @property
-    def weekday_str(self) -> str:
+    def weekday_full_str(self) -> str:
         """Weekday as a string."""
         return config.WEEKDAY_MAP_FULL[self.weekday]
+
+    @property
+    def weekday_short_str(self) -> str:
+        """Weekday as a string."""
+        return config.WEEKDAY_MAP[self.weekday]
 
 
 class Weekend(WeekdayMixin, Base):
@@ -124,7 +129,7 @@ class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
 
     def __repr__(self) -> str:
         """String model represetation."""
-        return f"Lesson(id={self.id!r}, weekday={self.weekday!r}, time={self.start_time!r}, user_id={self.user_id!r})"
+        return f"Урок на {self.weekday_short_str} в {self.st_str}"
 
 
 class Reschedule(BordersMixin, Base):
@@ -137,6 +142,10 @@ class Reschedule(BordersMixin, Base):
     source: Mapped[ScheduledLesson] = relationship()
     source_date: Mapped[date] = mapped_column(Date)
     date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, default=None)  # noqa: UP007
+
+    def __repr__(self) -> str:
+        """String model represetation."""
+        return f"Перенос на {self.date} в {self.st_str}"
 
 
 class RestrictedTime(WeekdayMixin, BordersMixin, Base):

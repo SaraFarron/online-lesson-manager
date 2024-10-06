@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import calendar
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 from itertools import chain
 from typing import Iterable
 
@@ -15,19 +14,6 @@ from database import engine
 from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, WorkBreak
 
 MAX_HOUR = 23
-
-
-def get_weekday_dates(months_ahead: int, weekday: int) -> list[date]:
-    today = datetime.date.today()
-    dates = []
-    for i in range(months_ahead):
-        month = today.month + i
-        year = today.year + (month - 1) // 12
-        month = (month - 1) % 12 + 1
-        for week in calendar.monthcalendar(year, month):
-            if week[weekday] != 0:
-                dates.append(datetime.date(year, month, week[weekday]))
-    return dates
 
 
 def calc_end_time(time: time):
