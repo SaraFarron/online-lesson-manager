@@ -29,19 +29,9 @@ def get_todays_schedule(date: datetime, user: User):
     with Session(engine) as session:
         teacher = session.query(Teacher).filter(Teacher.telegram_id == user.telegram_id).first()
         if teacher:
-            schedule = "\n".join(
-                [
-                    f"{s[0].strftime('%H:%M')}-{s[1].strftime('%H:%M')}: {s[2]}"
-                    for s in TeacherSchedule(user).schedule_day(date)
-                ],
-            )
+            schedule = "\n".join(TeacherSchedule(user).schedule_day(date))
         else:
-            schedule = "\n".join(
-                [
-                    f"{s[0].strftime('%H:%M')}-{s[1].strftime('%H:%M')}"
-                    for s in StudentSchedule(user).schedule_day(date)
-                ],
-            )
+            schedule = "\n".join(StudentSchedule(user).schedule_day(date))
     if not schedule:
         return Messages.SCHEDULE_EMPTY
     return schedule

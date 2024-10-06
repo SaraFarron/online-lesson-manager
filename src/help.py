@@ -8,7 +8,6 @@ class Commands(Enum):
     RESCHEDULE = "Отменить/перенести урок"
     TODAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
-    # ADD_LESSON = "Добавить урок на дату"
     CANCEL = "Отмена"
 
 

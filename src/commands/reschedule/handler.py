@@ -59,7 +59,7 @@ async def reschedule_lesson_handler(message: Message, state: FSMContext) -> None
                         Callbacks.CHOOSE_CANCEL_TYPE + str(lesson.id),
                     )
                     for lesson in lessons
-                ] + [(f"Перенос {rs.date} {rs.st_str}", ORL_RS_CALLBACK + "rs:" + str(rs.id)) for rs in reschedules]
+                ] + [(f"{rs!s}", ORL_RS_CALLBACK + "rs:" + str(rs.id)) for rs in reschedules]
                 keyboard = inline_keyboard(buttons)
                 keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
                 await message.answer(Messages.CHOOSE_LESSON, reply_markup=keyboard.as_markup())
