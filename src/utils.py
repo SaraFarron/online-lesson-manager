@@ -217,7 +217,7 @@ class TeacherSchedule:
         """Get schedule for the day."""
         with Session(engine) as session:
             events = get_events_day(session, day)
-            return model_list_adapter_teacher(events)
+            return [f"{e.short_repr} у {e.user.username_dog}" for e in events]
 
     def available_weekdays(self):
         """Get available weekdays."""
@@ -257,7 +257,8 @@ class StudentSchedule:
     def schedule_day(self, day: datetime):
         """Get schedule for the day."""
         with Session(engine) as session:
-            return model_list_adapter_user(get_events_day(session, day, self.user))
+            events = get_events_day(session, day, self.user)
+            return [f"{e.short_repr}" for e in events]
 
     def available_weekdays(self):
         """Get available weekdays."""
