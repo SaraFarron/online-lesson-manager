@@ -23,7 +23,18 @@ class Teacher(Base):
     work_end: Mapped[time] = mapped_column(Time, default=config.WORK_END)
     weekends: Mapped[list[Weekend]] = relationship(back_populates="teacher")
     breaks: Mapped[list[WorkBreak]] = relationship(back_populates="teacher")
+    holidays: Mapped[list[Vacations]] = relationship(back_populates="teacher")
     students: Mapped[list[User]] = relationship(back_populates="teacher")
+
+
+class Vacations(Base):
+    __tablename__ = "holidays"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
+    teacher: Mapped[Teacher] = relationship(back_populates="holidays")
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
 
 
 class WeekdayMixin:

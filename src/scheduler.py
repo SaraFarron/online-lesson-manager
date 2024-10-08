@@ -9,21 +9,33 @@ from config import logs
 from config.config import TIMEZONE
 from database import engine
 from logger import logger
-from models import Teacher, User
+from models import Teacher, User, Vacations
 from utils import TeacherSchedule, get_events_day, model_list_adapter_teacher, send_message
 
 
 async def lessons_notifications(timeout: float):
     """Send notifications about lessons."""
     logger.info(logs.NOTIFICATIONS_START)
-    if datetime.now(TIMEZONE).hour != 8:
+    now = datetime.now(TIMEZONE)
+    if now.hour != 8:
         logger.info(logs.NO_NEED_TO_SEND)
         return
     with Session(engine) as session:
-        now = datetime.now(TIMEZONE)
         notifees = []
         users = session.query(User).all()
         for user in users:
+            holidays = (
+                session.query(Vacations)
+                .filter(
+                    Vacations.start_date <= now.date(),
+                    Vacations.end_date >= now.date(),
+                    Vacations.teacher_id == user.teacher_id,
+                )
+                .all()
+            )
+            if holidays:
+                logger.info(logs.NO_NOTIFICATIONS_ON_VACATION)
+                return
             teacher: Teacher | None = session.query(Teacher).filter(Teacher.telegram_id == user.telegram_id).first()
             sargs = (session, now) if teacher else (session, now, user)
             schedule = model_list_adapter_teacher(get_events_day(*sargs))
