@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from config.base import getenv
 from config.config import ADMINS, TIMEZONE
 from database import engine
-from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, WorkBreak
+from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Vacations, WorkBreak
 
 MAX_HOUR = 23
 
@@ -216,7 +216,19 @@ class TeacherSchedule:
     def schedule_day(self, day: datetime):
         """Get schedule for the day."""
         with Session(engine) as session:
+            holidays = (
+                session.query(Vacations)
+                .filter(
+                    Vacations.start_date <= day.date(),
+                    Vacations.end_date >= day.date(),
+                    Vacations.teacher_id == self.user.teacher_id,
+                )
+                .all()
+            )
+            if holidays:
+                return []
             events = get_events_day(session, day)
+            events.sort(key=lambda x: x.start_time)
             return [f"{e.short_repr} у {e.user.username_dog}" for e in events]
 
     def available_weekdays(self):
@@ -257,7 +269,19 @@ class StudentSchedule:
     def schedule_day(self, day: datetime):
         """Get schedule for the day."""
         with Session(engine) as session:
+            holidays = (
+                session.query(Vacations)
+                .filter(
+                    Vacations.start_date <= day.date(),
+                    Vacations.end_date >= day.date(),
+                    Vacations.teacher_id == self.user.teacher_id,
+                )
+                .all()
+            )
+            if holidays:
+                return []
             events = get_events_day(session, day, self.user)
+            events.sort(key=lambda x: x.start_time)
             return [f"{e.short_repr}" for e in events]
 
     def available_weekdays(self):
