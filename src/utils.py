@@ -217,6 +217,7 @@ class TeacherSchedule:
         """Get schedule for the day."""
         with Session(engine) as session:
             events = get_events_day(session, day)
+            events.sort(key=lambda x: x.start_time)
             return [f"{e.short_repr} у {e.user.username_dog}" for e in events]
 
     def available_weekdays(self):
@@ -258,6 +259,7 @@ class StudentSchedule:
         """Get schedule for the day."""
         with Session(engine) as session:
             events = get_events_day(session, day, self.user)
+            events.sort(key=lambda x: x.start_time)
             return [f"{e.short_repr}" for e in events]
 
     def available_weekdays(self):
