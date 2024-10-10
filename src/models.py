@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, time
+from datetime import date, datetime, time, timedelta
 from typing import Optional
 
 from sqlalchemy import Date, ForeignKey, Integer, String, Time
@@ -143,6 +143,13 @@ class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
         """String model represetation."""
         return f"Урок в {self.st_str}-{self.et_str}"
 
+    def may_cancel(self, date_time: datetime) -> bool:
+        """Check if reschedule may be canceled."""
+        if self.weekday != date_time.weekday():
+            return True
+        delta = datetime.combine(date_time.date(), self.start_time, tzinfo=config.TIMEZONE) - date_time
+        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HRS_TO_CANCEL))
+
     def __repr__(self) -> str:
         """String model represetation."""
         return f"Урок на {self.weekday_short_str} в {self.st_str}"
@@ -163,6 +170,13 @@ class Reschedule(BordersMixin, Base):
     def short_repr(self) -> str:
         """String model represetation."""
         return f"Перенос в {self.st_str}-{self.et_str}"
+
+    def may_cancel(self, date_time: datetime) -> bool:
+        """Check if reschedule may be canceled."""
+        if self.date > date_time.date():
+            return True
+        delta = datetime.combine(self.date, self.start_time, tzinfo=config.TIMEZONE) - date_time
+        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HRS_TO_CANCEL))
 
     def __repr__(self) -> str:
         """String model represetation."""

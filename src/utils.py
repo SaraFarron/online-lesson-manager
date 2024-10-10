@@ -124,7 +124,11 @@ def get_events_weekday(session: Session, weekday: int, user: User | None = None)
 
     sl_query = sl_query.filter(ScheduledLesson.weekday == weekday)
 
-    return list(chain(sl_query.all(), rs_query.all()))
+    today = datetime.now(TIMEZONE).date()
+    rs_query = rs_query.filter(Reschedule.date.is_not(None), Reschedule.date >= today)
+    rs_query = [r for r in rs_query.all() if r.date.weekday() == weekday]
+
+    return list(chain(sl_query.all(), rs_query))
 
 
 def get_events(session: Session, day_or_weekday: datetime | int, user: User | None = None):

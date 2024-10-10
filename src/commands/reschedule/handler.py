@@ -20,7 +20,10 @@ COMMAND = "/reschedule"
 
 
 class Messages:
-    CHOOSE_LESSON = "Выберите занятие"
+    CHSE_LSN_1 = "Выберите занятие. Нельзя отменять занятия, до которых осталось меньше "
+    CHSE_LSN_2 = f"{config.HRS_TO_CANCEL} часов" if config.HRS_TO_CANCEL > 1 else f"{config.HRS_TO_CANCEL} часа"
+    CHSE_LSN_3 = " (такие предложены не будут)"
+    CHOOSE_LESSON = CHSE_LSN_1 + CHSE_LSN_2 + CHSE_LSN_3
     NO_LESSONS = "Нет предстоящих занятий"
     CANCEL_TYPE = "Вы можете отменить/перенести занятие навсегда или только в какую-то дату"
     DELETE_TYPE = "Навсегда"
@@ -50,7 +53,9 @@ async def reschedule_lesson_handler(message: Message, state: FSMContext) -> None
                 .all()
             )
             now = datetime.now(config.TIMEZONE)
-            reschedules = session.query(Reschedule).filter(Reschedule.user_id == user.id, Reschedule.date >= now).all()
+            reschedules = (
+                session.query(Reschedule).filter(Reschedule.user_id == user.id, Reschedule.date >= now.date()).all()
+            )
             if lessons or reschedules:
                 weekdays = {d.weekday(): config.WEEKDAY_MAP_FULL[d.weekday()] for d in this_week()}
                 buttons = [
@@ -59,7 +64,18 @@ async def reschedule_lesson_handler(message: Message, state: FSMContext) -> None
                         Callbacks.CHOOSE_CANCEL_TYPE + str(lesson.id),
                     )
                     for lesson in lessons
-                ] + [(f"{rs!s}", ORL_RS_CALLBACK + "rs:" + str(rs.id)) for rs in reschedules]
+                    if lesson.may_cancel(now)
+                ] + [
+                    (
+                        f"{rs!s}",
+                        ORL_RS_CALLBACK + "rs:" + str(rs.id),
+                    )
+                    for rs in reschedules
+                    if rs.may_cancel(now)
+                ]
+                if not buttons:
+                    await message.answer(Messages.NO_LESSONS)
+                    return
                 keyboard = inline_keyboard(buttons)
                 keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
                 await message.answer(Messages.CHOOSE_LESSON, reply_markup=keyboard.as_markup())

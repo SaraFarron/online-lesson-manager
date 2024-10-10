@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, time
 
 import aiojobs
 from sqlalchemy.orm import Session
@@ -13,18 +13,14 @@ from models import Teacher, User, Vacations
 from utils import TeacherSchedule, get_events_day, model_list_adapter_teacher, send_message
 
 
-async def lessons_notifications(timeout: float):
+async def send_notifications(now: datetime):
     """Send notifications about lessons."""
     logger.info(logs.NOTIFICATIONS_START)
-    now = datetime.now(TIMEZONE)
-    if now.hour != 8:
-        logger.info(logs.NO_NEED_TO_SEND)
-        return
     with Session(engine) as session:
-        notifees = []
+        notifees = set()
         users = session.query(User).all()
         for user in users:
-            holidays = (
+            vacations = (
                 session.query(Vacations)
                 .filter(
                     Vacations.start_date <= now.date(),
@@ -33,7 +29,7 @@ async def lessons_notifications(timeout: float):
                 )
                 .all()
             )
-            if holidays:
+            if vacations:
                 logger.info(logs.NO_NOTIFICATIONS_ON_VACATION)
                 return
             teacher: Teacher | None = session.query(Teacher).filter(Teacher.telegram_id == user.telegram_id).first()
@@ -51,19 +47,26 @@ async def lessons_notifications(timeout: float):
                     else:
                         text.append(messages.LESSON_IS_COMING_STUDENT % s[0].strftime("%H:%M"))
                     if not notifees:
-                        notifees.append(user.username_dog)
-                    notifees.append(s[2])
+                        notifees.add(user.username_dog)
+                    notifees.add(s[2])
             if text:
                 message = messages.LESSONS_ARE_COMING + "%0A".join(text)
                 await send_message(user.telegram_id, message)
 
             logger.info(logs.NOTIFICATIONS_SENT, ", ".join(notifees))
+
+
+async def lessons_notifications(timeout: float):
+    """Send notifications about lessons."""
+    now = datetime.now(TIMEZONE)
+    if time(8, 15) <= now.time() < time(8, 20):
+        await send_notifications(now)
     await asyncio.sleep(timeout)
 
 
 async def start_scheduler():
     """Start scheduler."""
-    timeout = 3599
+    timeout = 5 * 60
     logger.info(logs.SCHEDULER_START)
     async with aiojobs.Scheduler() as scheduler:
         while True:
