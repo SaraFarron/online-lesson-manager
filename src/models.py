@@ -148,7 +148,7 @@ class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
         if self.weekday != date_time.weekday():
             return True
         delta = datetime.combine(date_time.date(), self.start_time, tzinfo=config.TIMEZONE) - date_time
-        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HOURS_BEFORE_CANCEL))
+        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HRS_TO_CANCEL))
 
     def __repr__(self) -> str:
         """String model represetation."""
@@ -176,7 +176,7 @@ class Reschedule(BordersMixin, Base):
         if self.date > date_time.date():
             return True
         delta = datetime.combine(self.date, self.start_time, tzinfo=config.TIMEZONE) - date_time
-        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HOURS_BEFORE_CANCEL))
+        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HRS_TO_CANCEL))
 
     def __repr__(self) -> str:
         """String model represetation."""

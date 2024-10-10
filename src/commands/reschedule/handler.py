@@ -20,7 +20,10 @@ COMMAND = "/reschedule"
 
 
 class Messages:
-    CHOOSE_LESSON = "Выберите занятие"
+    CHSE_LSN_1 = "Выберите занятие. Нельзя отменять занятия, до которых осталось меньше "
+    CHSE_LSN_2 = f"{config.HRS_TO_CANCEL} часов" if config.HRS_TO_CANCEL > 1 else f"{config.HRS_TO_CANCEL} часа"
+    CHSE_LSN_3 = " (такие предложены не будут)"
+    CHOOSE_LESSON = CHSE_LSN_1 + CHSE_LSN_2 + CHSE_LSN_3
     NO_LESSONS = "Нет предстоящих занятий"
     CANCEL_TYPE = "Вы можете отменить/перенести занятие навсегда или только в какую-то дату"
     DELETE_TYPE = "Навсегда"
