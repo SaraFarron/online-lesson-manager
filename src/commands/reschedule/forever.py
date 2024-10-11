@@ -134,3 +134,4 @@ async def frl_update_sl(callback: CallbackQuery, state: FSMContext) -> None:
         session.commit()
         await send_message(user.teacher.telegram_id, message)
     await callback.message.answer(Messages.LESSON_ADDED)
+    await state.clear()

@@ -75,6 +75,7 @@ async def add_vacation_end(message: Message, state: FSMContext) -> None:
     except ValueError:
         await message.answer(Messages.START_IS_AFTER_END)
         await state.clear()
+        await message.answer("Операция отменена")
         return
     await state.update_data(start=start)
     with Session(engine) as session:

@@ -35,6 +35,12 @@ class Messages:
     WRONG_WEEKDAY = "Нельзя выбрать %s"
     CHOOSE_TIME = "Выберите время (по МСК)"
     LESSON_ADDED = "Урок добавлен"
+    CHOOSE_FUTURE_DATE = "Нельзя перенести урок в прошлое"
+    CHOOSE_LESSON_IN_FUTURE = "Нельзя выбрать урок в прошлом"
+    CRT_1 = "Урок можно поставить только за %d " % config.HRS_TO_CANCEL
+    CRT_2 = "час" if config.HRS_TO_CANCEL == 1 else "часа" if config.HRS_TO_CANCEL < 5 else "часов"
+    CRT_3 = " до его начала"
+    CHOOSE_REASONABLE_TIME = CRT_1 + CRT_2 + CRT_3
 
 
 class Callbacks:
@@ -62,6 +68,7 @@ async def orl_type_date(callback: CallbackQuery, state: FSMContext) -> None:
         else:
             await state.clear()
             await callback.message.answer("Произошла непредвиденная ошибка")
+            await callback.message.answer("Операция отменена")
 
 
 @router.callback_query(F.data.startswith(ORL_RS_CALLBACK))
@@ -90,6 +97,10 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext) -> None:
         await state.set_state(ChooseNewDateTime.date)
         await message.answer(Messages.WRONG_DATE)
         return
+    if date.date() < datetime.now(tz=config.TIMEZONE).date():
+        await state.set_state(ChooseNewDateTime.date)
+        await message.answer(Messages.CHOOSE_LESSON_IN_FUTURE)
+        return
     state_data = await state.get_data()
     with Session(engine) as session:
         reschedules = session.query(Reschedule).filter(Reschedule.source_date == date.date()).all()
@@ -103,6 +114,7 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext) -> None:
         if isinstance(event, ScheduledLesson) and event.id in [r.source.id for r in rshs]:
             await message.answer(Messages.ALREADY_CANCELED)
             await state.clear()
+            await message.answer("Операция отменена")
             return
         if isinstance(event, ScheduledLesson):
             right_weekday = session.query(ScheduledLesson).get(state_data["lesson"]).weekday
@@ -177,6 +189,10 @@ async def orl_choose_time(message: Message, state: FSMContext) -> None:
         await state.set_state(ChooseNewDateTime.time)
         await message.answer(Messages.WRONG_DATE)
         return
+    if date.date() < datetime.now(tz=config.TIMEZONE).date():
+        await state.set_state(ChooseNewDateTime.time)
+        await message.answer(Messages.CHOOSE_FUTURE_DATE)
+        return
     await state.update_data(new_date=date)
 
     with Session(engine):
@@ -202,6 +218,16 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
     """Handler receives messages with `reschedule_lesson_create_reschedule` state."""
     state_data = await state.get_data()
     time = datetime.strptime(callback.data.split(":")[1], "%H.%M").time()  # noqa: DTZ007
+    now = datetime.now(tz=config.TIMEZONE)
+    if state_data["new_date"].date() == now.date():
+        if time < now.time():
+            await callback.message.answer(Messages.CHOOSE_FUTURE_DATE)
+            return
+        if time < now.time().replace(hour=now.time().hour + config.HRS_TO_CANCEL):
+            await state.clear()
+            await callback.message.answer(Messages.CHOOSE_REASONABLE_TIME)
+            await callback.message.answer("Операция отменена")
+            return
     with Session(engine) as session:
         user: User = session.query(User).get(state_data["user_id"])
         event = state_data["event"]
@@ -233,3 +259,4 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
         session.commit()
         await send_message(user.teacher.telegram_id, message)
     await callback.message.answer(Messages.LESSON_ADDED)
+    await state.clear()
