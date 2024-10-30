@@ -8,9 +8,11 @@ import aiohttp
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.orm import Session
 
+from config import config
 from config.base import getenv
 from config.config import ADMINS, TIMEZONE
 from database import engine
+from logger import logger
 from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Vacations, WorkBreak
 
 MAX_HOUR = 23
@@ -316,3 +318,20 @@ class StudentSchedule:
                 teacher.work_end,
                 model_list_adapter_user(events) + breaks,
             )
+
+
+def delete_banned_users():
+    """Delete banned users."""
+    counter = 0
+    with Session(engine) as session:
+        for user_id in config.BANNED_USERS:
+            user = session.query(User).filter(User.telegram_id == user_id).first()
+            if user is None:
+                continue
+            counter += 1
+            session.query(Reschedule).filter(Reschedule.user_id == user.id).delete()
+            session.query(ScheduledLesson).filter(ScheduledLesson.user_id == user.id).delete()
+            session.query(User).filter(User.telegram_id == user_id).delete()
+        session.commit()
+
+    logger.info(f"Deleted {counter} banned users")

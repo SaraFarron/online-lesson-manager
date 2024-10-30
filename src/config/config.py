@@ -53,7 +53,6 @@ WEEKDAYS = {
     "СБ": "Суббота",
     "ВС": "Воскресенье",
 }
-
 WEEKDAY_MAP = {
     0: "ПН",
     1: "ВТ",
@@ -73,6 +72,8 @@ WEEKDAY_MAP_FULL = {
     6: "Воскресенье",
 }
 
+BANNED_USERS = [5224132707]
+
 
 class Weekday(BaseModel):
     number: int
@@ -91,8 +92,8 @@ WEEKDAYS_MODEL = [
 ]
 
 
-def get_weekday(weekday: int | str):
-    """Get the current day of the week."""
-    if isinstance(weekday, str):
-        return next(w for w in WEEKDAYS_MODEL if weekday in (w.short, w.long))
-    return WEEKDAYS[weekday]
+# def get_weekday(weekday: int | str):
+#     """Get the current day of the week."""
+#     if isinstance(weekday, str):
+#         return next(w for w in WEEKDAYS_MODEL if weekday in (w.short, w.long))
+#     return WEEKDAYS[weekday]
