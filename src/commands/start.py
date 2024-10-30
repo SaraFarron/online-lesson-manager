@@ -27,6 +27,8 @@ class Messages:
 @log_func
 async def start_handler(message: Message) -> None:
     """Handler receives messages with `/start` command."""
+    if message.from_user.id in config.BANNED_USERS:
+        return
     pasha_tid = config.ADMINS[0]
     with Session(engine) as session:
         user_to_register = session.query(User).filter(User.telegram_id == message.from_user.id).first()

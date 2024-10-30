@@ -42,6 +42,8 @@ class Callbacks:
 @log_func
 async def reschedule_lesson_handler(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/reschedule` command."""
+    if message.from_user.id in config.BANNED_USERS:
+        return
     with Session(engine) as session:
         user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
         if user:

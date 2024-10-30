@@ -38,6 +38,8 @@ class Callbacks:
 @log_func
 async def add_lesson_handler(message: Message, state: FSMContext) -> None:
     """First handler, gives a list of available weekdays."""
+    if message.from_user.id in config.BANNED_USERS:
+        return
     with Session(engine):
         schedule = get_schedule(message.from_user.id)
         available_weekdays = schedule.available_weekdays()
