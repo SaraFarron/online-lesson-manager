@@ -72,7 +72,7 @@ WEEKDAY_MAP_FULL = {
     6: "Воскресенье",
 }
 
-BANNED_USERS = [5224132707]
+BANNED_USERS = [5224132707, 5138705886]
 
 
 class Weekday(BaseModel):
