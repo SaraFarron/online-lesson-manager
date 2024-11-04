@@ -6,9 +6,9 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Date
 
-from config import config
-from src2.models import Base, ScheduledLesson, User
-from src2.models.mixins import BordersMixin
+from config import settings
+from models import Base, ScheduledLesson, User
+from models.mixins import BordersMixin
 
 
 class Reschedule(BordersMixin, Base):
@@ -31,8 +31,8 @@ class Reschedule(BordersMixin, Base):
         """Check if reschedule may be canceled."""
         if self.date > date_time.date():
             return True
-        delta = datetime.combine(self.date, self.start_time, tzinfo=config.TIMEZONE) - date_time
-        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HRS_TO_CANCEL))
+        delta = datetime.combine(self.date, self.start_time, tzinfo=settings.TIMEZONE) - date_time
+        return bool(delta > timedelta(0) and delta > timedelta(hours=settings.HRS_TO_CANCEL))
 
     def __repr__(self) -> str:
         """String model represetation."""

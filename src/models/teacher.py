@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, relationship
 
-from src2.models import User
+from models import User
 
 if TYPE_CHECKING:
-    from src2.models import Student, Vacations, Weekend, WorkBreak
+    from models import Student, Vacations, Weekend, WorkBreak
 
 
 class Teacher(User):

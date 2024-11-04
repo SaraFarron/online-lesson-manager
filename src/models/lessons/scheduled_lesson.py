@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from config import config
+from config import settings
+from models import Base, User
 from models.mixins import BordersMixin, WeekdayMixin
-from src2.models import Base, User
 
 
 class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
@@ -24,8 +24,8 @@ class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
         """Check if reschedule may be canceled."""
         if self.weekday != date_time.weekday():
             return True
-        delta = datetime.combine(date_time.date(), self.start_time, tzinfo=config.TIMEZONE) - date_time
-        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HRS_TO_CANCEL))
+        delta = datetime.combine(date_time.date(), self.start_time, tzinfo=settings.TIMEZONE) - date_time
+        return bool(delta > timedelta(0) and delta > timedelta(hours=settings.HRS_TO_CANCEL))
 
     def __repr__(self) -> str:
         """String model represetation."""

@@ -2,23 +2,29 @@ import asyncio
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.fsm.scene import SceneRegistry
+from aiogram.fsm.storage.memory import SimpleEventIsolation
 
-from commands import all_routers
-from config import logs
-from config.config import Config, load_config
-from logger import logger
-from utils import delete_banned_users
+from config import ALL_COMMANDS, Config, load_config
+from log import logger, logs
+from routers import all_routers
+from scenes import all_scenes
 
 
 async def main():
     """Start bot."""
     logger.info(logs.START)
-    delete_banned_users()
     config: Config = load_config()
     bot: Bot = Bot(token=config.tg_bot.token, default=DefaultBotProperties(parse_mode="HTML"))
-    dp: Dispatcher = Dispatcher()
+    dp: Dispatcher = Dispatcher(events_isolation=SimpleEventIsolation())
     for router in all_routers:
         dp.include_router(router)
+
+    scene_registry = SceneRegistry(dp)
+    for scene in all_scenes:
+        scene_registry.add(scene)
+
+    await bot.set_my_commands(ALL_COMMANDS)
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)

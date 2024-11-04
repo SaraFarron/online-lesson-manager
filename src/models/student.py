@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src2.models import User
+from models import User
 
 if TYPE_CHECKING:
-    from src2.models import Reschedule, RestrictedTime, ScheduledLesson, Teacher
+    from models import Reschedule, RestrictedTime, ScheduledLesson, Teacher
 
 
 class Student(User):

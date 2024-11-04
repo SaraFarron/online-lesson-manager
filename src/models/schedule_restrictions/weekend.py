@@ -1,8 +1,8 @@
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src2.models import Base, Teacher
-from src2.models.mixins import WeekdayMixin
+from models import Base, Teacher
+from models.mixins import WeekdayMixin
 
 
 class Weekend(WeekdayMixin, Base):

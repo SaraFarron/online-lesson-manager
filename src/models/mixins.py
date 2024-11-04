@@ -3,7 +3,7 @@ from datetime import time
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Integer, Time
 
-from config import config
+from config import settings
 
 
 class BordersMixin:
@@ -32,9 +32,9 @@ class WeekdayMixin:
     @property
     def weekday_full_str(self) -> str:
         """Weekday as a string."""
-        return config.WEEKDAY_MAP_FULL[self.weekday]
+        return settings.WEEKDAY_MAP_FULL[self.weekday]
 
     @property
     def weekday_short_str(self) -> str:
         """Weekday as a string."""
-        return config.WEEKDAY_MAP[self.weekday]
+        return settings.WEEKDAY_MAP[self.weekday]

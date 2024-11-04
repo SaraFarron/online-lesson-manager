@@ -1,9 +1,19 @@
-from sqlalchemy import create_engine
+import asyncio
 
-from config import logs
-from logger import logger
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from config import DB_ADDRESS
+from log import logger, logs
 from models import Base
 
-logger.info(logs.DB_CONNECTING)
-engine = create_engine("sqlite:///db/db.sqlite")
-Base.metadata.create_all(engine)
+
+async def init_db() -> None:
+    """Initialize database."""
+    logger.info(logs.DB_CONNECTING)
+    engine = create_async_engine(DB_ADDRESS)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+asyncio.run(init_db())
+engine = create_async_engine(DB_ADDRESS)

@@ -1,8 +1,8 @@
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
-from structures.role import Role
 
-from src2.models import Base
+from models import Base
+from structures.role import Role
 
 
 class User(Base):

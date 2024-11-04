@@ -4,7 +4,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Date
 
-from src2.models import Base, Teacher
+from models import Base, Teacher
 
 
 class Vacations(Base):

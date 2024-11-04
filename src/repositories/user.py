@@ -22,7 +22,7 @@ class UserRepo(Repository[User]):
         first_name: str | None = None,
         second_name: str | None = None,
         is_premium: bool | None = False,  # noqa: FBT002
-        role: Role | None = Role.USER,
+        role: Role | None = Role.STUDENT,
     ):
         """
         Insert a new user into the database.
