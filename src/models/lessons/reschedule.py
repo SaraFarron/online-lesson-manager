@@ -29,6 +29,8 @@ class Reschedule(BordersMixin, Base):
 
     def may_cancel(self, date_time: datetime) -> bool:
         """Check if reschedule may be canceled."""
+        if self.date is None:
+            return False
         if self.date > date_time.date():
             return True
         delta = datetime.combine(self.date, self.start_time, tzinfo=settings.TIMEZONE) - date_time
