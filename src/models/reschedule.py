@@ -17,7 +17,7 @@ class Reschedule(BordersMixin, Base):
     __tablename__ = "reschedule"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("student.id"))
     user: Mapped[User] = relationship(back_populates="reschedules")
     source_id: Mapped[int] = mapped_column(ForeignKey("scheduled_lesson.id"))
     source: Mapped[ScheduledLesson] = relationship()

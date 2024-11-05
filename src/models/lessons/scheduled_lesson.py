@@ -1,18 +1,24 @@
+from __future__ import annotations
+
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from config import settings
-from models import Base, User
+from models import Base
 from models.mixins import BordersMixin, WeekdayMixin
+
+if TYPE_CHECKING:
+    from models import User
 
 
 class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
     __tablename__ = "scheduled_lesson"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("student.id"))
     user: Mapped[User] = relationship(back_populates="scheduled_lessons")
 
     @property
