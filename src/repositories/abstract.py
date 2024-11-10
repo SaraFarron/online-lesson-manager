@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Generic, TypeVar
 
 from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from models import Base
 
@@ -16,9 +16,9 @@ class Repository(Generic[AbstractModel]):
     """Repository abstract class."""
 
     type_model: type[Base]
-    session: AsyncSession
+    session: Session
 
-    def __init__(self, type_model: type[Base], session: AsyncSession) -> None:
+    def __init__(self, type_model: type[Base], session: Session) -> None:
         """
         Initialize abstract repository class.
 
@@ -28,30 +28,27 @@ class Repository(Generic[AbstractModel]):
         self.type_model = type_model
         self.session = session
 
-    async def get(self, ident: int | str) -> AbstractModel:
+    def get(self, ident: int | str) -> AbstractModel:
         """
         Get an ONE model from the database with PK.
 
         :param ident: Key which need to find entry in database
         :return:
         """
-        return await self.session.get(entity=self.type_model, ident=ident)  # type: ignore  # noqa: PGH003
+        return self.session.get(entity=self.type_model, ident=ident)  # type: ignore  # noqa: PGH003
 
-    async def get_by_where(self, whereclause) -> AbstractModel | None:  # noqa: ANN001
+    def get_by_where(self, whereclause) -> AbstractModel | None:  # noqa: ANN001
         """
         Get an ONE model from the database with whereclause.
-
-        Todo:
-            1) https://github.com/MassonNN/masson-aiogram-template/issues/15
 
         :param whereclause: Clause by which entry will be found
         :return: Model if only one model was found, else None.
 
         """
         statement = select(self.type_model).where(whereclause)
-        return (await self.session.execute(statement)).one_or_none()  # type: ignore  # noqa: PGH003
+        return (self.session.execute(statement)).one_or_none()  # type: ignore  # noqa: PGH003
 
-    async def get_many(self, whereclause, limit: int = 100, order_by=None) -> Sequence[Base]:  # noqa: ANN001
+    def get_many(self, whereclause, limit: int = 100, order_by=None) -> Sequence[Base]:  # noqa: ANN001
         """
         Get many models from the database with whereclause.
 
@@ -69,9 +66,9 @@ class Repository(Generic[AbstractModel]):
         if order_by:
             statement = statement.order_by(order_by)
 
-        return (await self.session.scalars(statement)).all()
+        return (self.session.scalars(statement)).all()
 
-    async def delete(self, whereclause) -> None:  # noqa: ANN001
+    def delete(self, whereclause) -> None:  # noqa: ANN001
         """
         Delete model from the database.
 
@@ -79,10 +76,10 @@ class Repository(Generic[AbstractModel]):
         :return: Nothing
         """
         statement = delete(self.type_model).where(whereclause)
-        await self.session.execute(statement)
+        self.session.execute(statement)
 
     @abc.abstractmethod
-    async def new(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    def new(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
         """
         Add new entry of model to the database.
 
