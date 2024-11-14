@@ -1,8 +1,14 @@
+from sqlalchemy.orm import Session
+
 from models import Teacher, User
 from repositories import Repository
 
 
 class UserRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize user repository class."""
+        super().__init__(User, session)
+
     def new(self, full_name: str, telegram_id: int, teacher: Teacher, username: str) -> None:
         """Add new entry of model to the database."""
         user = User(
@@ -15,6 +21,10 @@ class UserRepo(Repository):
 
 
 class TeacherRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize teacher repository class."""
+        super().__init__(Teacher, session)
+
     def new(self, full_name: str, telegram_id: int) -> None:
         """Add new entry of model to the database."""
         teacher = Teacher(name=full_name, telegram_id=telegram_id)
