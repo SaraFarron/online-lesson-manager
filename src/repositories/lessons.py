@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, time
+
+from sqlalchemy.orm import Session
 
 from config.config import MAX_HOUR
 from models import Lesson, Reschedule, ScheduledLesson, User
@@ -13,6 +16,10 @@ def calc_end_time(time: time):
 
 
 class ScheduledLessonRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize scheduled lesson repository class."""
+        super().__init__(ScheduledLesson, session)
+
     def new(self, user: User, weekday: int, start_time: time) -> None:
         """Add new entry of model to the database."""
         sl = ScheduledLesson(user=user, weekday=weekday, start_time=start_time, end_time=calc_end_time(start_time))
@@ -24,6 +31,7 @@ class ScheduledLessonRepo(Repository):
         weekday: int | None = None,
         start_time: time | None = None,
     ):
+        """Get all entries of model from the database."""
         query = self.session.query(ScheduledLesson)
         filters = {}
         if user:
@@ -37,6 +45,10 @@ class ScheduledLessonRepo(Repository):
 
 
 class RescheduleRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize reschedule repository class."""
+        super().__init__(Reschedule, session)
+
     def new(
         self,
         user: User,
@@ -56,6 +68,9 @@ class RescheduleRepo(Repository):
         )
         self.session.add(reschedule)
 
+    def get_many(self, whereclause, limit: int = 100, order_by=None) -> Sequence[Reschedule]:  # noqa: D102, ANN001
+        return super().get_many(whereclause, limit, order_by)  # type: ignore  # noqa: PGH003
+
     def all(
         self,
         user: User | None = None,
@@ -63,6 +78,7 @@ class RescheduleRepo(Repository):
         date: date | None = None,
         start_time: time | None = None,
     ):
+        """Get all reschedules from the database."""
         query = self.session.query(Reschedule)
         filters = {}
         if user:
@@ -78,6 +94,10 @@ class RescheduleRepo(Repository):
 
 
 class LessonRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize lesson repository class."""
+        super().__init__(Lesson, session)
+
     def new(self, user: User, date: date, start_time: time) -> None:
         """Add new entry of model to the database."""
         lesson = Lesson(user=user, date=date, start_time=start_time, end_time=calc_end_time(start_time))
@@ -89,6 +109,7 @@ class LessonRepo(Repository):
         date: date | None = None,
         start_time: time | None = None,
     ):
+        """Get all entries of model from the database."""
         query = self.session.query(ScheduledLesson)
         filters = {}
         if user:
@@ -102,14 +123,18 @@ class LessonRepo(Repository):
 
 
 class LessonCollectionRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize lesson collection repository class."""
+        self.session = session
+
     def new(self, lesson_type: Lesson | ScheduledLesson | Reschedule, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
         """Add new entry of model to the database."""
         if type(lesson_type) is Lesson:
-            repo = LessonRepo(self.type_model, self.session)
+            repo = LessonRepo(self.session)
         elif type(lesson_type) is ScheduledLesson:
-            repo = ScheduledLessonRepo(self.type_model, self.session)
+            repo = ScheduledLessonRepo(self.session)
         elif type(lesson_type) is Reschedule:
-            repo = RescheduleRepo(self.type_model, self.session)
+            repo = RescheduleRepo(self.session)
         else:
             msg = "Unknown lesson type"
             raise TypeError(msg)
@@ -122,11 +147,12 @@ class LessonCollectionRepo(Repository):
         weekday: int | None = None,
         start_time: time | None = None,
     ):
-        lessons = LessonRepo(self.type_model, self.session).all(user, date, start_time)
-        scheduled_lessons = ScheduledLessonRepo(self.type_model, self.session).all(user, weekday, start_time)
-        reschedules = RescheduleRepo(self.type_model, self.session).all(user, None, date, start_time)
+        """Get all entries of model from the database."""
+        lessons = LessonRepo(self.session).all(user, date, start_time)
+        scheduled_lessons = ScheduledLessonRepo(self.session).all(user, weekday, start_time)
+        reschedules = RescheduleRepo(self.session).all(user, None, date, start_time)
         if date and scheduled_lessons:
-            cancellations = RescheduleRepo(self.type_model, self.session).get_many(
+            cancellations = RescheduleRepo(self.session).get_many(
                 (Reschedule.user == user, Reschedule.source.in_(scheduled_lessons)),
             )
             cancellation_ids = [c.source_id for c in cancellations]
