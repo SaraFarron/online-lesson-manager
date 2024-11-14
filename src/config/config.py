@@ -35,6 +35,8 @@ TIMEZONE = pytz.timezone("Europe/Moscow")
 
 MAX_BUTTON_ROWS = 10
 
+INVITE_CODE = "irina_gambal"
+
 ADMINS = [
     5362724893,  # Pasha
     882315246,  # Sara
@@ -91,9 +93,4 @@ WEEKDAYS_MODEL = [
     Weekday(number=6, short="ВС", long="Воскресенье"),
 ]
 
-
-# def get_weekday(weekday: int | str):
-#     """Get the current day of the week."""
-#     if isinstance(weekday, str):
-#         return next(w for w in WEEKDAYS_MODEL if weekday in (w.short, w.long))
-#     return WEEKDAYS[weekday]
+MAX_HOUR = 23

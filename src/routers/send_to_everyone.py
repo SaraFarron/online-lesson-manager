@@ -8,16 +8,17 @@ from aiogram.types import Message
 from sqlalchemy.orm import Session
 
 import messages
-from database import engine
 from help import AdminCommands
 from logger import log_func
-from models import Teacher
+from middlewares import DatabaseMiddleware
+from repositories import TeacherRepo
 from utils import send_message
 
 COMMAND = "/send_to_everyone"
 MAX_HOUR = 23
 
 router = Router()
+router.message.middleware(DatabaseMiddleware())
 
 
 class Messages:
@@ -32,29 +33,27 @@ class ChooseSendToEveryone(StatesGroup):
 @router.message(Command(COMMAND))
 @router.message(F.text == AdminCommands.SEND_TO_EVERYONE.value)
 @log_func
-async def send_to_everyone_handler(message: Message, state: FSMContext) -> None:
+async def send_to_everyone_handler(message: Message, state: FSMContext, db: Session) -> None:
     """First handler, gives a list of available weekdays."""
-    with Session(engine) as session:
-        teacher = session.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
-        if teacher is None:
-            await message.answer(messages.PERMISSION_DENIED)
-            return
+    teacher = TeacherRepo(db).get_by_telegram_id(message.from_user.id)  # type: ignore  # noqa: PGH003
+    if teacher is None:
+        await message.answer(messages.PERMISSION_DENIED)
+        return
     await state.set_state(ChooseSendToEveryone.write_message)
     await message.answer(Messages.WRITE_MESSAGE)
 
 
 @router.message(ChooseSendToEveryone.write_message)
 @log_func
-async def send_to_everyone_write_message(message: Message, state: FSMContext) -> None:
+async def send_to_everyone_write_message(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `send_to_everyone_write_message` state."""
-    with Session(engine) as session:
-        teacher = session.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
-        if teacher is None:
-            await message.answer(messages.PERMISSION_DENIED)
-            return
-        receivers = []
-        for student in teacher.students:
-            receivers.append(student.username_dog)
-            await send_message(student.telegram_id, message.text)
+    teacher = TeacherRepo(db).get_by_telegram_id(message.from_user.id)  # type: ignore  # noqa: PGH003
+    if teacher is None:
+        await message.answer(messages.PERMISSION_DENIED)
+        return
+    receivers = []
+    for student in teacher.students:
+        receivers.append(student.username_dog)
+        await send_message(student.telegram_id, message.text.replace("\n", "%0A"))  # type: ignore  # noqa: PGH003
     await message.answer(Messages.MESSAGES_SENT % ", ".join(receivers))
     await state.clear()
