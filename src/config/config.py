@@ -35,6 +35,8 @@ TIMEZONE = pytz.timezone("Europe/Moscow")
 
 MAX_BUTTON_ROWS = 10
 
+INVITE_CODE = "irina_gambal"
+
 ADMINS = [
     5362724893,  # Pasha
     882315246,  # Sara
