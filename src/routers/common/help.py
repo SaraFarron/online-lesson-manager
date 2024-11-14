@@ -31,4 +31,4 @@ def all_commands_keyboard(user_id: int):
 @log_func
 async def help_handler(message: Message) -> None:
     """Handler receives messages with `/help` command."""
-    await message.answer(HELP_MESSAGE, reply_markup=all_commands_keyboard(message.from_user.id))
+    await message.answer(HELP_MESSAGE, reply_markup=all_commands_keyboard(message.from_user.id)) # type: ignore  # noqa: PGH003
