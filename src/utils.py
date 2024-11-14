@@ -23,12 +23,11 @@ def calc_end_time(time: time):
     return time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0)
 
 
-def get_teacher():
+def get_teacher(session: Session):
     """Get the right teacher from the database."""
-    with Session(engine) as session:
-        teacher = session.query(Teacher).filter(Teacher.telegram_id == ADMINS[0]).first()
-        if not teacher:
-            teacher = session.query(Teacher).filter(Teacher.telegram_id == ADMINS[1]).first()
+    teacher = session.query(Teacher).filter(Teacher.telegram_id == ADMINS[0]).first()
+    if not teacher:
+        teacher = session.query(Teacher).filter(Teacher.telegram_id == ADMINS[1]).first()
     return teacher
 
 
