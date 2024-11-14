@@ -7,6 +7,7 @@ from commands import all_routers
 from config import logs
 from config.config import Config, load_config
 from logger import logger
+from routers import all_routers as all_routers_new
 from utils import delete_banned_users
 
 
@@ -18,6 +19,9 @@ async def main():
     bot: Bot = Bot(token=config.tg_bot.token, default=DefaultBotProperties(parse_mode="HTML"))
     dp: Dispatcher = Dispatcher()
     for router in all_routers:
+        dp.include_router(router)
+
+    for router in all_routers_new:
         dp.include_router(router)
 
     await bot.delete_webhook(drop_pending_updates=True)
