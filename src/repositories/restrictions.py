@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from datetime import date, time
 
+from sqlalchemy.orm import Session
+
 from models import RestrictedTime, Teacher, User, Vacations, Weekend, WorkBreak
 from repositories import Repository
 
 
 class WeekendRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize weekend repository class."""
+        super().__init__(Weekend, session)
+
     def new(self, teacher: Teacher, weekday: int) -> None:
         """Add new entry of model to the database."""
         weekend = Weekend(
@@ -30,6 +36,10 @@ class WeekendRepo(Repository):
 
 
 class VacationsRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize vacations repository class."""
+        super().__init__(Vacations, session)
+
     def new(self, teacher: Teacher, start_date: date, end_date: date) -> None:
         """Add new entry of model to the database."""
         vacation = Vacations(
@@ -54,6 +64,10 @@ class VacationsRepo(Repository):
 
 
 class WorkBreakRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize work breaks repository class."""
+        super().__init__(WorkBreak, session)
+
     def new(self, teacher: Teacher, weekday: int, start_time: time, end_time: time) -> None:
         """Add new entry of model to the database."""
         work_break = WorkBreak(
@@ -79,6 +93,10 @@ class WorkBreakRepo(Repository):
 
 
 class RestrictedTimeRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize restricted time repository class."""
+        super().__init__(RestrictedTime, session)
+
     def new(self, user: User, weekday: int, start_time: time, end_time: time, whole_day: bool = False) -> None:  # noqa: FBT002, FBT001
         """Add new entry of model to the database."""
         restricted_time = RestrictedTime(
@@ -93,14 +111,18 @@ class RestrictedTimeRepo(Repository):
 
 
 class TeacherRestTimeRepo(Repository):
+    def __init__(self, session: Session) -> None:
+        """Initialize teacher rest time repository class."""
+        self.session = session
+
     def new(self, restrict_type: Weekend | Vacations | WorkBreak, *args, **kwargs):  # noqa: ANN002, ANN003
         """Add new entry of model to the database."""
         if type(restrict_type) is Weekend:
-            repo = WeekendRepo(self.type_model, self.session)
+            repo = WeekendRepo(self.session)
         elif type(restrict_type) is Vacations:
-            repo = VacationsRepo(self.type_model, self.session)
+            repo = VacationsRepo(self.session)
         elif type(restrict_type) is WorkBreak:
-            repo = WorkBreakRepo(self.type_model, self.session)
+            repo = WorkBreakRepo(self.session)
         else:
             msg = "Unknown restriction type"
             raise TypeError(msg)
@@ -114,7 +136,7 @@ class TeacherRestTimeRepo(Repository):
         time: time | None = None,
     ):
         """Get all entries of model from the database."""
-        work_breaks = WorkBreakRepo(self.type_model, self.session).all(teacher, weekday, time)
-        vacations = VacationsRepo(self.type_model, self.session).all(teacher, date, date)
-        weekends = WeekendRepo(self.type_model, self.session).all(teacher, weekday, time)
+        work_breaks = WorkBreakRepo(self.session).all(teacher, weekday, time)
+        vacations = VacationsRepo(self.session).all(teacher, date, date)
+        weekends = WeekendRepo(self.session).all(teacher, weekday, time)
         return work_breaks + vacations + weekends
