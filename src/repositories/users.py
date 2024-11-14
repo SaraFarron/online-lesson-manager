@@ -21,7 +21,7 @@ class UserRepo(Repository):
         )
         self.session.add(user)
 
-    def get_by_telegram_id(self, telegram_id: int) -> User | None:
+    def get_by_telegram_id(self, telegram_id: int):
         """Get user by telegram id."""
         return self.session.query(User).filter(User.telegram_id == telegram_id).first()
 
@@ -42,3 +42,7 @@ class TeacherRepo(Repository):
         teacher = self.new(full_name, telegram_id)
         UserRepo(self.session).new(full_name, telegram_id, teacher, username)
         return teacher
+    
+    def get_by_telegram_id(self, telegram_id: int):
+        """Get teacher by tg id."""
+        return self.session.query(Teacher).filter_by(telegram_id=telegram_id).first()
