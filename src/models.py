@@ -171,6 +171,11 @@ class Reschedule(BordersMixin, Base):
         """String model represetation."""
         return f"Перенос в {self.st_str}-{self.et_str}"
 
+    @property
+    def weekday(self):
+        """Weekday."""
+        return self.date.weekday() if self.date else None
+
     def may_cancel(self, date_time: datetime) -> bool:
         """Check if reschedule may be canceled."""
         if self.date > date_time.date():
