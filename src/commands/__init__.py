@@ -1,5 +1,4 @@
 from commands.add_lesson import router as add_lesson_router
-from commands.check_notify import router as check_notify_router
 from commands.reschedule import router as reschedule_lesson_router
 from commands.set_working_hours import router as set_working_hours_router
 from commands.today_schedule import router as today_schedule_router
@@ -14,7 +13,7 @@ all_routers = [
     week_schedule_router,
     reschedule_lesson_router,
     set_working_hours_router,
-    check_notify_router,
+    # check_notify_router,
     # send_to_everyone_router,
 ]
 
