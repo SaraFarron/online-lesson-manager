@@ -2,7 +2,6 @@ from enum import Enum
 
 
 class Commands(Enum):
-    START = "Приветственное сообщение"
     HELP = "Помощь"
     ADD_SCHEDULED_LESSON = "Добавить урок в расписание"
     RESCHEDULE = "Отменить/перенести урок"
