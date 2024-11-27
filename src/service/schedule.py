@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import time
-from typing import Iterable
 
 from sqlalchemy.orm import Session
 
@@ -10,8 +10,10 @@ from repositories import LessonCollectionRepo, WeekendRepo, WorkBreakRepo
 
 
 class Collisions:
-    weekends: list[ScheduledLesson | Reschedule]
-    work_breaks: list[ScheduledLesson | Reschedule]
+    def __init__(self) -> None:
+        self.weekends: list[ScheduledLesson | Reschedule] = []
+        self.work_breaks: list[ScheduledLesson | Reschedule] = []
+        self.work_borders: list[ScheduledLesson | Reschedule] = []
 
     @property
     def all_collisions(self) -> list[ScheduledLesson | Reschedule]:
@@ -26,6 +28,8 @@ class Collisions:
             message += f"{lesson!s} у {lesson.user.username_dog} стоит в выходной\n"
         for lesson in self.work_breaks:
             message += f"{lesson!s} у {lesson.user.username_dog} стоит в перерыве\n"
+        for lesson in self.work_borders:
+            message += f"{lesson!s} у {lesson.user.username_dog} стоит в нерабочее время\n"
         if message:
             return "Уроки, пересекающиеся с выходными или рабочими перерывами:\n" + message
         return "Нет пересекающихся уроков"
@@ -50,12 +54,14 @@ class Schedule:
         lessons: list[Reschedule | ScheduledLesson] = []
         for s in teacher.students:
             lessons.extend(LessonCollectionRepo(self.session).all(s))
-
+        # TODO Лишние уроки выдаются
         collisions = Collisions()
         for lesson in lessons:
             if isinstance(lesson, Reschedule) and lesson.date is None:
                 continue
-            if lesson.weekday in weekends:
+            if not self.time_overlapse(lesson.edges, (teacher.work_start, teacher.work_end)):
+                collisions.work_borders.append(lesson)
+            elif lesson.weekday in weekends:
                 collisions.weekends.append(lesson)
             elif lesson.weekday in work_beaks and self.time_overlapse(work_beaks[lesson.weekday], lesson.edges):
                 collisions.work_breaks.append(lesson)
