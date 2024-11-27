@@ -126,6 +126,11 @@ class Lesson(BordersMixin, Base):
     # statuses: upcoming, canceled, completed
     status: Mapped[str] = mapped_column(String(10), default="upcoming")
 
+    @property
+    def short_repr(self) -> str:
+        """String model represetation."""
+        return f"Урок в {self.st_str}-{self.et_str}"
+
     def __repr__(self) -> str:
         """String model represetation."""
         return f"Lesson(id={self.id!r}, date={self.date!r}, time={self.start_time!r}, user_id={self.user_id!r})"
@@ -178,6 +183,8 @@ class Reschedule(BordersMixin, Base):
 
     def may_cancel(self, date_time: datetime) -> bool:
         """Check if reschedule may be canceled."""
+        if not self.date:
+            return False
         if self.date > date_time.date():
             return True
         delta = datetime.combine(self.date, self.start_time, tzinfo=config.TIMEZONE) - date_time
