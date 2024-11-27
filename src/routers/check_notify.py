@@ -15,6 +15,7 @@ from utils import inline_keyboard, send_message
 
 router: Router = Router()
 router.message.middleware(DatabaseMiddleware())
+router.callback_query.middleware(DatabaseMiddleware())
 
 
 COMMAND = "/check_notify"

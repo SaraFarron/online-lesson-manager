@@ -78,7 +78,7 @@ async def check_notify_handler(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith(Callbacks.CHECK_NOTIFY))
 @log_func
-async def check_notify_finish(callback: CallbackQuery, state: FSMContext) -> None:
+async def check_notify_finish(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `check_notify` callback."""
     if callback.data == Callbacks.CHECK_NOTIFY + "send":
         state_data = await state.get_data()
