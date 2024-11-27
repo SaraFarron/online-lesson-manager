@@ -16,7 +16,6 @@ class Messages:
 
 
 @router.message(Command(COMMAND))
-@router.message(F.text == Commands.CANCEL.value)
 @log_func
 async def cancel_handler(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/cancel` command."""

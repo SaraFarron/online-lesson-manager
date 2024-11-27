@@ -25,12 +25,10 @@ def log_func(func: Callable):
             for arg in args:
                 if isinstance(arg, Message):
                     args_str = f"user: {arg.from_user.full_name} text: {arg.text}"
-                    logger.info(logs.FUNCTION_CALL, func.__name__, args_str)
-                    return func(*args, **kwargs)
                 if isinstance(arg, CallbackQuery):
                     args_str = f"user: {arg.from_user.full_name} data: {arg.data}"
-                    logger.info(logs.FUNCTION_CALL, func.__name__, args_str)
-                    return func(*args, **kwargs)
+                logger.info(logs.FUNCTION_CALL, func.__name__, args_str)
+                # return func(*args, **kwargs)
             logger.info(func.__name__)
             return func(*args, **kwargs)
         except Exception as e:

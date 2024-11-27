@@ -27,7 +27,6 @@ def all_commands_keyboard(user_id: int):
 
 
 @router.message(Command(COMMAND))
-@router.message(F.text == Commands.HELP.value)
 @log_func
 async def help_handler(message: Message) -> None:
     """Handler receives messages with `/help` command."""
