@@ -116,6 +116,7 @@ async def add_break_finish(message: Message, state: FSMContext) -> None:
         session.commit()
 
     await message.answer(Messages.BREAK_ADDED)
+    await state.clear()
 
 
 @router.callback_query(F.data.startswith("swh:rm_break_"))
