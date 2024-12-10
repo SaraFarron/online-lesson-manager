@@ -1,3 +1,3 @@
-from service.schedule import Schedule
+from service.schedule import Schedule, SecondFunctions
 
-__all__ = ["Schedule"]
+__all__ = ["Schedule", "SecondFunctions"]

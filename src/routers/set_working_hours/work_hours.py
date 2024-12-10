@@ -8,10 +8,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from commands.set_working_hours.config import router
-from database import engine
 from logger import log_func
 from models import Teacher
+from routers.set_working_hours.config import router
 
 
 class Messages:
@@ -53,7 +52,7 @@ async def set_work_end(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(SetWorkingHoursState.edit_work_hours)
 @log_func
-async def set_work_border_handler(message: Message, state: FSMContext) -> None:
+async def set_work_border_handler(message: Message, state: FSMContext, db: Session) -> None:
     """Handler for changing the start of the work day."""
     try:
         time = datetime.strptime(message.text, "%H:%M").time()  # noqa: DTZ007
@@ -62,15 +61,14 @@ async def set_work_border_handler(message: Message, state: FSMContext) -> None:
         await message.answer(Messages.WRONG_TIME_FORMAT)
         return
     state_data = await state.get_data()
-    with Session(engine) as session:
-        teacher = session.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
-        if state_data["scene"] == "start":
-            teacher.work_start = time
-        elif state_data["scene"] == "end":
-            teacher.work_end = time
-        else:
-            await message.answer(Messages.ERROR)
-            return
-        session.commit()
+    teacher = db.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
+    if state_data["scene"] == "start":
+        teacher.work_start = time
+    elif state_data["scene"] == "end":
+        teacher.work_end = time
+    else:
+        await message.answer(Messages.ERROR)
+        return
+    db.commit()
     await state.clear()
     await message.answer(Messages.TIME_UPDATED)

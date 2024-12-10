@@ -8,12 +8,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from commands.reschedule.config import FRL_START_CALLBACK, ORL_RS_CALLBACK, ORL_START_CALLBACK, router
 from config import config
-from database import engine
 from help import Commands
 from logger import log_func
 from models import Reschedule, ScheduledLesson, User
+from routers.reschedule.config import FRL_START_CALLBACK, ORL_RS_CALLBACK, ORL_START_CALLBACK, router
 from utils import inline_keyboard, this_week
 
 COMMAND = "/reschedule"
@@ -40,51 +39,48 @@ class Callbacks:
 @router.message(Command(COMMAND))
 @router.message(F.text == Commands.RESCHEDULE.value)
 @log_func
-async def reschedule_lesson_handler(message: Message, state: FSMContext) -> None:
+async def reschedule_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `/reschedule` command."""
     if message.from_user.id in config.BANNED_USERS:
         return
-    with Session(engine) as session:
-        user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
-        if user:
-            await state.update_data(user_id=user.id)
-            lessons = (
-                session.query(ScheduledLesson)
-                .filter(ScheduledLesson.user_id == user.id)
-                .order_by(ScheduledLesson.weekday, ScheduledLesson.start_time)
-                .all()
-            )
-            now = datetime.now(config.TIMEZONE)
-            reschedules = (
-                session.query(Reschedule).filter(Reschedule.user_id == user.id, Reschedule.date >= now.date()).all()
-            )
-            if lessons or reschedules:
-                weekdays = {d.weekday(): config.WEEKDAY_MAP_FULL[d.weekday()] for d in this_week()}
-                buttons = [
-                    (
-                        f"{weekdays[lesson.weekday]} {lesson.start_time}",
-                        Callbacks.CHOOSE_CANCEL_TYPE + str(lesson.id),
-                    )
-                    for lesson in lessons
-                    if lesson.may_cancel(now)
-                ] + [
-                    (
-                        f"{rs!s}",
-                        ORL_RS_CALLBACK + "rs:" + str(rs.id),
-                    )
-                    for rs in reschedules
-                    if rs.may_cancel(now)
-                ]
-                if not buttons:
-                    await message.answer(Messages.NO_LESSONS)
-                    return
-                keyboard = inline_keyboard(buttons)
-                keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
-                await message.answer(Messages.CHOOSE_LESSON, reply_markup=keyboard.as_markup())
-            else:
+    user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
+    if user:
+        await state.update_data(user_id=user.id)
+        lessons = (
+            db.query(ScheduledLesson)
+            .filter(ScheduledLesson.user_id == user.id)
+            .order_by(ScheduledLesson.weekday, ScheduledLesson.start_time)
+            .all()
+        )
+        now = datetime.now(config.TIMEZONE)
+        reschedules = db.query(Reschedule).filter(Reschedule.user_id == user.id, Reschedule.date >= now.date()).all()
+        if lessons or reschedules:
+            weekdays = {d.weekday(): config.WEEKDAY_MAP_FULL[d.weekday()] for d in this_week()}
+            buttons = [
+                (
+                    f"{weekdays[lesson.weekday]} {lesson.start_time}",
+                    Callbacks.CHOOSE_CANCEL_TYPE + str(lesson.id),
+                )
+                for lesson in lessons
+                if lesson.may_cancel(now)
+            ] + [
+                (
+                    f"{rs!s}",
+                    ORL_RS_CALLBACK + "rs:" + str(rs.id),
+                )
+                for rs in reschedules
+                if rs.may_cancel(now)
+            ]
+            if not buttons:
                 await message.answer(Messages.NO_LESSONS)
+                return
+            keyboard = inline_keyboard(buttons)
+            keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
+            await message.answer(Messages.CHOOSE_LESSON, reply_markup=keyboard.as_markup())
         else:
-            await message.answer(Messages.NOT_REGISTERED)
+            await message.answer(Messages.NO_LESSONS)
+    else:
+        await message.answer(Messages.NOT_REGISTERED)
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_CANCEL_TYPE))
