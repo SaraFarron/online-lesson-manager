@@ -131,6 +131,11 @@ class Lesson(BordersMixin, Base):
         """String model represetation."""
         return f"Урок в {self.st_str}-{self.et_str}"
 
+    @property
+    def long_repr(self):
+        """String model represetation."""
+        return f"Урок в {self.st_str}-{self.et_str} у {self.user.name}"
+
     def __repr__(self) -> str:
         """String model represetation."""
         return f"Lesson(id={self.id!r}, date={self.date!r}, time={self.start_time!r}, user_id={self.user_id!r})"
@@ -147,6 +152,11 @@ class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
     def short_repr(self) -> str:
         """String model represetation."""
         return f"Урок в {self.st_str}-{self.et_str}"
+
+    @property
+    def long_repr(self):
+        """String model represetation."""
+        return f"Урок в {self.st_str}-{self.et_str} у {self.user.name}"
 
     def may_cancel(self, date_time: datetime) -> bool:
         """Check if reschedule may be canceled."""
@@ -175,6 +185,11 @@ class Reschedule(BordersMixin, Base):
     def short_repr(self) -> str:
         """String model represetation."""
         return f"Перенос в {self.st_str}-{self.et_str}"
+
+    @property
+    def long_repr(self):
+        """String model represetation."""
+        return f"Перенос в {self.st_str}-{self.et_str} у {self.user.name}"
 
     @property
     def weekday(self):
