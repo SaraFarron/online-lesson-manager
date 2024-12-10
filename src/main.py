@@ -19,10 +19,10 @@ async def main():
     config: Config = load_config()
     bot: Bot = Bot(token=config.tg_bot.token, default=DefaultBotProperties(parse_mode="HTML"))
     dp: Dispatcher = Dispatcher()
-    for router in all_routers:
+    for router in all_routers_new:
         dp.include_router(router)
 
-    for router in all_routers_new:
+    for router in all_routers:
         dp.include_router(router)
 
     await bot.set_my_commands(ALL_COMMANDS)
