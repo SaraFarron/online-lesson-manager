@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aiogram import F, Router
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
@@ -30,4 +30,4 @@ def all_commands_keyboard(user_id: int):
 @log_func
 async def help_handler(message: Message) -> None:
     """Handler receives messages with `/help` command."""
-    await message.answer(HELP_MESSAGE, reply_markup=all_commands_keyboard(message.from_user.id)) # type: ignore  # noqa: PGH003
+    await message.answer(HELP_MESSAGE, reply_markup=all_commands_keyboard(message.from_user.id))  # type: ignore  # noqa: PGH003

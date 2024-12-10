@@ -1,10 +1,9 @@
-from aiogram import F, Router, html
+from aiogram import Router, html
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
 from config import config, logs
-from help import Commands
 from logger import log_func, logger
 from middlewares import DatabaseMiddleware
 from repositories import TeacherRepo, UserRepo
@@ -12,6 +11,7 @@ from utils import get_teacher
 
 router: Router = Router()
 router.message.middleware(DatabaseMiddleware())
+
 
 class Messages:
     GREETINGS = "你好, %s!"

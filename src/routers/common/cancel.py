@@ -1,9 +1,8 @@
-from aiogram import F, Router
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from help import Commands
 from logger import log_func
 
 COMMAND = "cancel"
