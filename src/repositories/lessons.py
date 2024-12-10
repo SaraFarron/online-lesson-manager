@@ -110,7 +110,7 @@ class LessonRepo(Repository):
         start_time: time | None = None,
     ):
         """Get all entries of model from the database."""
-        query = self.session.query(ScheduledLesson)
+        query = self.session.query(Lesson)
         filters = {}
         if user:
             filters["user"] = user
@@ -126,6 +126,9 @@ class LessonCollectionRepo(Repository):
     def __init__(self, session: Session) -> None:
         """Initialize lesson collection repository class."""
         self.session = session
+        self.lessons = LessonRepo(self.session)
+        self.scheduled_lessons = ScheduledLessonRepo(self.session)
+        self.reschedules = RescheduleRepo(self.session)
 
     def new(self, lesson_type: Lesson | ScheduledLesson | Reschedule, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
         """Add new entry of model to the database."""
@@ -148,13 +151,22 @@ class LessonCollectionRepo(Repository):
         start_time: time | None = None,
     ):
         """Get all entries of model from the database."""
+        # TODO Finish this shit
         lessons = LessonRepo(self.session).all(user, date, start_time)
         scheduled_lessons = ScheduledLessonRepo(self.session).all(user, weekday, start_time)
         reschedules = RescheduleRepo(self.session).all(user, None, date, start_time)
         if date and scheduled_lessons:
+            sl_ids = [sl.id for sl in scheduled_lessons]
             cancellations = RescheduleRepo(self.session).get_many(
-                (Reschedule.user == user, Reschedule.source.in_(scheduled_lessons)),
+                (Reschedule.user == user, Reschedule.source_id.in_(sl_ids)),
             )
             cancellation_ids = [c.source_id for c in cancellations]
             scheduled_lessons = [sl for sl in scheduled_lessons if sl.id not in cancellation_ids]
+        return lessons + scheduled_lessons + reschedules
+
+    def all_date(self, date: date, user: User | None = None):
+        """Get all entries of model from the database."""
+        lessons = self.lessons.all(user, date)
+        scheduled_lessons = self.scheduled_lessons.all(user, date.weekday())
+        reschedules = self.reschedules.all(user, None, date)
         return lessons + scheduled_lessons + reschedules
