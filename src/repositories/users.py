@@ -47,3 +47,7 @@ class TeacherRepo(Repository):
     def get_by_telegram_id(self, telegram_id: int):
         """Get teacher by tg id."""
         return self.session.query(Teacher).filter_by(telegram_id=telegram_id).first()
+
+    def is_teacher(self, user: User):
+        """Check if user is teacher."""
+        return bool(self.get(user.teacher_id))
