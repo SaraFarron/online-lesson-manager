@@ -11,6 +11,7 @@ import messages
 from config import config
 from logger import log_func
 from models import Reschedule, ScheduledLesson, User
+from repositories import ScheduledLessonRepo, UserRepo
 from routers.reschedule.config import FRL_START_CALLBACK, router
 from service import SecondFunctions
 from utils import MAX_HOUR, inline_keyboard, send_message
@@ -41,7 +42,7 @@ class Callbacks:
 async def frl_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     state_data = await state.get_data()
-    lesson: ScheduledLesson = db.query(ScheduledLesson).get(state_data["lesson"])
+    lesson: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
     if lesson:
         await state.update_data(
             lesson=state_data["lesson"],
@@ -54,7 +55,7 @@ async def frl_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, d
                 (Messages.CHOOSE_NEW_DATE, Callbacks.CHOOSE_DATE),
             ],
         ).as_markup()
-        await callback.message.answer(Messages.CONFRIM, reply_markup=keyboard)
+        await callback.message.answer(Messages.CONFRIM, reply_markup=keyboard) # type: ignore  # noqa: PGH003
 
 
 @router.callback_query(F.data == Callbacks.CONFIRM)
@@ -62,8 +63,8 @@ async def frl_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, d
 async def frl_delete_sl(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_confirm` state."""
     state_data = await state.get_data()
-    sl: ScheduledLesson = db.query(ScheduledLesson).get(state_data["lesson"])
-    user: User = db.query(User).get(state_data["user_id"])
+    sl: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
+    user: User = UserRepo(db).get(state_data["user_id"])
     message = messages.USER_DELETED_SL % (user.username_dog, sl.weekday_full_str, sl.st_str)
     # Delete all reschedules for this lesson in order to prevent errors
     reschedules_to_delete = db.query(Reschedule).filter_by(source=sl).all()
@@ -74,7 +75,7 @@ async def frl_delete_sl(callback: CallbackQuery, state: FSMContext, db: Session)
     db.commit()
     await send_message(user.teacher.telegram_id, message)
     await state.clear()
-    await callback.message.answer(Messages.CANCELED)
+    await callback.message.answer(Messages.CANCELED) # type: ignore  # noqa: PGH003
 
 
 @router.callback_query(F.data == Callbacks.CHOOSE_DATE)
@@ -85,7 +86,7 @@ async def frl_choose_weekday(callback: CallbackQuery, state: FSMContext, db: Ses
     schedule = SecondFunctions(db, state_data["user_telegram_id"])
     weekdays = [(config.WEEKDAY_MAP[w], Callbacks.CHOOSE_WEEKDAY + str(w)) for w in schedule.available_weekdays()]
     keyboard = inline_keyboard(weekdays)
-    await callback.message.answer(Messages.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup())
+    await callback.message.answer(Messages.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup()) # type: ignore  # noqa: PGH003
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_WEEKDAY))
@@ -93,18 +94,18 @@ async def frl_choose_weekday(callback: CallbackQuery, state: FSMContext, db: Ses
 async def frl_choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_choose_time` state."""
     state_data = await state.get_data()
-    weekday = int(callback.data.split(":")[1])
+    weekday = int(callback.data.split(":")[1]) # type: ignore  # noqa: PGH003
 
     schedule = SecondFunctions(db, state_data["user_telegram_id"])
     if weekday not in schedule.available_weekdays():
-        await callback.message.answer(Messages.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[weekday])
+        await callback.message.answer(Messages.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[weekday]) # type: ignore  # noqa: PGH003
         return
     await state.update_data(new_date=weekday)
     available_time = schedule.available_time_weekday(weekday)
     buttons = [(t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M")) for t in available_time]
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(2, repeat=True)
-    await callback.message.answer(Messages.CHOOSE_TIME, reply_markup=keyboard.as_markup())
+    await callback.message.answer(Messages.CHOOSE_TIME, reply_markup=keyboard.as_markup()) # type: ignore  # noqa: PGH003
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_TIME))
@@ -112,9 +113,9 @@ async def frl_choose_time(callback: CallbackQuery, state: FSMContext, db: Sessio
 async def frl_update_sl(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_create_reschedule` state."""
     state_data = await state.get_data()
-    time = datetime.strptime(callback.data.split(":")[1], "%H.%M").time()  # noqa: DTZ007
-    user: User = db.query(User).get(state_data["user_id"])
-    sl: ScheduledLesson = db.query(ScheduledLesson).get(state_data["lesson"])
+    time = datetime.strptime(callback.data.split(":")[1], "%H.%M").time() # type: ignore  # noqa: PGH003, DTZ007
+    user: User = UserRepo(db).get(state_data["user_id"])
+    sl: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
     old_w, old_t = sl.weekday_full_str, sl.st_str
     sl.weekday = state_data["new_date"]
     sl.start_time = time
@@ -128,5 +129,5 @@ async def frl_update_sl(callback: CallbackQuery, state: FSMContext, db: Session)
     )
     db.commit()
     await send_message(user.teacher.telegram_id, message)
-    await callback.message.answer(Messages.LESSON_ADDED)
+    await callback.message.answer(Messages.LESSON_ADDED) # type: ignore  # noqa: PGH003
     await state.clear()

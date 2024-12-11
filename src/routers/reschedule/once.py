@@ -12,6 +12,7 @@ import messages
 from config import config
 from logger import log_func
 from models import Reschedule, ScheduledLesson, User
+from repositories import RescheduleRepo, ScheduledLessonRepo, UserRepo
 from routers.reschedule.config import ORL_RS_CALLBACK, ORL_START_CALLBACK, router
 from service import SecondFunctions
 from utils import calc_end_time, inline_keyboard, send_message
@@ -23,6 +24,8 @@ class ChooseNewDateTime(StatesGroup):
 
 
 class Messages:
+    _HRS_PL = 5
+
     CONFRIM = "Вы можете перенести урок на другое время или отменить его"
     CANCEL_LESSON = "Отменить урок"
     CHOOSE_NEW_DATE = "Перенести на новую дату"
@@ -37,8 +40,8 @@ class Messages:
     LESSON_ADDED = "Урок добавлен"
     CHOOSE_FUTURE_DATE = "Нельзя перенести урок в прошлое"
     CHOOSE_LESSON_IN_FUTURE = "Нельзя выбрать урок в прошлом"
-    CRT_1 = "Урок можно поставить только за %d " % config.HRS_TO_CANCEL
-    CRT_2 = "час" if config.HRS_TO_CANCEL == 1 else "часа" if config.HRS_TO_CANCEL < 5 else "часов"
+    CRT_1 = f"Урок можно поставить только за {config.HRS_TO_CANCEL} "
+    CRT_2 = "час" if config.HRS_TO_CANCEL == 1 else "часа" if config.HRS_TO_CANCEL < _HRS_PL else "часов"
     CRT_3 = " до его начала"
     CHOOSE_REASONABLE_TIME = CRT_1 + CRT_2 + CRT_3
 
@@ -55,7 +58,9 @@ class Callbacks:
 async def orl_type_date(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     state_data = await state.get_data()
-    lesson: ScheduledLesson | None = db.query(ScheduledLesson).get(state_data["lesson"])
+    lesson: ScheduledLesson | None = ScheduledLessonRepo(db).get(state_data["lesson"])
+    if not isinstance(callback.message, Message):
+        return
     if lesson:
         await state.update_data(
             event=lesson,
@@ -74,7 +79,9 @@ async def orl_type_date(callback: CallbackQuery, state: FSMContext, db: Session)
 @log_func
 async def orl_rs_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
-    event: Reschedule = db.query(Reschedule).get(int(callback.data.split(":")[2]))
+    if not isinstance(callback.message, Message):
+        return
+    event: Reschedule = RescheduleRepo(db).get(int(callback.data.split(":")[2]))  # type: ignore  # noqa: PGH003
     await state.update_data(date=event.source_date, event=event, user_telegram_id=event.user.telegram_id)
     keyboard = inline_keyboard(
         [
@@ -90,7 +97,7 @@ async def orl_rs_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext
 async def orl_cancel_or_reschedule(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     try:
-        date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
+        date = datetime.strptime(message.text if message.text else "", "%d-%m-%Y")  # noqa: DTZ007
     except ValueError:
         await state.set_state(ChooseNewDateTime.date)
         await message.answer(Messages.WRONG_DATE)
@@ -114,7 +121,7 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext, db: Sess
         await message.answer("Операция отменена")
         return
     if isinstance(event, ScheduledLesson):
-        right_weekday = db.query(ScheduledLesson).get(state_data["lesson"]).weekday
+        right_weekday = ScheduledLessonRepo(db).get(state_data["lesson"]).weekday
         if date.weekday() != right_weekday:
             await state.set_state(ChooseNewDateTime.date)
             await message.answer(
@@ -137,13 +144,15 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext, db: Sess
 @log_func
 async def orl_cancel_lesson(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_confirm` state."""
+    if not isinstance(callback.message, Message):
+        return
     state_data = await state.get_data()
-    user: User = db.query(User).get(state_data["user_id"])
+    user: User = UserRepo(db).get(state_data["user_id"])
     if isinstance(state_data["event"], Reschedule):
-        event = db.query(Reschedule).get(state_data["event"].id)
+        event = RescheduleRepo(db).get(state_data["event"].id)
         db.delete(event)
     else:
-        event: ScheduledLesson = db.query(ScheduledLesson).get(state_data["lesson"])
+        event: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
         reschedule = Reschedule(
             user=user,
             source=event,
@@ -165,6 +174,8 @@ async def orl_cancel_lesson(callback: CallbackQuery, state: FSMContext, db: Sess
 @log_func
 async def orl_choose_new_date(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_choose_date` state."""
+    if not isinstance(callback.message, Message):
+        return
     state_data = await state.get_data()
     schedule = SecondFunctions(db, state_data["user_telegram_id"])
     weekends_str = ", ".join([config.WEEKDAY_MAP_FULL[w] for w in schedule.available_weekdays()])
@@ -179,7 +190,7 @@ async def orl_choose_time(message: Message, state: FSMContext, db: Session) -> N
     """Handler receives messages with `reschedule_lesson_choose_time` state."""
     state_data = await state.get_data()
     try:
-        date = datetime.strptime(message.text, "%d-%m-%Y")  # noqa: DTZ007
+        date = datetime.strptime(message.text if message.text else "", "%d-%m-%Y")  # noqa: DTZ007
     except ValueError:
         await state.set_state(ChooseNewDateTime.time)
         await message.answer(Messages.WRONG_DATE)
@@ -210,8 +221,10 @@ async def orl_choose_time(message: Message, state: FSMContext, db: Session) -> N
 @log_func
 async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_create_reschedule` state."""
+    if not isinstance(callback.message, Message):
+        return
     state_data = await state.get_data()
-    time = datetime.strptime(callback.data.split(":")[1], "%H.%M").time()  # noqa: DTZ007
+    time = datetime.strptime(callback.data.split(":")[1], "%H.%M").time()  # type: ignore # noqa: DTZ007, PGH003
     now = datetime.now(tz=config.TIMEZONE)
     if state_data["new_date"].date() == now.date():
         if time < now.time():
@@ -222,26 +235,18 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
             await callback.message.answer(Messages.CHOOSE_REASONABLE_TIME)
             await callback.message.answer("Операция отменена")
             return
-    user: User = db.query(User).get(state_data["user_id"])
+    user: User = UserRepo(db).get(state_data["user_id"])
     event = state_data["event"]
     if isinstance(event, Reschedule):
-        event: Reschedule = db.query(Reschedule).get(event.id)
+        event: Reschedule = RescheduleRepo(db).get(event.id)
         old_date, old_time = event.source_date, event.start_time
         event.date = state_data["new_date"]
         event.start_time = time
         event.end_time = calc_end_time(time)
     else:
-        sl: ScheduledLesson = db.query(ScheduledLesson).get(state_data["lesson"])
-        reschedule = Reschedule(
-            user=user,
-            source=sl,
-            source_date=state_data["date"],
-            date=state_data["new_date"],
-            start_time=time,
-            end_time=calc_end_time(time),
-        )
+        sl: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
+        reschedule = RescheduleRepo(db).new(user, sl, state_data["date"], state_data["new_date"], time)
         old_date, old_time = reschedule.source_date.strftime("%d-%m-%Y"), sl.st_str
-        db.add(reschedule)
     message = messages.USER_MOVED_SL % (
         user.username_dog,
         old_date,

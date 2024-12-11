@@ -41,9 +41,10 @@ class Callbacks:
 @log_func
 async def reschedule_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `/reschedule` command."""
-    if message.from_user.id in config.BANNED_USERS:
+    user_id = message.from_user.id # type: ignore  # noqa: PGH003
+    if user_id in config.BANNED_USERS:
         return
-    user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
+    user = db.query(User).filter(User.telegram_id == user_id).first()
     if user:
         await state.update_data(user_id=user.id)
         lessons = (
@@ -87,7 +88,7 @@ async def reschedule_lesson_handler(message: Message, state: FSMContext, db: Ses
 @log_func
 async def reschedule_lesson_choose_cancel_type_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
-    lesson_id = int(callback.data.split(":")[1])
+    lesson_id = int(callback.data.split(":")[1]) # type: ignore  # noqa: PGH003
     await state.update_data(lesson=lesson_id)
     buttons = [
         (Messages.ONE_TYPE, ORL_START_CALLBACK),
@@ -95,4 +96,4 @@ async def reschedule_lesson_choose_cancel_type_handler(callback: CallbackQuery, 
     ]
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
-    await callback.message.answer(Messages.CANCEL_TYPE, reply_markup=keyboard.as_markup())
+    await callback.message.answer(Messages.CANCEL_TYPE, reply_markup=keyboard.as_markup()) # type: ignore  # noqa: PGH003
