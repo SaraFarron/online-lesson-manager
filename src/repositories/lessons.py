@@ -56,7 +56,7 @@ class RescheduleRepo(Repository):
         source_date: date,
         new_date: date | None = None,
         new_time: time | None = None,
-    ) -> None:
+    ):
         """Add new entry of model to the database."""
         reschedule = Reschedule(
             user=user,
@@ -67,6 +67,7 @@ class RescheduleRepo(Repository):
             end_time=calc_end_time(new_time) if new_time else None,
         )
         self.session.add(reschedule)
+        return reschedule
 
     def get_many(self, whereclause, limit: int = 100, order_by=None) -> Sequence[Reschedule]:  # noqa: D102, ANN001
         return super().get_many(whereclause, limit, order_by)  # type: ignore  # noqa: PGH003
