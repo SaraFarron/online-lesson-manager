@@ -4,6 +4,7 @@ from aiogram.types import Message
 from sqlalchemy.orm import Session
 
 from config import config
+from errors import PermissionDeniedError
 from logger import log_func
 from middlewares import DatabaseMiddleware
 from repositories import UserRepo
@@ -24,6 +25,7 @@ class Messages:
 
 
 @router.message(CommandStart(deep_link=True))
+@router.message(CommandStart())
 @log_func
 async def start_handler(message: Message, command: CommandObject, db: Session) -> None:
     """Handler receives messages with `/start` command."""
@@ -40,7 +42,7 @@ async def start_handler(message: Message, command: CommandObject, db: Session) -
                 break
         else:
             await message.answer(Messages.WHO_ARE_YOU)
-            return
+            raise PermissionDeniedError
     else:
         if not user.telegram_username:
             user.telegram_username = tg_username
