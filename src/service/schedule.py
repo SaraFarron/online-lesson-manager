@@ -301,7 +301,7 @@ class Schedule(SessionBase):
         for day in week:
             day_schedule = self.lessons_day(user, day)
             weekday = html.bold(self.WEEKDAY_MAP_FULL[day.weekday()])
-            current_date = day.strftime("%d.%m.%Y")
+            current_date = f" {day.strftime("%d.%m.%Y")}\n"
             if day_schedule:
                 current_day_schedule = [lesson.short_repr for lesson in day_schedule]
                 days.append(weekday + current_date + "\n".join(current_day_schedule))
