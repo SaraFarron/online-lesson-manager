@@ -4,6 +4,7 @@ from aiogram.types.error_event import ErrorEvent
 from aiogram.types.message import Message
 
 from config.config import ADMINS
+from logger import logger
 from messages import errors as err_msgs
 from utils import send_message
 
@@ -37,7 +38,8 @@ def add_errors(dp: Dispatcher):
         await message.answer(err_msgs.NOT_TEXT_MESSAGE)
 
     @dp.errors(ExceptionTypeFilter(Exception), F.update.message.as_("message"))
-    async def value_error(event: ErrorEvent, message: Message) -> None:  # noqa: ARG001
+    async def value_error(event: ErrorEvent, message: Message) -> None:
+        logger.exception(event.exception)
         await message.answer(err_msgs.UNKNOWN)
 
     return dp
