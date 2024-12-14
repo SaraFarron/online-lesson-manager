@@ -23,9 +23,10 @@ async def main():
 
     dp = add_errors(dp)
     for router in all_routers:
-        router.message.middleware(LoggingMiddleware())
-        router.callback_query.middleware(LoggingMiddleware())
         dp.include_router(router)
+
+    dp.message.middleware(LoggingMiddleware())
+    dp.callback_query.middleware(LoggingMiddleware())
 
     await bot.set_my_commands(ALL_COMMANDS)
 

@@ -23,6 +23,7 @@ MAX_HOUR = 23
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
+router.callback_query.middleware(DatabaseMiddleware())
 
 
 class Callbacks:

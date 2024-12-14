@@ -38,7 +38,7 @@ class LoggingMiddleware(BaseMiddleware):
         """Calls every update."""
         if event.from_user:
             user_input = event.text if isinstance(event, Message) else event.data
-            log = f"User {event.from_user.full_name}({event.from_user.id}) called {handler.__name__} with {user_input}"
+            log = f"User {event.from_user.full_name}({event.from_user.id}) sent {user_input}"
             logger.info(log)
         else:
             logger.warning(f"Called {handler.__name__} without user")
