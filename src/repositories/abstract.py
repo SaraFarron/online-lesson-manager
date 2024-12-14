@@ -62,7 +62,7 @@ class Repository(Generic[AbstractModel]):
         :return: List of founded models
 
         """
-        statement = select(self.type_model).where(whereclause).limit(limit)
+        statement = select(self.type_model).filter(whereclause).limit(limit)
         if order_by:
             statement = statement.order_by(order_by)
 

@@ -129,6 +129,8 @@ async def orl_cancel_lesson(callback: CallbackQuery, state: FSMContext, db: Sess
             user=user,
             source=event,
             source_date=state_data["date"],
+            start_time=event.start_time,
+            end_time=event.end_time,
         )
         db.add(reschedule)
     message = replies.USER_CANCELED_SL % (

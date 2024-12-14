@@ -270,15 +270,33 @@ class Schedule(SessionBase):
 
     def lessons_day(self, user: User, date: date):
         """Get lessons for day."""
+        reschedules = self.session.query(Reschedule).filter(Reschedule.date == date).all()
+        lessons = self.session.query(Lesson).filter(Lesson.date == date).all()
+        cancellations = [c.id for c in self.session.query(Reschedule).filter(Reschedule.source_date == date).all()]
+        scheduled_lessons = (
+            self.session.query(ScheduledLesson)
+            .filter(
+                ScheduledLesson.weekday == date.weekday(),
+                ScheduledLesson.id.not_in(cancellations),
+            )
+            .all()
+        )
         teacher: Teacher | None = TeacherRepo(self.session).get(user.teacher_id)
-        if teacher:
-            lessons: list[Reschedule | ScheduledLesson | Lesson] = []
-            for student in teacher.students:
-                student_lessons = LessonCollectionRepo(self.session).all(student, date)
-                lessons.extend(student_lessons)
-            return sorted(lessons, key=lambda x: x.edges[0])
-        lessons = LessonCollectionRepo(self.session).all(user, date)
-        return sorted(lessons, key=lambda x: x.edges[0])
+
+        if not teacher:
+            events: list[ScheduledLesson | Lesson | Reschedule] = [
+                *[sl for sl in scheduled_lessons if sl.user_id == user.id],
+                *[r for r in reschedules if r.user_id == user.id],
+                *[lsn for lsn in lessons if lsn.user_id == user.id],
+            ]
+        else:
+            students_ids = [s.id for s in teacher.students]
+            events: list[ScheduledLesson | Lesson | Reschedule] = [
+                *[sl for sl in scheduled_lessons if sl.user_id in students_ids],
+                *[r for r in reschedules if r.user_id in students_ids],
+                *[lsn for lsn in lessons if lsn.user_id in students_ids],
+            ]
+        return sorted(events, key=lambda x: x.edges[0])
 
     def lessons_day_message(self, user: User, date: date):
         """Get message with lessons for day."""

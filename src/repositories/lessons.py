@@ -160,8 +160,8 @@ class LessonCollectionRepo(Repository):
         reschedules = RescheduleRepo(self.session).all(user, None, date, start_time)
         if date and scheduled_lessons:
             sl_ids = [sl.id for sl in scheduled_lessons]
-            cancellations = RescheduleRepo(self.session).get_many(
-                (Reschedule.user == user, Reschedule.source_id.in_(sl_ids)),
+            cancellations = self.session.query(Reschedule).filter(
+                Reschedule.user == user, Reschedule.source_id.in_(sl_ids),
             )
             cancellation_ids = [c.source_id for c in cancellations]
             scheduled_lessons = [sl for sl in scheduled_lessons if sl.id not in cancellation_ids]
