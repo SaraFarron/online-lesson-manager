@@ -26,7 +26,7 @@ class RegistrationService:
 
     def register(self, admin_id: int, telegram_id: int, full_name: str, username: str | None = None):
         """Register user or teacher."""
-        if telegram_id in config.ADMINS:
+        if telegram_id in config.ADMINS.values():
             self.register_teacher(telegram_id, full_name, username)
             logger.info(logs.TEACHER_REGISTERED, full_name)
         else:
