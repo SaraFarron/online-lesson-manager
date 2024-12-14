@@ -6,9 +6,10 @@ from aiogram.types import Message
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 from config.config import ADMINS
-from config.messages import HELP_MESSAGE
+from errors import AiogramTelegramError
 from help import AdminCommands, Commands
 from logger import log_func
+from messages import replies
 
 COMMAND = "help"
 router: Router = Router()
@@ -30,4 +31,6 @@ def all_commands_keyboard(user_id: int):
 @log_func
 async def help_handler(message: Message) -> None:
     """Handler receives messages with `/help` command."""
-    await message.answer(HELP_MESSAGE, reply_markup=all_commands_keyboard(message.from_user.id))  # type: ignore  # noqa: PGH003
+    if message.from_user is None:
+        raise AiogramTelegramError
+    await message.answer(replies.HELP_MESSAGE, reply_markup=all_commands_keyboard(message.from_user.id))
