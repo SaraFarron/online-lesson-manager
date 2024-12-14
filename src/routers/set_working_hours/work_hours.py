@@ -9,7 +9,6 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from errors import AiogramTelegramError, NoTextMessageError, PermissionDeniedError
-from logger import log_func
 from messages import replies
 from models import Teacher
 from routers.set_working_hours.config import router
@@ -20,7 +19,6 @@ class SetWorkingHoursState(StatesGroup):
 
 
 @router.callback_query(F.data == "swh:start")
-@log_func
 async def set_work_start(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler for changing the start of the work day."""
     if not isinstance(callback.message, Message):
@@ -31,7 +29,6 @@ async def set_work_start(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "swh:end")
-@log_func
 async def set_work_end(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler for changing the end of the work day."""
     if not isinstance(callback.message, Message):
@@ -42,7 +39,6 @@ async def set_work_end(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(SetWorkingHoursState.edit_work_hours)
-@log_func
 async def set_work_border_handler(message: Message, state: FSMContext, db: Session) -> None:
     """Handler for changing the start of the work day."""
     if not message.text:

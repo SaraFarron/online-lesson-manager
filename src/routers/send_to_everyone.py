@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from errors import AiogramTelegramError, NoTextMessageError, PermissionDeniedError
 from help import AdminCommands
-from logger import log_func
 from messages import replies
 from middlewares import DatabaseMiddleware
 from repositories import TeacherRepo
@@ -28,7 +27,6 @@ class ChooseSendToEveryone(StatesGroup):
 
 @router.message(Command(COMMAND))
 @router.message(F.text == AdminCommands.SEND_TO_EVERYONE.value)
-@log_func
 async def send_to_everyone_handler(message: Message, state: FSMContext, db: Session) -> None:
     """First handler, gives a list of available weekdays."""
     if not message.from_user:
@@ -41,7 +39,6 @@ async def send_to_everyone_handler(message: Message, state: FSMContext, db: Sess
 
 
 @router.message(ChooseSendToEveryone.write_message)
-@log_func
 async def send_to_everyone_write_message(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `send_to_everyone_write_message` state."""
     if not message.from_user:

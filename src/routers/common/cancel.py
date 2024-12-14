@@ -3,7 +3,6 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from logger import log_func
 from messages import replies
 
 COMMAND = "cancel"
@@ -12,7 +11,6 @@ router: Router = Router()
 
 
 @router.message(Command(COMMAND))
-@log_func
 async def cancel_handler(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/cancel` command."""
     current_state = await state.get_state()

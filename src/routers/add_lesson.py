@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from config import config
 from errors import AiogramTelegramError, PermissionDeniedError
 from help import Commands
-from logger import log_func
 from messages import replies
 from middlewares import DatabaseMiddleware
 from models import ScheduledLesson
@@ -33,7 +32,6 @@ class Callbacks:
 
 @router.message(Command(COMMAND))
 @router.message(F.text == Commands.ADD_SCHEDULED_LESSON.value)
-@log_func
 async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     """First handler, gives a list of available weekdays."""
     if message.from_user is None:
@@ -50,7 +48,6 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_WEEKDAY))
-@log_func
 async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Second handler, gives a list of available times."""
     if not isinstance(callback.message, Message):
@@ -70,7 +67,6 @@ async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMC
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_TIME))
-@log_func
 async def add_lesson_choose_time_handler(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Last handler, saves scheduled lesson."""
     if not isinstance(callback.message, Message):

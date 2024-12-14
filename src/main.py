@@ -8,6 +8,7 @@ from config.config import Config, load_config
 from config.menu import ALL_COMMANDS
 from errors import add_errors
 from logger import logger
+from middlewares import LoggingMiddleware
 from routers import all_routers
 from utils import delete_banned_users
 
@@ -22,6 +23,8 @@ async def main():
 
     dp = add_errors(dp)
     for router in all_routers:
+        router.message.middleware(LoggingMiddleware())
+        router.callback_query.middleware(LoggingMiddleware())
         dp.include_router(router)
 
     await bot.set_my_commands(ALL_COMMANDS)

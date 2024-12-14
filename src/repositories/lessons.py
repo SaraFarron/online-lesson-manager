@@ -131,7 +131,7 @@ class LessonCollectionRepo(Repository):
         self.scheduled_lessons = ScheduledLessonRepo(self.session)
         self.reschedules = RescheduleRepo(self.session)
 
-    def new(self, lesson_type: Lesson | ScheduledLesson | Reschedule, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    def new(self, lesson_type: Lesson | ScheduledLesson | Reschedule, *args, **kwargs) -> Reschedule |None:  # noqa: ANN002, ANN003
         """Add new entry of model to the database."""
         if type(lesson_type) is Lesson:
             repo = LessonRepo(self.session)
@@ -142,6 +142,8 @@ class LessonCollectionRepo(Repository):
         else:
             msg = "Unknown lesson type"
             raise TypeError(msg)
+        if not repo:
+            raise TypeError
         return repo.new(*args, **kwargs)
 
     def all(

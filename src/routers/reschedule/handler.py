@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from config import config
 from errors import AiogramTelegramError
 from help import Commands
-from logger import log_func
 from messages import buttons, replies
 from models import Reschedule, ScheduledLesson, User
 from routers.reschedule.config import FRL_START_CALLBACK, ORL_RS_CALLBACK, ORL_START_CALLBACK, router
@@ -28,7 +27,6 @@ class Callbacks:
 
 @router.message(Command(COMMAND))
 @router.message(F.text == Commands.RESCHEDULE.value)
-@log_func
 async def reschedule_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `/reschedule` command."""
     user_id = message.from_user.id  # type: ignore  # noqa: PGH003
@@ -75,7 +73,6 @@ async def reschedule_lesson_handler(message: Message, state: FSMContext, db: Ses
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_CANCEL_TYPE))
-@log_func
 async def reschedule_lesson_choose_cancel_type_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     if not isinstance(callback.message, Message):

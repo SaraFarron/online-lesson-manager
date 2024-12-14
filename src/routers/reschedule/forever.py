@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from config import config
 from errors import AiogramTelegramError
-from logger import log_func
 from messages import buttons, replies
 from models import Reschedule, ScheduledLesson, User
 from repositories import ScheduledLessonRepo, UserRepo
@@ -26,7 +25,6 @@ class Callbacks:
 
 
 @router.callback_query(F.data.startswith(FRL_START_CALLBACK))
-@log_func
 async def frl_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     state_data = await state.get_data()
@@ -49,7 +47,6 @@ async def frl_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, d
 
 
 @router.callback_query(F.data == Callbacks.CONFIRM)
-@log_func
 async def frl_delete_sl(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_confirm` state."""
     if not isinstance(callback.message, Message):
@@ -71,7 +68,6 @@ async def frl_delete_sl(callback: CallbackQuery, state: FSMContext, db: Session)
 
 
 @router.callback_query(F.data == Callbacks.CHOOSE_DATE)
-@log_func
 async def frl_choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_choose_date` state."""
     if not isinstance(callback.message, Message):
@@ -84,7 +80,6 @@ async def frl_choose_weekday(callback: CallbackQuery, state: FSMContext, db: Ses
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_WEEKDAY))
-@log_func
 async def frl_choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_choose_time` state."""
     if not isinstance(callback.message, Message):
@@ -105,7 +100,6 @@ async def frl_choose_time(callback: CallbackQuery, state: FSMContext, db: Sessio
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_TIME))
-@log_func
 async def frl_update_sl(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_create_reschedule` state."""
     if not isinstance(callback.message, Message):

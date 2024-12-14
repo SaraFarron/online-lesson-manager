@@ -8,7 +8,6 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from config.config import ADMINS
 from errors import AiogramTelegramError
 from help import AdminCommands, Commands
-from logger import log_func
 from messages import replies
 
 COMMAND = "help"
@@ -28,7 +27,6 @@ def all_commands_keyboard(user_id: int):
 
 
 @router.message(Command(COMMAND))
-@log_func
 async def help_handler(message: Message) -> None:
     """Handler receives messages with `/help` command."""
     if message.from_user is None:

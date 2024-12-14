@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from config import config
 from errors import AiogramTelegramError, PermissionDeniedError
-from logger import log_func
 from messages import replies
 from models import Teacher, Weekend
 from routers.set_working_hours.config import router
@@ -15,7 +14,6 @@ from utils import inline_keyboard
 
 
 @router.callback_query(F.data.startswith("swh:rm_weekend_"))
-@log_func
 async def remove_weekend(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for removing a weekend."""
     if not isinstance(callback.message, Message):
@@ -29,7 +27,6 @@ async def remove_weekend(callback: CallbackQuery, state: FSMContext, db: Session
 
 
 @router.callback_query(F.data == "swh:add_weekend")
-@log_func
 async def add_weekend(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for adding a weekend."""
     if not isinstance(callback.message, Message):
@@ -45,7 +42,6 @@ async def add_weekend(callback: CallbackQuery, state: FSMContext, db: Session) -
 
 
 @router.callback_query(F.data.startswith("swh:add_weekend_"))
-@log_func
 async def add_weekend_finish(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for finishing adding a weekend."""
     if not isinstance(callback.message, Message):

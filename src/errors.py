@@ -24,7 +24,7 @@ def add_errors(dp: Dispatcher):
     """Adds all errors to dispatcher."""
 
     @dp.errors(ExceptionTypeFilter(PermissionDeniedError), F.update.message.as_("message"))
-    async def permission_denied(event: ErrorEvent, message: Message) -> None:
+    async def permission_denied(event: ErrorEvent, message: Message) -> None:  # noqa: ARG001
         await message.answer(err_msgs.PERMISSION_DENIED)
 
     @dp.errors(ExceptionTypeFilter(AiogramTelegramError), F.update.message.as_("message"))
@@ -33,11 +33,11 @@ def add_errors(dp: Dispatcher):
         await message.answer(err_msgs.TELEGRAM_ERROR_OCCURED)
 
     @dp.errors(ExceptionTypeFilter(NoTextMessageError), F.update.message.as_("message"))
-    async def no_text_message_error(event: ErrorEvent, message: Message) -> None:
+    async def no_text_message_error(event: ErrorEvent, message: Message) -> None:  # noqa: ARG001
         await message.answer(err_msgs.NOT_TEXT_MESSAGE)
 
     @dp.errors(ExceptionTypeFilter(Exception), F.update.message.as_("message"))
-    async def value_error(event: ErrorEvent, message: Message) -> None:
+    async def value_error(event: ErrorEvent, message: Message) -> None:  # noqa: ARG001
         await message.answer(err_msgs.UNKNOWN)
 
     return dp

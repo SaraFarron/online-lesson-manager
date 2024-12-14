@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from errors import AiogramTelegramError, PermissionDeniedError
 from help import AdminCommands
-from logger import log_func
 from messages import replies
 from middlewares import DatabaseMiddleware
 from models import Reschedule, ScheduledLesson
@@ -28,7 +27,6 @@ class Callbacks:
 
 @router.message(Command(COMMAND))
 @router.message(F.text == AdminCommands.CHECK_SCHEDULE.value)
-@log_func
 async def check_notify_handler(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `/check_notify` command."""
     if message.from_user is None:
@@ -54,7 +52,6 @@ async def check_notify_handler(message: Message, state: FSMContext, db: Session)
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHECK_NOTIFY))
-@log_func
 async def check_notify_finish(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `check_notify` callback."""
     if not isinstance(callback.message, Message):

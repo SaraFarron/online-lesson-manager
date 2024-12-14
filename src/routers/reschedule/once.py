@@ -9,7 +9,6 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from config import config
-from logger import log_func
 from messages import buttons, replies
 from models import Reschedule, ScheduledLesson, User
 from repositories import RescheduleRepo, ScheduledLessonRepo, UserRepo
@@ -31,7 +30,6 @@ class Callbacks:
 
 
 @router.callback_query(F.data.startswith(ORL_START_CALLBACK))
-@log_func
 async def orl_type_date(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     state_data = await state.get_data()
@@ -53,7 +51,6 @@ async def orl_type_date(callback: CallbackQuery, state: FSMContext, db: Session)
 
 
 @router.callback_query(F.data.startswith(ORL_RS_CALLBACK))
-@log_func
 async def orl_rs_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     if not isinstance(callback.message, Message):
@@ -70,7 +67,6 @@ async def orl_rs_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext
 
 
 @router.message(ChooseNewDateTime.date)
-@log_func
 async def orl_cancel_or_reschedule(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     try:
@@ -118,7 +114,6 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext, db: Sess
 
 
 @router.callback_query(F.data == Callbacks.CONFIRM)
-@log_func
 async def orl_cancel_lesson(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_confirm` state."""
     if not isinstance(callback.message, Message):
@@ -148,7 +143,6 @@ async def orl_cancel_lesson(callback: CallbackQuery, state: FSMContext, db: Sess
 
 
 @router.callback_query(F.data == Callbacks.CHOOSE_DATE)
-@log_func
 async def orl_choose_new_date(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_choose_date` state."""
     if not isinstance(callback.message, Message):
@@ -162,7 +156,6 @@ async def orl_choose_new_date(callback: CallbackQuery, state: FSMContext, db: Se
 
 @router.message(ChooseNewDateTime.time)
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_WEEKDAY))
-@log_func
 async def orl_choose_time(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_choose_time` state."""
     state_data = await state.get_data()
@@ -195,7 +188,6 @@ async def orl_choose_time(message: Message, state: FSMContext, db: Session) -> N
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_TIME))
-@log_func
 async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_create_reschedule` state."""
     if not isinstance(callback.message, Message):

@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from config import config
 from errors import AiogramTelegramError, NoTextMessageError, PermissionDeniedError
-from logger import log_func
 from messages import replies
 from models import Teacher, Vacations
 from routers.set_working_hours.config import router
@@ -26,7 +25,6 @@ class States(StatesGroup):
 
 
 @router.callback_query(F.data.startswith("swh:edit_vacations"))
-@log_func
 async def edit_vacations_hanlder(callback: CallbackQuery, state: FSMContext, db: Session):
     """Handler for editing vacations."""
     if not isinstance(callback.message, Message):
@@ -43,7 +41,6 @@ async def edit_vacations_hanlder(callback: CallbackQuery, state: FSMContext, db:
 
 
 @router.callback_query(F.data == "swh:add_vacation_start")
-@log_func
 async def add_vacation_start(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler for adding vacations."""
     if not isinstance(callback.message, Message):
@@ -56,7 +53,6 @@ async def add_vacation_start(callback: CallbackQuery, state: FSMContext, db: Ses
 
 
 @router.message(States.add_vacation_start)
-@log_func
 async def add_vacation_end(message: Message, state: FSMContext, db: Session) -> None:
     """Handler for adding vacations."""
     if not message.from_user:
@@ -79,7 +75,6 @@ async def add_vacation_end(message: Message, state: FSMContext, db: Session) -> 
 
 
 @router.message(States.add_vacation_end)
-@log_func
 async def add_vacation_finish(message: Message, state: FSMContext, db: Session) -> None:
     """Handler for adding vacations."""
     if not message.from_user:
@@ -108,7 +103,6 @@ async def add_vacation_finish(message: Message, state: FSMContext, db: Session) 
 
 
 @router.callback_query(F.data.startswith("swh:rm_vacation_"))
-@log_func
 async def remove_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for removing breaks."""
     if not isinstance(callback.message, Message):

@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from config import config
 from errors import AiogramTelegramError, NoTextMessageError, PermissionDeniedError
-from logger import log_func
 from messages import replies
 from models import Teacher, WorkBreak
 from routers.set_working_hours.config import router
@@ -22,7 +21,6 @@ class SetWorkingHoursState(StatesGroup):
 
 
 @router.callback_query(F.data == "swh:edit_breaks")
-@log_func
 async def edit_breaks(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for editing breaks."""
     if not isinstance(callback.message, Message):
@@ -46,7 +44,6 @@ async def edit_breaks(callback: CallbackQuery, state: FSMContext, db: Session) -
 
 
 @router.callback_query(F.data == "swh:add_break")
-@log_func
 async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for adding breaks."""
     if not isinstance(callback.message, Message):
@@ -67,7 +64,6 @@ async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> 
 
 
 @router.callback_query(F.data.startswith("swh:add_break_"))
-@log_func
 async def add_break_choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler for finishing adding breaks."""
     if not isinstance(callback.message, Message):
@@ -75,13 +71,12 @@ async def add_break_choose_time(callback: CallbackQuery, state: FSMContext, db: 
     teacher = db.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
     if teacher is None:
         raise PermissionDeniedError
-    await state.update_data(weekday=int(callback.data.replace("swh:add_break_", ""))) # type: ignore  # noqa: PGH003
+    await state.update_data(weekday=int(callback.data.replace("swh:add_break_", "")))  # type: ignore  # noqa: PGH003
     await state.set_state(SetWorkingHoursState.add_break)
     await callback.message.answer(replies.CHOOSE_BREAK_PERIOD)
 
 
 @router.message(SetWorkingHoursState.add_break)
-@log_func
 async def add_break_finish(message: Message, state: FSMContext, db: Session) -> None:
     """Handler for finishing adding breaks."""
     if not message.from_user:
@@ -113,7 +108,6 @@ async def add_break_finish(message: Message, state: FSMContext, db: Session) -> 
 
 
 @router.callback_query(F.data.startswith("swh:rm_break_"))
-@log_func
 async def remove_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for removing breaks."""
     if not isinstance(callback.message, Message):

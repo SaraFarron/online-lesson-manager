@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from config import config
 from errors import AiogramTelegramError, PermissionDeniedError
 from help import AdminCommands
-from logger import log_func
 from models import Teacher
 from routers.set_working_hours.config import router
 from utils import inline_keyboard
@@ -18,7 +17,6 @@ COMMAND = "/reschedule"
 
 @router.message(Command(COMMAND))
 @router.message(F.text == AdminCommands.EDIT_WORKING_HOURS.value)
-@log_func
 async def set_working_hours_handler(message: Message, db: Session) -> None:
     """Handler receives messages with `/reschedule` command."""
     if not message.from_user:

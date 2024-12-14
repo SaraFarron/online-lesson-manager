@@ -12,7 +12,7 @@ from config.base import getenv
 from config.config import ADMINS, TIMEZONE
 from database import engine
 from logger import logger
-from models import Reschedule, ScheduledLesson, Teacher, User
+from models import Reschedule, ScheduledLesson, User
 
 MAX_HOUR = 23
 
@@ -20,14 +20,6 @@ MAX_HOUR = 23
 def calc_end_time(time: time):
     """Calculate end time."""
     return time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0)
-
-
-def get_teacher(session: Session):
-    """Get the right teacher from the database."""
-    teacher = session.query(Teacher).filter(Teacher.telegram_id == ADMINS[0]).first()
-    if not teacher:
-        teacher = session.query(Teacher).filter(Teacher.telegram_id == ADMINS[1]).first()
-    return teacher
 
 
 async def send_message(telegram_id: int, message: str) -> None:
@@ -40,8 +32,8 @@ async def send_message(telegram_id: int, message: str) -> None:
 
 async def notify_admins(message: str) -> None:
     """Send a message to all admins."""
-    for admin in ADMINS:
-        await send_message(admin, message)
+    for tg_id in ADMINS.values():
+        await send_message(tg_id, message)
 
 
 def inline_keyboard(buttons: dict[str, str] | Iterable[tuple[str, str]]):
@@ -49,7 +41,7 @@ def inline_keyboard(buttons: dict[str, str] | Iterable[tuple[str, str]]):
     builder = InlineKeyboardBuilder()
     if isinstance(buttons, dict):
         for callback_data, text in buttons.items():
-            builder.button(text=text, callback_data=callback_data) # type: ignore  # noqa: PGH003
+            builder.button(text=text, callback_data=callback_data)  # type: ignore  # noqa: PGH003
     else:
         for text, callback_data in buttons:
             builder.button(text=text, callback_data=callback_data)

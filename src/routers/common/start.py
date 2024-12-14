@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from config import config
 from errors import AiogramTelegramError, PermissionDeniedError
-from logger import log_func
 from messages import replies
 from middlewares import DatabaseMiddleware
 from repositories import UserRepo
@@ -17,7 +16,6 @@ router.message.middleware(DatabaseMiddleware())
 
 @router.message(CommandStart(deep_link=True))
 @router.message(CommandStart())
-@log_func
 async def start_handler(message: Message, command: CommandObject, db: Session) -> None:
     """Handler receives messages with `/start` command."""
     if message.from_user is None:
