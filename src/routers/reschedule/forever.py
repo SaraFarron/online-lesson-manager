@@ -4,30 +4,18 @@ from datetime import datetime
 
 from aiogram import F
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-import messages
 from config import config
+from errors import AiogramTelegramError
 from logger import log_func
+from messages import buttons, replies
 from models import Reschedule, ScheduledLesson, User
 from repositories import ScheduledLessonRepo, UserRepo
 from routers.reschedule.config import FRL_START_CALLBACK, router
 from service import SecondFunctions
 from utils import MAX_HOUR, inline_keyboard, send_message
-
-
-class Messages:
-    CONFRIM = "Вы можете перенести урок на другое время или отменить его"
-    CANCEL_LESSON = "Отменить урок"
-    CHOOSE_NEW_DATE = "Перенести на новую дату"
-    CHOOSE_RIGHT_WEEKDAY = "Нельзя выбрать %s, подходят только даты на выбранный день недели - %s"
-    CHOOSE_WEEKDAY = "Выберите день недели"
-    WRONG_DATE = "Неправильный формат даты, введите дату в формате ДД-ММ-ГГГГ, например 01-01-2024"
-    CANCELED = "Урок отменён"
-    WRONG_WEEKDAY = "Нельзя выбрать %s"
-    CHOOSE_TIME = "Выберите время (по МСК)"
-    LESSON_ADDED = "Урок добавлен"
 
 
 class Callbacks:
@@ -43,6 +31,8 @@ async def frl_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, d
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     state_data = await state.get_data()
     lesson: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     if lesson:
         await state.update_data(
             lesson=state_data["lesson"],
@@ -51,21 +41,23 @@ async def frl_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, d
         )
         keyboard = inline_keyboard(
             [
-                (Messages.CANCEL_LESSON, Callbacks.CONFIRM),
-                (Messages.CHOOSE_NEW_DATE, Callbacks.CHOOSE_DATE),
+                (buttons.CANCEL_LESSON, Callbacks.CONFIRM),
+                (buttons.CHOOSE_NEW_DATE, Callbacks.CHOOSE_DATE),
             ],
         ).as_markup()
-        await callback.message.answer(Messages.CONFRIM, reply_markup=keyboard) # type: ignore  # noqa: PGH003
+        await callback.message.answer(replies.CONFRIM, reply_markup=keyboard)
 
 
 @router.callback_query(F.data == Callbacks.CONFIRM)
 @log_func
 async def frl_delete_sl(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_confirm` state."""
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     state_data = await state.get_data()
     sl: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
     user: User = UserRepo(db).get(state_data["user_id"])
-    message = messages.USER_DELETED_SL % (user.username_dog, sl.weekday_full_str, sl.st_str)
+    message = replies.USER_DELETED_SL % (user.username_dog, sl.weekday_full_str, sl.st_str)
     # Delete all reschedules for this lesson in order to prevent errors
     reschedules_to_delete = db.query(Reschedule).filter_by(source=sl).all()
     for reschedule in reschedules_to_delete:
@@ -75,52 +67,58 @@ async def frl_delete_sl(callback: CallbackQuery, state: FSMContext, db: Session)
     db.commit()
     await send_message(user.teacher.telegram_id, message)
     await state.clear()
-    await callback.message.answer(Messages.CANCELED) # type: ignore  # noqa: PGH003
+    await callback.message.answer(replies.CANCELED)
 
 
 @router.callback_query(F.data == Callbacks.CHOOSE_DATE)
 @log_func
 async def frl_choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_choose_date` state."""
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     state_data = await state.get_data()
     schedule = SecondFunctions(db, state_data["user_telegram_id"])
     weekdays = [(config.WEEKDAY_MAP[w], Callbacks.CHOOSE_WEEKDAY + str(w)) for w in schedule.available_weekdays()]
     keyboard = inline_keyboard(weekdays)
-    await callback.message.answer(Messages.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup()) # type: ignore  # noqa: PGH003
+    await callback.message.answer(replies.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup())
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_WEEKDAY))
 @log_func
 async def frl_choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_choose_time` state."""
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     state_data = await state.get_data()
-    weekday = int(callback.data.split(":")[1]) # type: ignore  # noqa: PGH003
+    weekday = int(callback.data.split(":")[1])  # type: ignore  # noqa: PGH003
 
     schedule = SecondFunctions(db, state_data["user_telegram_id"])
     if weekday not in schedule.available_weekdays():
-        await callback.message.answer(Messages.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[weekday]) # type: ignore  # noqa: PGH003
+        await callback.message.answer(replies.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[weekday])
         return
     await state.update_data(new_date=weekday)
     available_time = schedule.available_time_weekday(weekday)
     buttons = [(t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M")) for t in available_time]
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(2, repeat=True)
-    await callback.message.answer(Messages.CHOOSE_TIME, reply_markup=keyboard.as_markup()) # type: ignore  # noqa: PGH003
+    await callback.message.answer(replies.CHOOSE_TIME, reply_markup=keyboard.as_markup())
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_TIME))
 @log_func
 async def frl_update_sl(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschedule_lesson_create_reschedule` state."""
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     state_data = await state.get_data()
-    time = datetime.strptime(callback.data.split(":")[1], "%H.%M").time() # type: ignore  # noqa: PGH003, DTZ007
+    time = datetime.strptime(callback.data.split(":")[1], "%H.%M").time()  # type: ignore  # noqa: PGH003, DTZ007
     user: User = UserRepo(db).get(state_data["user_id"])
     sl: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
     old_w, old_t = sl.weekday_full_str, sl.st_str
     sl.weekday = state_data["new_date"]
     sl.start_time = time
     sl.end_time = time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0)
-    message = messages.USER_MOVED_SL % (
+    message = replies.USER_MOVED_SL % (
         user.username_dog,
         old_w,
         old_t,
@@ -129,5 +127,5 @@ async def frl_update_sl(callback: CallbackQuery, state: FSMContext, db: Session)
     )
     db.commit()
     await send_message(user.teacher.telegram_id, message)
-    await callback.message.answer(Messages.LESSON_ADDED) # type: ignore  # noqa: PGH003
+    await callback.message.answer(replies.LESSON_ADDED)
     await state.clear()

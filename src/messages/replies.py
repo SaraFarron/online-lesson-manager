@@ -1,3 +1,5 @@
+from config import config
+
 NO_DATA = "Нет данных"
 
 USER_ADDED_SL = "%s добавил занятие на %s в %s"
@@ -63,4 +65,38 @@ TIME_UPDATED = "Время обновлено"
 
 PERMISSION_DENIED = "У вас нет доступа к этой команде"
 NO_DATA = "Нет данных"
+
+CONFRIM = "Вы можете перенести урок на другое время или отменить его"
+CHOOSE_WEEKDAY = "Выберите день недели"
+
+WRONG_WEEKDAY = "Нельзя выбрать %s"
+WRONG_DATE = "Неправильный формат даты, введите дату в формате ДД-ММ-ГГГГ, например 01-01-2024"
+
+CHSE_LSN_1 = "Выберите занятие. Нельзя отменять занятия, до которых осталось меньше "
+CHSE_LSN_2 = f"{config.HRS_TO_CANCEL} часов" if config.HRS_TO_CANCEL > 1 else f"{config.HRS_TO_CANCEL} часа"
+CHSE_LSN_3 = " (такие предложены не будут)"
+CHOOSE_LESSON = CHSE_LSN_1 + CHSE_LSN_2 + CHSE_LSN_3
+NO_LESSONS = "Нет предстоящих занятий"
+CANCEL_TYPE = "Вы можете отменить/перенести занятие навсегда или только в какую-то дату"
+
+NOT_REGISTERED = "Вы не зарегистрированы. Пожалуйста воспользуйтесь командой /start"
+
+_HRS_PL = 5
+
+CONFRIM = "Вы можете перенести урок на другое время или отменить его"
+ALREADY_CANCELED = "Этот урок на эту дату уже отменён"
+CHOOSE_RIGHT_WEEKDAY = "Нельзя выбрать %s, подходят только даты на выбранный день недели - %s"
+TYPE_NEW_DATE = "Введите дату в формате ДД-ММ-ГГГГ, в которую хотите отменить занятие"
+WRONG_DATE = "Неправильный формат даты, введите дату в формате ДД-ММ-ГГГГ, например 01-01-2024"
+CANCELED = "Урок отменён"
+CHOOSE_DATE = "Введите дату в формате ДД-ММ-ГГГГ, можно выбрать следующие дни недели: %s"
+WRONG_WEEKDAY = "Нельзя выбрать %s"
+CHOOSE_TIME = "Выберите время (по МСК)"
+LESSON_ADDED = "Урок добавлен"
+CHOOSE_FUTURE_DATE = "Нельзя перенести урок в прошлое"
+CHOOSE_LESSON_IN_FUTURE = "Нельзя выбрать урок в прошлом"
+CRT_1 = f"Урок можно поставить только за {config.HRS_TO_CANCEL} "
+CRT_2 = "час" if config.HRS_TO_CANCEL == 1 else "часа" if config.HRS_TO_CANCEL < _HRS_PL else "часов"
+CRT_3 = " до его начала"
+CHOOSE_REASONABLE_TIME = CRT_1 + CRT_2 + CRT_3
 
