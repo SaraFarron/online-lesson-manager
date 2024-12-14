@@ -1,12 +1,13 @@
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InaccessibleMessage, Message
+from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-import messages
+from errors import AiogramTelegramError, PermissionDeniedError
 from help import AdminCommands
 from logger import log_func
+from messages import replies
 from middlewares import DatabaseMiddleware
 from models import Reschedule, ScheduledLesson
 from repositories import TeacherRepo
@@ -30,10 +31,11 @@ class Callbacks:
 @log_func
 async def check_notify_handler(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `/check_notify` command."""
-    teacher = TeacherRepo(db).get_by_telegram_id(message.from_user.id)  # type: ignore  # noqa: PGH003
+    if message.from_user is None:
+        raise AiogramTelegramError
+    teacher = TeacherRepo(db).get_by_telegram_id(message.from_user.id)
     if teacher is None:
-        await message.answer(messages.PERMISSION_DENIED)
-        return
+        raise PermissionDeniedError
 
     schedule = Schedule(db)
     collisions = schedule.check_schedule_consistency(teacher)
@@ -55,10 +57,9 @@ async def check_notify_handler(message: Message, state: FSMContext, db: Session)
 @log_func
 async def check_notify_finish(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `check_notify` callback."""
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     message = callback.message
-    if isinstance(message, InaccessibleMessage) or message is None:
-        msg = "NO MESSAGE IN CALLBACK"
-        raise TypeError(msg)
     if callback.data == Callbacks.CHECK_NOTIFY + "send":
         err_msg = "Ошибка при отправке уведомления "
         state_data = await state.get_data()
@@ -75,7 +76,7 @@ async def check_notify_finish(callback: CallbackQuery, state: FSMContext, db: Se
                     continue
             else:
                 continue
-            await send_message(lesson.user.telegram_id, messages.OUT_OF_WT % str(lesson))
+            await send_message(lesson.user.telegram_id, replies.OUT_OF_WT % str(lesson))
         await message.answer("Уведомления отправлены")
     else:
         await state.clear()
