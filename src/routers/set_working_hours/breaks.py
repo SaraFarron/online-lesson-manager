@@ -8,21 +8,13 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-import messages
 from config import config
+from errors import AiogramTelegramError, NoTextMessageError, PermissionDeniedError
 from logger import log_func
+from messages import replies
 from models import Teacher, WorkBreak
 from routers.set_working_hours.config import router
 from utils import inline_keyboard
-
-
-class Messages:
-    CHOOSE_WEEKDAY = "Выберите день недели"
-    EDIT_BREAKS = "Выберите действие"
-    CHOOSE_BREAK_PERIOD = "Напишите время перерыва в формате ЧЧ:ММ - ЧЧ:ММ (МСК)"
-    INVALID_TIME_PERIOD = "Неправильный формат времени, введите время в формате 'ЧЧ:ММ - ЧЧ:ММ' (МСК)"
-    BREAK_REMOVED = "Перерыв убран"
-    BREAK_ADDED = "Перерыв добавлен"
 
 
 class SetWorkingHoursState(StatesGroup):
@@ -31,12 +23,13 @@ class SetWorkingHoursState(StatesGroup):
 
 @router.callback_query(F.data == "swh:edit_breaks")
 @log_func
-async def edit_breaks(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+async def edit_breaks(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for editing breaks."""
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     teacher = db.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
     if teacher is None:
-        await callback.message.answer(messages.PERMISSION_DENIED)
-        return
+        raise PermissionDeniedError
 
     breaks = db.query(WorkBreak).filter(WorkBreak.teacher_id == teacher.id).all()
     breaks = [
@@ -49,19 +42,20 @@ async def edit_breaks(callback: CallbackQuery, state: FSMContext, db: Session) -
 
     keyboard = inline_keyboard([*breaks, ("Добавить перерыв", "swh:add_break")])
     keyboard.adjust(1 if len(breaks) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
-    await callback.message.answer(Messages.EDIT_BREAKS, reply_markup=keyboard.as_markup())
+    await callback.message.answer(replies.EDIT_BREAKS, reply_markup=keyboard.as_markup())
 
 
 @router.callback_query(F.data == "swh:add_break")
 @log_func
-async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for adding breaks."""
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     teacher = db.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
     if teacher is None:
-        await callback.message.answer(messages.PERMISSION_DENIED)
-        return
+        raise PermissionDeniedError
     await callback.message.answer(
-        Messages.CHOOSE_WEEKDAY,
+        replies.CHOOSE_WEEKDAY,
         reply_markup=inline_keyboard(
             [
                 (config.WEEKDAY_MAP[d], f"swh:add_break_{d}")
@@ -76,29 +70,33 @@ async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> 
 @log_func
 async def add_break_choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler for finishing adding breaks."""
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     teacher = db.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
     if teacher is None:
-        await callback.message.answer(messages.PERMISSION_DENIED)
-        return
-    await state.update_data(weekday=int(callback.data.replace("swh:add_break_", "")))
+        raise PermissionDeniedError
+    await state.update_data(weekday=int(callback.data.replace("swh:add_break_", ""))) # type: ignore  # noqa: PGH003
     await state.set_state(SetWorkingHoursState.add_break)
-    await callback.message.answer(Messages.CHOOSE_BREAK_PERIOD)
+    await callback.message.answer(replies.CHOOSE_BREAK_PERIOD)
 
 
 @router.message(SetWorkingHoursState.add_break)
 @log_func
 async def add_break_finish(message: Message, state: FSMContext, db: Session) -> None:
     """Handler for finishing adding breaks."""
+    if not message.from_user:
+        raise AiogramTelegramError
     data = await state.get_data()
     teacher = db.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
     if teacher is None:
-        await message.answer(messages.PERMISSION_DENIED)
-        return
+        raise PermissionDeniedError
+    if not message.text:
+        raise NoTextMessageError
     try:
         start_time = datetime.strptime(message.text.split(" - ")[0], "%H:%M").time()  # noqa: DTZ007
         end_time = datetime.strptime(message.text.split(" - ")[1], "%H:%M").time()  # noqa: DTZ007
     except ValueError:
-        await message.answer(Messages.INVALID_TIME_PERIOD)
+        await message.answer(replies.INVALID_TIME_PERIOD)
         return
     work_break = WorkBreak(
         teacher_id=teacher.id,
@@ -110,21 +108,22 @@ async def add_break_finish(message: Message, state: FSMContext, db: Session) -> 
     db.add(work_break)
     db.commit()
 
-    await message.answer(Messages.BREAK_ADDED)
+    await message.answer(replies.BREAK_ADDED)
     await state.clear()
 
 
 @router.callback_query(F.data.startswith("swh:rm_break_"))
 @log_func
-async def remove_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+async def remove_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for removing breaks."""
+    if not isinstance(callback.message, Message):
+        raise AiogramTelegramError
     teacher = db.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
     if teacher is None:
-        await callback.message.answer(messages.PERMISSION_DENIED)
-        return
-    wb = db.query(WorkBreak).filter(WorkBreak.id == int(callback.data.replace("swh:rm_break_", ""))).first()
+        raise PermissionDeniedError
+    wb = db.query(WorkBreak).filter(WorkBreak.id == int(callback.data.replace("swh:rm_break_", ""))).first()  # type: ignore  # noqa: PGH003
     if wb:
         db.delete(wb)
     db.commit()
 
-    await callback.message.answer(Messages.BREAK_REMOVED)
+    await callback.message.answer(replies.BREAK_REMOVED)

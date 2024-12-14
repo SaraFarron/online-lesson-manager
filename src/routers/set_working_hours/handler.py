@@ -5,8 +5,8 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
-import messages
 from config import config
+from errors import AiogramTelegramError, PermissionDeniedError
 from help import AdminCommands
 from logger import log_func
 from models import Teacher
@@ -21,10 +21,11 @@ COMMAND = "/reschedule"
 @log_func
 async def set_working_hours_handler(message: Message, db: Session) -> None:
     """Handler receives messages with `/reschedule` command."""
+    if not message.from_user:
+        raise AiogramTelegramError
     teacher = db.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
     if not teacher:
-        await message.answer(messages.PERMISSION_DENIED)
-        return
+        raise PermissionDeniedError
     buttons = [
         (f"Изменить начало рабочего дня: {teacher.work_start.strftime('%H:%M')}", "swh:start"),
         (f"Изменить конец рабочего дня: {teacher.work_end.strftime('%H:%M')}", "swh:end"),

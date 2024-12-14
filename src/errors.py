@@ -8,6 +8,10 @@ from messages import errors as err_msgs
 from utils import send_message
 
 
+class NoTextMessageError(Exception):
+    pass
+
+
 class PermissionDeniedError(Exception):
     pass
 
@@ -27,6 +31,10 @@ def add_errors(dp: Dispatcher):
     async def aiogram_telegram_error(event: ErrorEvent, message: Message) -> None:
         await send_message(ADMINS["sara_farron"], f"error occured: {event.exception}\nmessage: {message}")
         await message.answer(err_msgs.TELEGRAM_ERROR_OCCURED)
+
+    @dp.errors(ExceptionTypeFilter(NoTextMessageError), F.update.message.as_("message"))
+    async def no_text_message_error(event: ErrorEvent, message: Message) -> None:
+        await message.answer(err_msgs.NOT_TEXT_MESSAGE)
 
     @dp.errors(ExceptionTypeFilter(Exception), F.update.message.as_("message"))
     async def value_error(event: ErrorEvent, message: Message) -> None:
