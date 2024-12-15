@@ -213,60 +213,13 @@ class SecondFunctions(FirstFunctions):
         return self.get_avaiable_time(teacher.work_start, teacher.work_end, model_list + breaks)
 
 
-class Schedule(SessionBase):
-    DAY_SCHEDULE = "Занятия на %s:\n"
-    DAY_EMPTY_SCHEDULE = "На %s занятий нет"
-    EMPTY_SCHEDULE = "Занятий нет"
-
-    WEEKDAY_MAP = {
-        0: "ПН",
-        1: "ВТ",
-        2: "СР",
-        3: "ЧТ",
-        4: "ПТ",
-        5: "СБ",
-        6: "ВС",
-    }
-    WEEKDAY_MAP_FULL = {
-        0: "Понедельник",
-        1: "Вторник",
-        2: "Среда",
-        3: "Четверг",
-        4: "Пятница",
-        5: "Суббота",
-        6: "Воскресенье",
-    }
-
-    def __init__(self, session: Session) -> None:
-        """Initialize schedule class."""
-        self.session = session
-
+class EventsService(SessionBase):
     @staticmethod
     def time_overlapse(borders1: Iterable[time], borders2: Iterable[time]):
         """Check if two time ranges overlap."""
         start1, end1 = borders1
         start2, end2 = borders2
         return start1 < end2 and start2 < end1
-
-    def check_schedule_consistency(self, teacher: Teacher):
-        """Check schedule consistency. E.g. if lessons collide - return these lessons."""
-        weekends = [we.weekday for we in WeekendRepo(self.session).all(teacher)]
-        work_beaks = {wb.weekday: (wb.start_time, wb.end_time) for wb in WorkBreakRepo(self.session).all(teacher)}
-        lessons: list[Reschedule | ScheduledLesson] = []
-        for s in teacher.students:
-            lessons.extend(LessonCollectionRepo(self.session).all(s))
-        # TODO Лишние уроки выдаются
-        collisions = Collisions()
-        for lesson in lessons:
-            if isinstance(lesson, Reschedule) and lesson.date is None:
-                continue
-            if not self.time_overlapse(lesson.edges, (teacher.work_start, teacher.work_end)):
-                collisions.work_borders.append(lesson)
-            elif lesson.weekday in weekends:
-                collisions.weekends.append(lesson)
-            elif lesson.weekday in work_beaks and self.time_overlapse(work_beaks[lesson.weekday], lesson.edges):
-                collisions.work_breaks.append(lesson)
-        return collisions
 
     def lessons_day(self, user: User, date: date, teacher: Teacher | None = None):
         """Get lessons for day."""
@@ -297,11 +250,139 @@ class Schedule(SessionBase):
             ]
         return sorted(events, key=lambda x: x.edges[0])
 
+    def lessons_week(self, user: User, start_date: date):
+        """Get lessons for week."""
+        week = [date(start_date.year, start_date.month, day) for day in range(start_date.day, start_date.day + 7)]
+        teacher = TeacherRepo(self.session).get_by_telegram_id(user.telegram_id)
+        for day in week:
+            yield self.lessons_day(user, day, teacher)
+
+    def events_weekday(self, wd: int, teacher: Teacher, user: User | None = None):
+        """Get events for weekday."""
+        teacher_weekends = [w.weekday for w in teacher.weekends]
+        filters = (ScheduledLesson.weekday == wd, ScheduledLesson.weekday.not_in(teacher_weekends))
+        if user:
+            filters += (ScheduledLesson.user_id == user.id,)
+        return self.session.query(ScheduledLesson).filter(*filters).all()
+
+    def events_date(self, date: date, teacher: Teacher, user: User | None = None):
+        """Get events for date."""
+        teacher_weekends = (
+            self.session.query(Vacations)
+            .filter(Vacations.teacher_id == teacher.id, Vacations.start_date <= date, Vacations.end_date >= date)
+            .all()
+        )
+        if teacher_weekends:
+            return []
+        filters = (Reschedule.date == date,)
+        if user:
+            filters += (Reschedule.user_id == user.id,)
+        reschedules = self.session.query(Reschedule).filter(*filters).all()
+
+        cancellations = [r.source_id for r in self.session.query(Reschedule).filter(Reschedule.date == date).all()]
+        scheduled_lessons = (
+            self.session.query(ScheduledLesson)
+            .filter(ScheduledLesson.weekday == date.weekday(), ScheduledLesson.id.not_in(cancellations))
+            .all()
+        )
+        if user:
+            reschedules = [r for r in reschedules if r.user_id == user.id]
+            scheduled_lessons = [sl for sl in scheduled_lessons if sl.user_id == user.id]
+
+        return sorted(reschedules + scheduled_lessons, key=lambda x: x.edges[0])
+
+    def events_day(self, day: date | int, teacher: Teacher, user: User | None = None):
+        """Get events for day."""
+        if isinstance(day, int):
+            return self.events_weekday(day, teacher, user)
+        return self.events_date(day, teacher, user)
+
+    def available_times(self, start: time, end: time, taken_times: list[tuple[time, time]]):
+        """Get available time from start to end without taken times."""
+        available = []
+        current_time: time = start
+        while current_time < end:
+            taken = False
+            for taken_time in taken_times:
+                if taken_time[0] <= current_time < taken_time[1]:
+                    taken = True
+                    break
+            if not taken:
+                available.append(current_time)
+            current_time = (
+                current_time.replace(hour=current_time.hour + 1)
+                if current_time.hour < MAX_HOUR
+                else current_time.replace(hour=0)
+            )
+        return available
+
+    def is_available_weekday(self, wd: int, teacher: Teacher):
+        """Check if weekday has available time."""
+        sl_query = self.session.query(ScheduledLesson)
+        rs_query = self.session.query(Reschedule)
+
+        sl_query = sl_query.filter(ScheduledLesson.weekday == wd)
+
+        today = datetime.now(TIMEZONE).date()
+        rs_query = rs_query.filter(Reschedule.date.is_not(None), Reschedule.date >= today)
+        rs_query = [r for r in rs_query.all() if r.date.weekday() == wd]  # type: ignore  # noqa: PGH003
+
+        events = [model.edges for model in list(chain(sl_query.all(), rs_query)) if model.edges[0]]
+        events.sort(key=lambda x: x[0])
+        return bool(self.available_times(teacher.work_start, teacher.work_end, events))
+
+
+class Schedule(EventsService):
+    DAY_SCHEDULE = "Занятия на %s:\n"
+    DAY_EMPTY_SCHEDULE = "На %s занятий нет"
+    EMPTY_SCHEDULE = "Занятий нет"
+
+    WEEKDAY_MAP = {
+        0: "ПН",
+        1: "ВТ",
+        2: "СР",
+        3: "ЧТ",
+        4: "ПТ",
+        5: "СБ",
+        6: "ВС",
+    }
+    WEEKDAY_MAP_FULL = {
+        0: "Понедельник",
+        1: "Вторник",
+        2: "Среда",
+        3: "Четверг",
+        4: "Пятница",
+        5: "Суббота",
+        6: "Воскресенье",
+    }
+
+    def __init__(self, session: Session) -> None:
+        """Initialize schedule class."""
+        self.session = session
+
+    def check_schedule_consistency(self, teacher: Teacher):
+        """Check schedule consistency. E.g. if lessons collide - return these lessons."""
+        weekends = [we.weekday for we in WeekendRepo(self.session).all(teacher)]
+        work_beaks = {wb.weekday: (wb.start_time, wb.end_time) for wb in WorkBreakRepo(self.session).all(teacher)}
+        lessons: list[Reschedule | ScheduledLesson] = []
+        for s in teacher.students:
+            lessons.extend(LessonCollectionRepo(self.session).all(s))
+        collisions = Collisions()
+        for lesson in lessons:
+            if isinstance(lesson, Reschedule) and lesson.date is None:
+                continue
+            if not self.time_overlapse(lesson.edges, (teacher.work_start, teacher.work_end)):
+                collisions.work_borders.append(lesson)
+            elif lesson.weekday in weekends:
+                collisions.weekends.append(lesson)
+            elif lesson.weekday in work_beaks and self.time_overlapse(work_beaks[lesson.weekday], lesson.edges):
+                collisions.work_breaks.append(lesson)
+        return collisions
+
     def lessons_day_message(self, user: User, date: date):
         """Get message with lessons for day."""
-        teacher = TeacherRepo(self.session).get(user.teacher_id)
-        if teacher:
-            lessons = self.lessons_day(user, date, teacher)
+        teacher = TeacherRepo(self.session).get_by_telegram_id(user.telegram_id)
+        lessons = self.lessons_day(user, date, teacher)
         if lessons:
             if teacher:
                 lessons_text = "\n".join([lesson.long_repr for lesson in lessons])
@@ -310,32 +391,44 @@ class Schedule(SessionBase):
             return self.DAY_SCHEDULE % date.strftime("%d.%m.%Y") + lessons_text
         return self.DAY_EMPTY_SCHEDULE % date.strftime("%d.%m.%Y")
 
-    def lessons_week(self, user: User, start_date: date):
-        """Get lessons for week."""
-        week = [date(start_date.year, start_date.month, day) for day in range(start_date.day, start_date.day + 7)]
-        for day in week:
-            yield self.lessons_day(user, day)
-
     def lessons_week_message(self, user: User, start_date: date):
         """Get message with lessons for week."""
         week = [date(start_date.year, start_date.month, day) for day in range(start_date.day, start_date.day + 7)]
+        teacher = TeacherRepo(self.session).get_by_telegram_id(user.telegram_id)
         days = []
         for day in week:
-            day_schedule = self.lessons_day(user, day)
+            day_schedule = self.lessons_day(user, day, teacher)
             weekday = html.bold(self.WEEKDAY_MAP_FULL[day.weekday()])
             current_date = f" {day.strftime("%d.%m.%Y")}\n"
             if day_schedule:
-                current_day_schedule = [lesson.short_repr for lesson in day_schedule]
+                if teacher:
+                    current_day_schedule = [lesson.long_repr for lesson in day_schedule]
+                else:
+                    current_day_schedule = [lesson.short_repr for lesson in day_schedule]
                 days.append(weekday + current_date + "\n".join(current_day_schedule))
             else:
                 days.append(weekday + current_date + self.EMPTY_SCHEDULE)
         return "\n\n".join(days)
 
-    def available_weekdays(self):
+    def available_weekdays(self, user: User):
         """Get available weekdays."""
+        teacher = TeacherRepo(self.session).get(user.teacher_id)
+        if not teacher:
+            msg = f"Teacher {user.teacher_id} not found"
+            raise ValueError(msg)
 
-    def available_time(self):
-        pass
+        weekends = [w.weekday for w in user.teacher.weekends]
+        restricted = [r.weekday for r in user.restricted_times if r.whole_day_restricted]
+        na_weekdays = weekends + restricted
 
-    def add_lesson(self):
-        pass
+        result = []
+        for wd in range(7):
+            if wd in na_weekdays or not self.is_available_weekday(wd, teacher):
+                continue
+            result.append(wd)
+        return result
+
+    def available_time(self, user: User, day: date | int):
+        """Get available time for day."""
+        events = [(e.start_time, e.end_time) for e in self.events_day(day, user.teacher, None)]
+        return self.available_times(user.teacher.work_start, user.teacher.work_end, events)

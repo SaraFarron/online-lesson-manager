@@ -15,7 +15,7 @@ from messages import replies
 from middlewares import DatabaseMiddleware
 from models import ScheduledLesson
 from repositories import UserRepo
-from service import SecondFunctions
+from service import Schedule
 from utils import inline_keyboard, send_message
 
 COMMAND = "/add_sl"
@@ -37,14 +37,17 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
     """First handler, gives a list of available weekdays."""
     if message.from_user is None:
         raise AiogramTelegramError
-    if message.from_user.id in config.BANNED_USERS:
+
+    user = UserRepo(db).get_by_telegram_id(message.from_user.id)
+
+    if message.from_user.id in config.BANNED_USERS or user is None:
         raise PermissionDeniedError
-    available_weekdays = SecondFunctions(db, message.from_user.id).available_weekdays()
+    available_weekdays = Schedule(db).available_weekdays(user)
 
     weekdays = [(config.WEEKDAY_MAP[d], Callbacks.CHOOSE_WEEKDAY + str(d)) for d in available_weekdays]
     keyboard = inline_keyboard(weekdays)
 
-    await state.update_data(user_id=message.from_user.id)
+    await state.update_data(user_id=user.id)
     await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup())
 
 
@@ -57,7 +60,10 @@ async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMC
     await state.update_data(weekday=weekday)
     state_data = await state.get_data()
 
-    available_time = SecondFunctions(db, state_data["user_id"]).available_time_weekday(weekday)
+    user = UserRepo(db).get(state_data["user_id"])
+    if not user:
+        raise PermissionDeniedError
+    available_time = Schedule(db).available_time(user, weekday)
 
     keyboard = inline_keyboard(
         [(t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M")) for t in available_time],
