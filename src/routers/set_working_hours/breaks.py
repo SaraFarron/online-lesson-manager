@@ -87,9 +87,11 @@ async def add_break_finish(message: Message, state: FSMContext, db: Session) -> 
         raise PermissionDeniedError
     if not message.text:
         raise NoTextMessageError
+    text = message.text.replace(" - ", "-") if " - " in message.text else message.text
     try:
-        start_time = datetime.strptime(message.text.split(" - ")[0], "%H:%M").time()  # noqa: DTZ007
-        end_time = datetime.strptime(message.text.split(" - ")[1], "%H:%M").time()  # noqa: DTZ007
+        splitted_text = text.split("-")
+        start_time = datetime.strptime(splitted_text[0], "%H:%M").time()  # noqa: DTZ007
+        end_time = datetime.strptime(splitted_text[1], "%H:%M").time()  # noqa: DTZ007
     except ValueError:
         await message.answer(replies.INVALID_TIME_PERIOD)
         return
