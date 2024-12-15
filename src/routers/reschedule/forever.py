@@ -13,7 +13,7 @@ from messages import buttons, replies
 from models import Reschedule, ScheduledLesson, User
 from repositories import ScheduledLessonRepo, UserRepo
 from routers.reschedule.config import FRL_START_CALLBACK, router
-from service import SecondFunctions
+from service import Schedule
 from utils import MAX_HOUR, inline_keyboard, send_message
 
 
@@ -73,8 +73,11 @@ async def frl_choose_weekday(callback: CallbackQuery, state: FSMContext, db: Ses
     if not isinstance(callback.message, Message):
         raise AiogramTelegramError
     state_data = await state.get_data()
-    schedule = SecondFunctions(db, state_data["user_telegram_id"])
-    weekdays = [(config.WEEKDAY_MAP[w], Callbacks.CHOOSE_WEEKDAY + str(w)) for w in schedule.available_weekdays()]
+    user = UserRepo(db).get_by_telegram_id(state_data["user_telegram_id"])
+    if not user:
+        raise PermissionError
+    schedule = Schedule(db).available_weekdays(user)
+    weekdays = [(config.WEEKDAY_MAP[w], Callbacks.CHOOSE_WEEKDAY + str(w)) for w in schedule]
     keyboard = inline_keyboard(weekdays)
     await callback.message.answer(replies.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup())
 
@@ -87,12 +90,15 @@ async def frl_choose_time(callback: CallbackQuery, state: FSMContext, db: Sessio
     state_data = await state.get_data()
     weekday = int(callback.data.split(":")[1])  # type: ignore  # noqa: PGH003
 
-    schedule = SecondFunctions(db, state_data["user_telegram_id"])
-    if weekday not in schedule.available_weekdays():
+    user = UserRepo(db).get_by_telegram_id(state_data["user_telegram_id"])
+    if not user:
+        raise PermissionError
+    schedule = Schedule(db)
+    if weekday not in schedule.available_weekdays(user):
         await callback.message.answer(replies.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[weekday])
         return
     await state.update_data(new_date=weekday)
-    available_time = schedule.available_time_weekday(weekday)
+    available_time = schedule.available_time(user, weekday)
     buttons = [(t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M")) for t in available_time]
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(2, repeat=True)

@@ -13,7 +13,7 @@ from messages import buttons, replies
 from models import Reschedule, ScheduledLesson, User
 from repositories import RescheduleRepo, ScheduledLessonRepo, UserRepo
 from routers.reschedule.config import ORL_RS_CALLBACK, ORL_START_CALLBACK, router
-from service import SecondFunctions
+from service import Schedule
 from utils import calc_end_time, inline_keyboard, send_message
 
 
@@ -150,8 +150,12 @@ async def orl_choose_new_date(callback: CallbackQuery, state: FSMContext, db: Se
     if not isinstance(callback.message, Message):
         return
     state_data = await state.get_data()
-    schedule = SecondFunctions(db, state_data["user_telegram_id"])
-    weekends_str = ", ".join([config.WEEKDAY_MAP_FULL[w] for w in schedule.available_weekdays()])
+    user = UserRepo(db).get(state_data["user_id"])
+    if not user:
+        await state.clear()
+        raise PermissionError
+    schedule = Schedule(db)
+    weekends_str = ", ".join([config.WEEKDAY_MAP_FULL[w] for w in schedule.available_weekdays(user)])
     await state.set_state(ChooseNewDateTime.time)
     await callback.message.answer(replies.CHOOSE_DATE % weekends_str)
 
@@ -173,16 +177,23 @@ async def orl_choose_time(message: Message, state: FSMContext, db: Session) -> N
         return
     await state.update_data(new_date=date)
 
-    schedule = SecondFunctions(db, state_data["user_telegram_id"])
+    user = UserRepo(db).get(state_data["user_id"])
+    if not user:
+        await state.clear()
+        raise PermissionError
+
+    schedule = Schedule(db)
     weekday = date if isinstance(date, int) else date.weekday()
-    if weekday not in schedule.available_weekdays():
+    if weekday not in schedule.available_weekdays(user):
         await message.answer(replies.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[weekday])
         return
     await state.update_data(new_date=date)
     await state.set_state(ChooseNewDateTime.time)
-    available_time = (
-        schedule.available_time_weekday(date) if isinstance(date, int) else schedule.available_time_day(date)
-    )
+    available_time = schedule.available_time(user, date)
+    if not available_time:
+        await message.answer(replies.NO_AVAILABLE_TIME)
+        await state.clear()
+        return
     buttons = [(t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M")) for t in available_time]
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(2, repeat=True)

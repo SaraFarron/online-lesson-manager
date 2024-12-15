@@ -410,7 +410,7 @@ class Schedule(EventsService):
                 days.append(weekday + current_date + self.EMPTY_SCHEDULE)
         return "\n\n".join(days)
 
-    def available_weekdays(self, user: User):
+    def available_weekdays(self, user: User) -> list[int]:
         """Get available weekdays."""
         teacher = TeacherRepo(self.session).get(user.teacher_id)
         if not teacher:
@@ -428,7 +428,15 @@ class Schedule(EventsService):
             result.append(wd)
         return result
 
-    def available_time(self, user: User, day: date | int):
+    def available_time(self, user: User, day: date | int) -> list[time]:
         """Get available time for day."""
+        if isinstance(day, date):
+            teacher_weekends = (
+                self.session.query(Vacations)
+                .filter(Vacations.teacher_id == user.teacher.id, Vacations.start_date <= day, Vacations.end_date >= day)
+                .all()
+            )
+            if teacher_weekends:
+                return []
         events = [(e.start_time, e.end_time) for e in self.events_day(day, user.teacher, None)]
         return self.available_times(user.teacher.work_start, user.teacher.work_end, events)
