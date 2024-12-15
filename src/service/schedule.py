@@ -23,7 +23,7 @@ class Collisions:
     @property
     def all_collisions(self) -> list[ScheduledLesson | Reschedule]:
         """Return all collisions."""
-        return self.weekends + self.work_breaks
+        return self.weekends + self.work_breaks + self.work_borders
 
     @property
     def message(self) -> str:
@@ -268,7 +268,7 @@ class Schedule(SessionBase):
                 collisions.work_breaks.append(lesson)
         return collisions
 
-    def lessons_day(self, user: User, date: date):
+    def lessons_day(self, user: User, date: date, teacher: Teacher | None = None):
         """Get lessons for day."""
         reschedules = self.session.query(Reschedule).filter(Reschedule.date == date).all()
         lessons = self.session.query(Lesson).filter(Lesson.date == date).all()
@@ -281,7 +281,6 @@ class Schedule(SessionBase):
             )
             .all()
         )
-        teacher: Teacher | None = TeacherRepo(self.session).get(user.teacher_id)
 
         if not teacher:
             events: list[ScheduledLesson | Lesson | Reschedule] = [
@@ -300,9 +299,14 @@ class Schedule(SessionBase):
 
     def lessons_day_message(self, user: User, date: date):
         """Get message with lessons for day."""
-        lessons = self.lessons_day(user, date)
+        teacher = TeacherRepo(self.session).get(user.teacher_id)
+        if teacher:
+            lessons = self.lessons_day(user, date, teacher)
         if lessons:
-            lessons_text = "\n".join([lesson.short_repr for lesson in lessons])
+            if teacher:
+                lessons_text = "\n".join([lesson.long_repr for lesson in lessons])
+            else:
+                lessons_text = "\n".join([lesson.short_repr for lesson in lessons])
             return self.DAY_SCHEDULE % date.strftime("%d.%m.%Y") + lessons_text
         return self.DAY_EMPTY_SCHEDULE % date.strftime("%d.%m.%Y")
 
