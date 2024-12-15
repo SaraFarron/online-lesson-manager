@@ -32,6 +32,10 @@ class TeacherRepo(Repository):
         """Initialize teacher repository class."""
         super().__init__(Teacher, session)
 
+    def get(self, teacher_id: int | str) -> Teacher | None:
+        """Get teacher by id."""
+        return super().get(teacher_id)
+
     def new(self, full_name: str, telegram_id: int):
         """Add new entry of model to the database."""
         teacher = Teacher(name=full_name, telegram_id=telegram_id)
