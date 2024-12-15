@@ -15,8 +15,8 @@ async def cancel_handler(message: Message, state: FSMContext) -> None:
     """Handler receives messages with `/cancel` command."""
     current_state = await state.get_state()
     if current_state is None:
-        await message.answer(replies.CANCELED)
+        await message.answer(replies.CANCEL)
         return
 
     await state.clear()
-    await message.answer(replies.CANCELED)  # , reply_markup=ReplyKeyboardRemove()
+    await message.answer(replies.CANCEL)  # , reply_markup=ReplyKeyboardRemove()
