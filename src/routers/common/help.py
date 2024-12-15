@@ -19,7 +19,7 @@ def all_commands_keyboard(user_id: int):
     builder = ReplyKeyboardBuilder()
     for command in Commands:
         builder.button(text=command.value)
-    if user_id in ADMINS:
+    if user_id in ADMINS.values():
         for command in AdminCommands:
             builder.button(text=command.value)
     builder.adjust(2, repeat=True)
