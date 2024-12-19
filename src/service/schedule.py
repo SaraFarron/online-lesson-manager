@@ -253,17 +253,18 @@ class EventsService(SessionBase):
             )
             .all()
         )
+        reschedules_times = [r.start_time for r in reschedules]
 
         if not teacher:
             events: list[ScheduledLesson | Lesson | Reschedule] = [
-                *[sl for sl in scheduled_lessons if sl.user_id == user.id],
+                *[sl for sl in scheduled_lessons if sl.user_id == user.id and sl.start_time not in reschedules_times],
                 *[r for r in reschedules if r.user_id == user.id],
                 *[lsn for lsn in lessons if lsn.user_id == user.id],
             ]
         else:
             students_ids = [s.id for s in teacher.students]
             events: list[ScheduledLesson | Lesson | Reschedule] = [
-                *[sl for sl in scheduled_lessons if sl.user_id in students_ids],
+                *[sl for sl in scheduled_lessons if sl.user_id in students_ids and sl.start_time not in reschedules_times],
                 *[r for r in reschedules if r.user_id in students_ids],
                 *[lsn for lsn in lessons if lsn.user_id in students_ids],
             ]
