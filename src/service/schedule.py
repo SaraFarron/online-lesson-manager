@@ -7,7 +7,7 @@ from itertools import chain
 from aiogram import html
 from sqlalchemy.orm import Session
 
-from config.config import TIMEZONE
+from config.config import HRS_TO_CANCEL, TIMEZONE
 from models import Lesson, Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Vacations, WorkBreak
 from repositories import LessonCollectionRepo, TeacherRepo, WeekendRepo, WorkBreakRepo
 
@@ -214,6 +214,14 @@ class SecondFunctions(FirstFunctions):
 
 
 class EventsService(SessionBase):
+    def is_too_late_to_cancel(self, event_time: time, event_date: date):
+        now = datetime.now(TIMEZONE)
+        if now.date() > event_date:
+            return True
+        if now.date() < event_date:
+            return False
+        return event_time < now.time().replace(hour=now.time().hour + HRS_TO_CANCEL)
+
     @staticmethod
     def time_overlapse(borders1: Iterable[time], borders2: Iterable[time]):
         """Check if two time ranges overlap."""
@@ -440,3 +448,19 @@ class Schedule(EventsService):
                 return []
         events = [(e.start_time, e.end_time) for e in self.events_day(day, user.teacher, None)]
         return self.available_times(user.teacher.work_start, user.teacher.work_end, events)
+
+    def events_to_cancel(self, user: User, day: date):
+        """Get events available to cancel."""
+        scheduled_lessons = self.session.query(ScheduledLesson).filter(ScheduledLesson.user_id == user.id).all()
+        reschedules = (
+            self.session.query(Reschedule)
+            .filter(
+                Reschedule.user_id == user.id,
+                Reschedule.date.is_not(None),
+                Reschedule.date >= day,
+            )
+            .all()
+        )
+        lessons = self.session.query(Lesson).filter(Lesson.user_id == user.id, Lesson.date >= day).all()
+        events = [r for r in reschedules if not self.is_too_late_to_cancel(r.start_time, r.date)]  # type: ignore  # noqa: PGH003
+        return sorted(events + scheduled_lessons + lessons, key=lambda e: e.start_time)

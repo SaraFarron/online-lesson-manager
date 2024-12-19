@@ -47,7 +47,7 @@ async def orl_type_date(callback: CallbackQuery, state: FSMContext, db: Session)
     else:
         await state.clear()
         await callback.message.answer("Произошла непредвиденная ошибка")
-        await callback.message.answer("Операция отменена")
+        await callback.message.answer(replies.ACTION_CANCELLED)
 
 
 @router.callback_query(F.data.startswith(ORL_RS_CALLBACK))
@@ -69,13 +69,14 @@ async def orl_rs_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext
 @router.message(ChooseNewDateTime.date)
 async def orl_cancel_or_reschedule(message: Message, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
+    now = datetime.now(tz=config.TIMEZONE)
     try:
         date = datetime.strptime(message.text if message.text else "", "%d-%m-%Y")  # noqa: DTZ007
     except ValueError:
         await state.set_state(ChooseNewDateTime.date)
         await message.answer(replies.WRONG_DATE)
         return
-    if date.date() < datetime.now(tz=config.TIMEZONE).date():
+    if date.date() < now.date():
         await state.set_state(ChooseNewDateTime.date)
         await message.answer(replies.CHOOSE_LESSON_IN_FUTURE)
         return
@@ -94,6 +95,10 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext, db: Sess
         await message.answer("Операция отменена")
         return
     if isinstance(event, ScheduledLesson):
+        if date.date() == now.date() and Schedule(db).is_too_late_to_cancel(event.start_time, now.date()):
+            await message.answer(replies.CHOOSE_REASONABLE_TIME)
+            await state.set_state(ChooseNewDateTime.date)
+            return
         right_weekday = ScheduledLessonRepo(db).get(state_data["lesson"]).weekday
         if date.weekday() != right_weekday:
             await state.set_state(ChooseNewDateTime.date)

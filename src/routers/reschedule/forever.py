@@ -27,10 +27,10 @@ class Callbacks:
 @router.callback_query(F.data.startswith(FRL_START_CALLBACK))
 async def frl_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
-    state_data = await state.get_data()
-    lesson: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
     if not isinstance(callback.message, Message):
         raise AiogramTelegramError
+    state_data = await state.get_data()
+    lesson: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
     if lesson:
         await state.update_data(
             lesson=state_data["lesson"],
@@ -54,6 +54,14 @@ async def frl_delete_sl(callback: CallbackQuery, state: FSMContext, db: Session)
     state_data = await state.get_data()
     sl: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
     user: User = UserRepo(db).get(state_data["user_id"])
+
+    now = datetime.now(config.TIMEZONE)
+
+    if now.weekday() == sl.weekday and Schedule(db).is_too_late_to_cancel(sl.start_time, now.date()):
+        await callback.message.answer(f"{replies.CHOOSE_REASONABLE_TIME}. {replies.ACTION_CANCELLED}")
+        await state.clear()
+        return
+
     message = replies.USER_DELETED_SL % (user.username_dog, sl.weekday_full_str, sl.st_str)
     # Delete all reschedules for this lesson in order to prevent errors
     reschedules_to_delete = db.query(Reschedule).filter_by(source=sl).all()
