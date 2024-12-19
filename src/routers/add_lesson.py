@@ -63,11 +63,17 @@ async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMC
     user = UserRepo(db).get(state_data["user_id"])
     if not user:
         raise PermissionDeniedError
-    available_time = Schedule(db).available_time(user, weekday)
+    available_time = Schedule(db).available_time_with_reschedules(user, weekday)
 
-    keyboard = inline_keyboard(
-        [(t.strftime("%H:%M"), Callbacks.CHOOSE_TIME + t.strftime("%H.%M")) for t in available_time],
-    )
+    buttons = []
+    for t, s in available_time:
+        if s:
+            button_text = f"{t.strftime("%H:%M")} ({s})"
+        else:
+            button_text = t.strftime("%H:%M")
+        buttons.append((button_text, Callbacks.CHOOSE_TIME + t.strftime("%H.%M")))
+
+    keyboard = inline_keyboard(buttons)
     keyboard.adjust(1, repeat=True)
 
     await callback.message.answer(replies.CHOOSE_TIME, reply_markup=keyboard.as_markup())
@@ -82,7 +88,7 @@ async def add_lesson_choose_time_handler(callback: CallbackQuery, state: FSMCont
     time = datetime.strptime(time_str, "%H.%M").time()  # noqa: DTZ007
     state_data = await state.get_data()
     await state.update_data(time=time)
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"])
+    user = UserRepo(db).get(state_data["user_id"])
     if not user:
         raise PermissionDeniedError
     sl = ScheduledLesson(

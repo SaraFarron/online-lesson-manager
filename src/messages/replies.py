@@ -68,7 +68,6 @@ TIME_UPDATED = "Время обновлено"
 PERMISSION_DENIED = "У вас нет доступа к этой команде"
 NO_DATA = "Нет данных"
 
-CONFRIM = "Вы можете перенести урок на другое время или отменить его"
 CHOOSE_WEEKDAY = "Выберите день недели"
 
 WRONG_WEEKDAY = "Нельзя выбрать %s"
@@ -85,7 +84,7 @@ NOT_REGISTERED = "Вы не зарегистрированы. Пожалуйст
 
 _HRS_PL = 5
 
-CONFRIM = "Вы можете перенести урок на другое время или отменить его"
+CONFIRM = "Вы можете перенести урок на другое время или отменить его"
 ALREADY_CANCELED = "Этот урок на эту дату уже отменён"
 CHOOSE_RIGHT_WEEKDAY = "Нельзя выбрать %s, подходят только даты на выбранный день недели - %s"
 TYPE_NEW_DATE = "Введите дату в формате ДД-ММ-ГГГГ, в которую хотите отменить занятие"
@@ -97,7 +96,7 @@ CHOOSE_TIME = "Выберите время (по МСК)"
 LESSON_ADDED = "Урок добавлен"
 CHOOSE_FUTURE_DATE = "Нельзя перенести урок в прошлое"
 CHOOSE_LESSON_IN_FUTURE = "Нельзя выбрать урок в прошлом"
-CRT_1 = f"Урок можно поставить только за {config.HRS_TO_CANCEL} "
+CRT_1 = f"Урок можно поставить/убрать только за {config.HRS_TO_CANCEL} "
 CRT_2 = "час" if config.HRS_TO_CANCEL == 1 else "часа" if config.HRS_TO_CANCEL < _HRS_PL else "часов"
 CRT_3 = " до его начала"
 CHOOSE_REASONABLE_TIME = CRT_1 + CRT_2 + CRT_3

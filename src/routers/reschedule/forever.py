@@ -43,7 +43,7 @@ async def frl_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext, d
                 (buttons.CHOOSE_NEW_DATE, Callbacks.CHOOSE_DATE),
             ],
         ).as_markup()
-        await callback.message.answer(replies.CONFRIM, reply_markup=keyboard)
+        await callback.message.answer(replies.CONFIRM, reply_markup=keyboard)
 
 
 @router.callback_query(F.data == Callbacks.CONFIRM)

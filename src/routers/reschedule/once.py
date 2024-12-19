@@ -63,7 +63,7 @@ async def orl_rs_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext
             (buttons.CHOOSE_NEW_DATE, Callbacks.CHOOSE_DATE),
         ],
     ).as_markup()
-    await callback.message.answer(replies.CONFRIM, reply_markup=keyboard)
+    await callback.message.answer(replies.CONFIRM, reply_markup=keyboard)
 
 
 @router.message(ChooseNewDateTime.date)
@@ -115,7 +115,7 @@ async def orl_cancel_or_reschedule(message: Message, state: FSMContext, db: Sess
             (buttons.CHOOSE_NEW_DATE, Callbacks.CHOOSE_DATE),
         ],
     ).as_markup()
-    await message.answer(replies.CONFRIM, reply_markup=keyboard)
+    await message.answer(replies.CONFIRM, reply_markup=keyboard)
 
 
 @router.callback_query(F.data == Callbacks.CONFIRM)
@@ -194,7 +194,7 @@ async def orl_choose_time(message: Message, state: FSMContext, db: Session) -> N
         return
     await state.update_data(new_date=date)
     await state.set_state(ChooseNewDateTime.time)
-    available_time = schedule.available_time(user, date)
+    available_time = schedule.available_time(user, date.date())
     if not available_time:
         await message.answer(replies.NO_AVAILABLE_TIME)
         await state.clear()

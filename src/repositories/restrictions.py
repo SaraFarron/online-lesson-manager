@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import date, time
+from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from models import RestrictedTime, Teacher, User, Vacations, Weekend, WorkBreak
+from models import RestrictedTime, Teacher, User, Vacations, Weekend, WorkBreak, Base
 from repositories import Repository
 
 
@@ -67,6 +68,10 @@ class WorkBreakRepo(Repository):
     def __init__(self, session: Session) -> None:
         """Initialize work breaks repository class."""
         super().__init__(WorkBreak, session)
+
+    def get_many(self, whereclause, limit: int = 100, order_by=None) -> Sequence[WorkBreak]:
+        """Get all entries of model from the database."""
+        return super().get_many(whereclause, limit, order_by)
 
     def new(self, teacher: Teacher, weekday: int, start_time: time, end_time: time) -> None:
         """Add new entry of model to the database."""

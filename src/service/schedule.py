@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from itertools import chain
 
 from aiogram import html
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from config.config import HRS_TO_CANCEL, TIMEZONE
 from models import Lesson, Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Vacations, WorkBreak
-from repositories import LessonCollectionRepo, TeacherRepo, WeekendRepo, WorkBreakRepo
+from repositories import LessonCollectionRepo, TeacherRepo, WeekendRepo, WorkBreakRepo, RescheduleRepo
 
 MAX_HOUR = 23
 
@@ -214,6 +214,17 @@ class SecondFunctions(FirstFunctions):
 
 
 class EventsService(SessionBase):
+    @staticmethod
+    def week_from_date(start_of_week: date):
+        """Get dates for the current week from start."""
+        end_of_week = start_of_week + timedelta(days=7)
+        return [start_of_week + timedelta(n) for n in range(int((end_of_week - start_of_week).days))]
+
+    def closest_date_from_weekday(self, weekday: int, start: date):
+        for d in self.week_from_date(start):
+            if d.weekday() == weekday:
+                return d
+
     def is_too_late_to_cancel(self, event_time: time, event_date: date):
         now = datetime.now(TIMEZONE)
         if now.date() > event_date:
@@ -439,6 +450,7 @@ class Schedule(EventsService):
     def available_time(self, user: User, day: date | int) -> list[time]:
         """Get available time for day."""
         if isinstance(day, date):
+            work_breaks = WorkBreakRepo(self.session).get_many(WorkBreak.weekday == day.weekday())
             teacher_weekends = (
                 self.session.query(Vacations)
                 .filter(Vacations.teacher_id == user.teacher.id, Vacations.start_date <= day, Vacations.end_date >= day)
@@ -446,8 +458,31 @@ class Schedule(EventsService):
             )
             if teacher_weekends:
                 return []
+        else:
+            work_breaks = WorkBreakRepo(self.session).get_many(WorkBreak.weekday == day)
         events = [(e.start_time, e.end_time) for e in self.events_day(day, user.teacher, None)]
+        events += [(wb.start_time, wb.end_time) for wb in work_breaks]
         return self.available_times(user.teacher.work_start, user.teacher.work_end, events)
+
+    def available_time_with_reschedules(self, user: User, day: date | int) -> list[tuple[time, str]]:
+        """Get available time for day with consideration for reschedules."""
+        available_time = self.available_time(user, day)
+        res_repo = RescheduleRepo(self.session)
+        time_with_reschedules = []
+        for t in available_time:
+            if isinstance(day, date):
+                reschedule = res_repo.get_by_where(
+                    (Reschedule.date == day, Reschedule.user_id == user.id, Reschedule.start_time == t))
+            else:
+                today = datetime.now(TIMEZONE).date()
+                closest_date = self.closest_date_from_weekday(day, today)
+                reschedule = res_repo.get_by_where(
+                    (Reschedule.date == closest_date, Reschedule.start_time == t))
+            if reschedule:
+                time_with_reschedules.append((t, f"Занято {reschedule.date}"))
+            else:
+                time_with_reschedules.append((t, ""))
+        return time_with_reschedules
 
     def events_to_cancel(self, user: User, day: date):
         """Get events available to cancel."""
@@ -462,5 +497,6 @@ class Schedule(EventsService):
             .all()
         )
         lessons = self.session.query(Lesson).filter(Lesson.user_id == user.id, Lesson.date >= day).all()
-        events = [r for r in reschedules if not self.is_too_late_to_cancel(r.start_time, r.date)]  # type: ignore  # noqa: PGH003
+        events = [r for r in reschedules if
+                  not self.is_too_late_to_cancel(r.start_time, r.date)]  # type: ignore  # noqa: PGH003
         return sorted(events + scheduled_lessons + lessons, key=lambda e: e.start_time)
