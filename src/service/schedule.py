@@ -244,7 +244,8 @@ class EventsService(SessionBase):
         """Get lessons for day."""
         reschedules = self.session.query(Reschedule).filter(Reschedule.date == date).all()
         lessons = self.session.query(Lesson).filter(Lesson.date == date).all()
-        cancellations = [c.source_id for c in self.session.query(Reschedule).filter(Reschedule.source_date == date).all()]
+        cancellations = [c.source_id for c in
+                         self.session.query(Reschedule).filter(Reschedule.source_date == date).all()]
         scheduled_lessons = (
             self.session.query(ScheduledLesson)
             .filter(
@@ -264,7 +265,8 @@ class EventsService(SessionBase):
         else:
             students_ids = [s.id for s in teacher.students]
             events: list[ScheduledLesson | Lesson | Reschedule] = [
-                *[sl for sl in scheduled_lessons if sl.user_id in students_ids and sl.start_time not in reschedules_times],
+                *[sl for sl in scheduled_lessons if
+                  sl.user_id in students_ids and sl.start_time not in reschedules_times],
                 *[r for r in reschedules if r.user_id in students_ids],
                 *[lsn for lsn in lessons if lsn.user_id in students_ids],
             ]

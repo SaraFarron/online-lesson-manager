@@ -104,7 +104,7 @@ class User(Base):
     @property
     def username_dog(self) -> str:
         """Telegram username dog."""
-        return f"@{self.telegram_username}" if self.telegram_username else f"{self.name} ({self.telegram_id})"
+        return f"@{self.telegram_username}" if self.telegram_username else f"{self.name} ({self.username_link})"
 
     @property
     def username_link(self) -> str:
