@@ -181,6 +181,9 @@ class Reschedule(BordersMixin, Base):
     source_date: Mapped[date] = mapped_column(Date)
     date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, default=None)  # noqa: UP007
 
+    start_time: Mapped[time] = mapped_column(Time, nullable=True)
+    end_time: Mapped[time] = mapped_column(Time, nullable=True)
+
     @property
     def short_repr(self) -> str:
         """String model represetation."""

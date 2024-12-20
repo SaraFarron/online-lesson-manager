@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -30,6 +30,8 @@ async def week_schedule_handler(message: Message, db: Session) -> None:
     user = UserRepo(db).get_by_telegram_id(t_user.id)
     if user:
         schedule = Schedule(db)
-        await message.answer(schedule.lessons_week_message(user, datetime.now(TIMEZONE)))
+        today = datetime.now(TIMEZONE)
+        start_of_week = today - timedelta(days=today.weekday())
+        await message.answer(schedule.lessons_week_message(user, start_of_week.date()))
     else:
         await message.answer(replies.NOT_REGISTERED)

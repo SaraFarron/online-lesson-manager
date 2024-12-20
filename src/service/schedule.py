@@ -244,7 +244,7 @@ class EventsService(SessionBase):
         """Get lessons for day."""
         reschedules = self.session.query(Reschedule).filter(Reschedule.date == date).all()
         lessons = self.session.query(Lesson).filter(Lesson.date == date).all()
-        cancellations = [c.id for c in self.session.query(Reschedule).filter(Reschedule.source_date == date).all()]
+        cancellations = [c.source_id for c in self.session.query(Reschedule).filter(Reschedule.source_date == date).all()]
         scheduled_lessons = (
             self.session.query(ScheduledLesson)
             .filter(
