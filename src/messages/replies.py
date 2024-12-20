@@ -8,7 +8,7 @@ USER_DELETED_SL = "%s удалил занятие %s в %s"
 USER_MOVED_SL = "%s перенес занятие %s в %s на %s в %s"
 
 
-LESSONS_ARE_COMING = "🔔 Скоро уроки!%0A"
+LESSONS_ARE_COMING = "🔔 Скоро уроки!\n"
 LESSON_IS_COMING_TEACHER = "Урок у %s в %s"
 LESSON_IS_COMING_STUDENT = "Урок в %s"
 
