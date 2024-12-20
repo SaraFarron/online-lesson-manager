@@ -67,6 +67,9 @@ class Repository(Generic[AbstractModel]):
 
         return (self.session.scalars(statement)).all()
 
+    def all(self) -> Sequence[AbstractModel]:
+        return self.session.query(self.type_model).all()
+
     def delete(self, whereclause) -> None:  # noqa: ANN001
         """
         Delete model from the database.

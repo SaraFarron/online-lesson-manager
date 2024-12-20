@@ -240,15 +240,16 @@ class EventsService(SessionBase):
         start2, end2 = borders2
         return start1 < end2 and start2 < end1
 
-    def lessons_day(self, user: User, date: date, teacher: Teacher | None = None):
+    def lessons_day(self, user: User, day: date, teacher: Teacher | None = None):
         """Get lessons for day."""
-        reschedules = self.session.query(Reschedule).filter(Reschedule.date == date).all()
-        lessons = self.session.query(Lesson).filter(Lesson.date == date).all()
-        cancellations = [c.source_id for c in self.session.query(Reschedule).filter(Reschedule.source_date == date).all()]
+        reschedules = self.session.query(Reschedule).filter(Reschedule.date == day).all()
+        lessons = self.session.query(Lesson).filter(Lesson.date == day).all()
+        cancellations = [c.source_id for c in
+                         self.session.query(Reschedule).filter(Reschedule.source_date == day).all()]
         scheduled_lessons = (
             self.session.query(ScheduledLesson)
             .filter(
-                ScheduledLesson.weekday == date.weekday(),
+                ScheduledLesson.weekday == day.weekday(),
                 ScheduledLesson.id.not_in(cancellations),
             )
             .all()
@@ -264,7 +265,8 @@ class EventsService(SessionBase):
         else:
             students_ids = [s.id for s in teacher.students]
             events: list[ScheduledLesson | Lesson | Reschedule] = [
-                *[sl for sl in scheduled_lessons if sl.user_id in students_ids and sl.start_time not in reschedules_times],
+                *[sl for sl in scheduled_lessons if
+                  sl.user_id in students_ids and sl.start_time not in reschedules_times],
                 *[r for r in reschedules if r.user_id in students_ids],
                 *[lsn for lsn in lessons if lsn.user_id in students_ids],
             ]
@@ -285,24 +287,24 @@ class EventsService(SessionBase):
             filters += (ScheduledLesson.user_id == user.id,)
         return self.session.query(ScheduledLesson).filter(*filters).all()
 
-    def events_date(self, date: date, teacher: Teacher, user: User | None = None):
+    def events_date(self, day: date, teacher: Teacher, user: User | None = None):
         """Get events for date."""
         teacher_weekends = (
             self.session.query(Vacations)
-            .filter(Vacations.teacher_id == teacher.id, Vacations.start_date <= date, Vacations.end_date >= date)
+            .filter(Vacations.teacher_id == teacher.id, Vacations.start_date <= day, Vacations.end_date >= day)
             .all()
         )
         if teacher_weekends:
             return []
-        filters = (Reschedule.date == date,)
+        filters = (Reschedule.date == day,)
         if user:
             filters += (Reschedule.user_id == user.id,)
         reschedules = self.session.query(Reschedule).filter(*filters).all()
 
-        cancellations = [r.source_id for r in self.session.query(Reschedule).filter(Reschedule.date == date).all()]
+        cancellations = [r.source_id for r in self.session.query(Reschedule).filter(Reschedule.date == day).all()]
         scheduled_lessons = (
             self.session.query(ScheduledLesson)
-            .filter(ScheduledLesson.weekday == date.weekday(), ScheduledLesson.id.not_in(cancellations))
+            .filter(ScheduledLesson.weekday == day.weekday(), ScheduledLesson.id.not_in(cancellations))
             .all()
         )
         if user:
@@ -353,7 +355,7 @@ class EventsService(SessionBase):
 
 
 class Schedule(EventsService):
-    DAY_SCHEDULE = "Занятия на %s:\n"
+    DAY_SCHEDULE = "Занятия на %s:"
     DAY_EMPTY_SCHEDULE = "На %s занятий нет"
     EMPTY_SCHEDULE = "Занятий нет"
 
@@ -399,17 +401,17 @@ class Schedule(EventsService):
                 collisions.work_breaks.append(lesson)
         return collisions
 
-    def lessons_day_message(self, user: User, date: date):
+    def lessons_day_message(self, user: User, day: date):
         """Get message with lessons for day."""
         teacher = TeacherRepo(self.session).get_by_telegram_id(user.telegram_id)
-        lessons = self.lessons_day(user, date, teacher)
+        lessons = self.lessons_day(user, day, teacher)
         if lessons:
             if teacher:
                 lessons_text = "\n".join([lesson.long_repr for lesson in lessons])
             else:
                 lessons_text = "\n".join([lesson.short_repr for lesson in lessons])
-            return self.DAY_SCHEDULE % date.strftime("%d.%m.%Y") + lessons_text
-        return self.DAY_EMPTY_SCHEDULE % date.strftime("%d.%m.%Y")
+            return self.DAY_SCHEDULE % day.strftime("%d.%m.%Y") + "\n" + lessons_text
+        return self.DAY_EMPTY_SCHEDULE % day.strftime("%d.%m.%Y")
 
     def lessons_week_message(self, user: User, start_date: date):
         """Get message with lessons for week."""
