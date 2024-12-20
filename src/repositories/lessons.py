@@ -56,7 +56,7 @@ class RescheduleRepo(Repository):
         source_date: date,
         new_date: date | None = None,
         new_time: time | None = None,
-    ) -> None:
+    ):
         """Add new entry of model to the database."""
         reschedule = Reschedule(
             user=user,
@@ -67,6 +67,7 @@ class RescheduleRepo(Repository):
             end_time=calc_end_time(new_time) if new_time else None,
         )
         self.session.add(reschedule)
+        return reschedule
 
     def get_many(self, whereclause, limit: int = 100, order_by=None) -> Sequence[Reschedule]:  # noqa: D102, ANN001
         return super().get_many(whereclause, limit, order_by)  # type: ignore  # noqa: PGH003
@@ -110,7 +111,7 @@ class LessonRepo(Repository):
         start_time: time | None = None,
     ):
         """Get all entries of model from the database."""
-        query = self.session.query(ScheduledLesson)
+        query = self.session.query(Lesson)
         filters = {}
         if user:
             filters["user"] = user
@@ -126,8 +127,11 @@ class LessonCollectionRepo(Repository):
     def __init__(self, session: Session) -> None:
         """Initialize lesson collection repository class."""
         self.session = session
+        self.lessons = LessonRepo(self.session)
+        self.scheduled_lessons = ScheduledLessonRepo(self.session)
+        self.reschedules = RescheduleRepo(self.session)
 
-    def new(self, lesson_type: Lesson | ScheduledLesson | Reschedule, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    def new(self, lesson_type: Lesson | ScheduledLesson | Reschedule, *args, **kwargs) -> Reschedule |None:  # noqa: ANN002, ANN003
         """Add new entry of model to the database."""
         if type(lesson_type) is Lesson:
             repo = LessonRepo(self.session)
@@ -138,6 +142,8 @@ class LessonCollectionRepo(Repository):
         else:
             msg = "Unknown lesson type"
             raise TypeError(msg)
+        if not repo:
+            raise TypeError
         return repo.new(*args, **kwargs)
 
     def all(
@@ -148,13 +154,22 @@ class LessonCollectionRepo(Repository):
         start_time: time | None = None,
     ):
         """Get all entries of model from the database."""
+        # TODO Finish this shit
         lessons = LessonRepo(self.session).all(user, date, start_time)
         scheduled_lessons = ScheduledLessonRepo(self.session).all(user, weekday, start_time)
         reschedules = RescheduleRepo(self.session).all(user, None, date, start_time)
         if date and scheduled_lessons:
-            cancellations = RescheduleRepo(self.session).get_many(
-                (Reschedule.user == user, Reschedule.source.in_(scheduled_lessons)),
+            sl_ids = [sl.id for sl in scheduled_lessons]
+            cancellations = self.session.query(Reschedule).filter(
+                Reschedule.user == user, Reschedule.source_id.in_(sl_ids),
             )
             cancellation_ids = [c.source_id for c in cancellations]
             scheduled_lessons = [sl for sl in scheduled_lessons if sl.id not in cancellation_ids]
+        return lessons + scheduled_lessons + reschedules
+
+    def all_date(self, date: date, user: User | None = None):
+        """Get all entries of model from the database."""
+        lessons = self.lessons.all(user, date)
+        scheduled_lessons = self.scheduled_lessons.all(user, date.weekday())
+        reschedules = self.reschedules.all(user, None, date)
         return lessons + scheduled_lessons + reschedules

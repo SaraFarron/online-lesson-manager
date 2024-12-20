@@ -35,12 +35,11 @@ TIMEZONE = pytz.timezone("Europe/Moscow")
 
 MAX_BUTTON_ROWS = 10
 
-INVITE_CODE = "irina_gambal"
+ADMINS = {
+    "irina_gambal": int(getenv("IRINA_TG_ID")),
+    "sara_farron": int(getenv("SARA_TG_ID")),
+}
 
-ADMINS = [
-    5362724893,  # Pasha
-    882315246,  # Sara
-]
 WORK_START = time(hour=9, minute=0, tzinfo=TIMEZONE)
 WORK_END = time(hour=21, minute=0, tzinfo=TIMEZONE)
 HRS_TO_CANCEL = 3

@@ -45,10 +45,9 @@ class Repository(Generic[AbstractModel]):
         :return: Model if only one model was found, else None.
 
         """
-        statement = select(self.type_model).where(whereclause)
-        return (self.session.execute(statement)).one_or_none()  # type: ignore  # noqa: PGH003
+        return self.session.query(self.type_model).filter(*whereclause).first()
 
-    def get_many(self, whereclause, limit: int = 100, order_by=None) -> Sequence[Base]:  # noqa: ANN001
+    def get_many(self, whereclause, limit: int = 100, order_by=None) -> Sequence:  # noqa: ANN001
         """
         Get many models from the database with whereclause.
 
@@ -62,7 +61,7 @@ class Repository(Generic[AbstractModel]):
         :return: List of founded models
 
         """
-        statement = select(self.type_model).where(whereclause).limit(limit)
+        statement = select(self.type_model).filter(whereclause).limit(limit)
         if order_by:
             statement = statement.order_by(order_by)
 
