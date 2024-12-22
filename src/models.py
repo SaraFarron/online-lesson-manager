@@ -33,7 +33,7 @@ class Vacations(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"), nullable=True)
     teacher: Mapped[Teacher] = relationship(back_populates="holidays")
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"), nullable=True)
     user: Mapped[User] = relationship(back_populates="holidays")
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
