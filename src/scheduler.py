@@ -33,7 +33,7 @@ async def send_notifications(now: datetime):
 async def lessons_notifications(timeout: float):
     """Send notifications about lessons."""
     now = datetime.now(TIMEZONE)
-    if time(7, 15) <= now.time() < time(7, 20):
+    if time(8, 15) <= now.time() < time(8, 20):
         await send_notifications(now)
     await asyncio.sleep(timeout)
 
