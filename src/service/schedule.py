@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from config.config import HRS_TO_CANCEL, TIMEZONE
 from models import Lesson, Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Vacations, WorkBreak
-from repositories import LessonCollectionRepo, TeacherRepo, WeekendRepo, WorkBreakRepo, RescheduleRepo
+from repositories import LessonCollectionRepo, TeacherRepo, WeekendRepo, WorkBreakRepo, RescheduleRepo, VacationsRepo
 
 MAX_HOUR = 23
 
@@ -242,6 +242,10 @@ class EventsService(SessionBase):
 
     def lessons_day(self, user: User, day: date, teacher: Teacher | None = None):
         """Get lessons for day."""
+        active_vacations = VacationsRepo(self.session).get_active_vacations(user.id)
+        if active_vacations:
+            return []
+
         reschedules = self.session.query(Reschedule).filter(Reschedule.date == day).all()
         lessons = self.session.query(Lesson).filter(Lesson.date == day).all()
         cancellations = [c.source_id for c in
