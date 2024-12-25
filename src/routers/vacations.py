@@ -34,11 +34,11 @@ class States(StatesGroup):
 
 @router.message(Command(COMMAND))
 @router.message(F.text == Commands.VACATIONS.value)
-async def vacations_hanlder(callback: CallbackQuery, state: FSMContext, db: Session):
+async def vacations_hanlder(message: Message, state: FSMContext, db: Session):
     """Handler for editing vacations."""
-    if not isinstance(callback.message, Message):
+    if not isinstance(message, Message):
         raise AiogramTelegramError
-    user = UserRepo(db).get_by_telegram_id(callback.message.from_user.id)
+    user = UserRepo(db).get_by_telegram_id(message.from_user.id)
     if user is None:
         raise PermissionDeniedError
     buttons = [(f"Убрать отпуск {h.start_date} - {h.end_date}", f"vacations:rm_v_{h.id}") for h in
@@ -47,7 +47,7 @@ async def vacations_hanlder(callback: CallbackQuery, state: FSMContext, db: Sess
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
     await state.update_data(user=user)
-    await callback.message.answer(replies.EDIT_VACATIONS, reply_markup=keyboard.as_markup())
+    await message.answer(replies.EDIT_VACATIONS, reply_markup=keyboard.as_markup())
 
 
 @router.callback_query(F.data == "vacations:add_vacation_start")
@@ -55,7 +55,7 @@ async def add_vacation_start(callback: CallbackQuery, state: FSMContext, db: Ses
     """Handler for adding vacations."""
     if not isinstance(callback.message, Message):
         raise AiogramTelegramError
-    user = UserRepo(db).get_by_telegram_id(callback.message.from_user.id)
+    user = UserRepo(db).get_by_telegram_id(callback.from_user.id)
     if user is None:
         raise PermissionDeniedError
     await state.set_state(States.add_vacation_start)
@@ -111,18 +111,16 @@ async def add_vacation_finish(message: Message, state: FSMContext, db: Session) 
     await message.answer(replies.VACATION_ADDED)
 
 
-@router.callback_query(F.data.startswith("vacations:rm_v"))
+@router.callback_query(F.data.startswith("vacations:rm_v_"))
 async def remove_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for removing breaks."""
     if not isinstance(callback.message, Message):
         raise AiogramTelegramError
-    user = UserRepo(db).get_by_telegram_id(callback.message.from_user.id)
+    user = UserRepo(db).get_by_telegram_id(callback.from_user.id)
     if user is None:
         raise PermissionDeniedError
-    wb = db.query(Vacations).filter(Vacations.id == int(
-        callback.data.replace("vacations:rm_v", ""))).first()
-    if wb:
-        db.delete(wb)
+    v_id = int(callback.data.replace("vacations:rm_v_", ""))
+    VacationsRepo(db).delete(Vacations.id == v_id)
     db.commit()
 
     await callback.message.answer(replies.VACATION_DELETED)

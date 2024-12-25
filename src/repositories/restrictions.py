@@ -5,7 +5,7 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from models import RestrictedTime, Teacher, User, Vacations, Weekend, WorkBreak, Base
+from models import RestrictedTime, Teacher, User, Vacations, Weekend, WorkBreak
 from repositories import Repository
 
 
@@ -42,8 +42,8 @@ class VacationsRepo(Repository):
         super().__init__(Vacations, session)
 
     def get_active_vacations(self, user: User, day: date):
-        return self.session.query(Vacations).filter(Vacations.user_id == user.id, Vacations.start_date >= day,
-                                                    Vacations.end_date <= day).all()
+        return self.session.query(Vacations).filter(Vacations.user_id == user.id, Vacations.start_date <= day,
+                                                    Vacations.end_date >= day).all()
 
     def new(self, user: User, start_date: date, end_date: date) -> None:
         """Add new entry of model to the database."""
