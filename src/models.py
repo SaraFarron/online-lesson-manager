@@ -31,8 +31,10 @@ class Vacations(Base):
     __tablename__ = "holidays"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id", name="teacher"), nullable=True)
     teacher: Mapped[Teacher] = relationship(back_populates="holidays")
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id", name="user"), nullable=True)
+    user: Mapped[User] = relationship(back_populates="holidays")
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
 
@@ -76,7 +78,7 @@ class BordersMixin:
     @property
     def edges(self):
         """Start and end time as a tuple."""
-        return (self.start_time, self.end_time)
+        return self.start_time, self.end_time
 
 
 class WorkBreak(WeekdayMixin, BordersMixin, Base):
@@ -100,6 +102,7 @@ class User(Base):
     scheduled_lessons: Mapped[list[ScheduledLesson]] = relationship(back_populates="user", cascade="all, delete")
     reschedules: Mapped[list[Reschedule]] = relationship(back_populates="user", cascade="all, delete")
     restricted_times: Mapped[list[RestrictedTime]] = relationship(back_populates="user")
+    holidays: Mapped[list[Vacations]] = relationship(back_populates="user")
 
     @property
     def username_dog(self) -> str:

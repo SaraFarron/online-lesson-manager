@@ -55,7 +55,7 @@ async def orl_rs_cancel_or_reschedule(callback: CallbackQuery, state: FSMContext
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
     if not isinstance(callback.message, Message):
         return
-    event: Reschedule = RescheduleRepo(db).get(int(callback.data.split(":")[2]))  # type: ignore  # noqa: PGH003
+    event: Reschedule = RescheduleRepo(db).get(int(callback.data.split(":")[-1]))  # type: ignore  # noqa: PGH003
     await state.update_data(date=event.source_date, event=event, user_telegram_id=event.user.telegram_id)
     keyboard = inline_keyboard(
         [

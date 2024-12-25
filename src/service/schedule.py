@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from config.config import HRS_TO_CANCEL, TIMEZONE
 from models import Lesson, Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Vacations, WorkBreak
-from repositories import LessonCollectionRepo, TeacherRepo, WeekendRepo, WorkBreakRepo, RescheduleRepo
+from repositories import LessonCollectionRepo, TeacherRepo, WeekendRepo, WorkBreakRepo, RescheduleRepo, VacationsRepo
 
 MAX_HOUR = 23
 
@@ -242,6 +242,10 @@ class EventsService(SessionBase):
 
     def lessons_day(self, user: User, day: date, teacher: Teacher | None = None):
         """Get lessons for day."""
+        active_vacations = VacationsRepo(self.session).get_active_vacations(user, day)
+        if active_vacations:
+            return []
+
         reschedules = self.session.query(Reschedule).filter(Reschedule.date == day).all()
         lessons = self.session.query(Lesson).filter(Lesson.date == day).all()
         cancellations = [c.source_id for c in
@@ -452,6 +456,7 @@ class Schedule(EventsService):
 
     def available_time(self, user: User, day: date | int) -> list[time]:
         """Get available time for day."""
+        vac_repo = VacationsRepo(self.session)
         if isinstance(day, date):
             work_breaks = WorkBreakRepo(self.session).get_many(WorkBreak.weekday == day.weekday())
             teacher_weekends = (
@@ -461,9 +466,14 @@ class Schedule(EventsService):
             )
             if teacher_weekends:
                 return []
+            events = []
+            for e in self.events_day(day, user.teacher, None):
+                if vac_repo.get_active_vacations(e.user, day):
+                    continue
+                events.append((e.start_time, e.end_time))
         else:
             work_breaks = WorkBreakRepo(self.session).get_many(WorkBreak.weekday == day)
-        events = [(e.start_time, e.end_time) for e in self.events_day(day, user.teacher, None)]
+            events = [(e.start_time, e.end_time) for e in self.events_day(day, user.teacher, None)]
         events += [(wb.start_time, wb.end_time) for wb in work_breaks]
         return self.available_times(user.teacher.work_start, user.teacher.work_end, events)
 
@@ -471,6 +481,7 @@ class Schedule(EventsService):
         """Get available time for day with consideration for reschedules."""
         available_time = self.available_time(user, day)
         res_repo = RescheduleRepo(self.session)
+        vac_repo = VacationsRepo(self.session)
         time_with_reschedules = []
         for t in available_time:
             if isinstance(day, date):
@@ -482,7 +493,8 @@ class Schedule(EventsService):
                 reschedule = res_repo.get_by_where(
                     (Reschedule.date == closest_date, Reschedule.start_time == t))
             if reschedule:
-                time_with_reschedules.append((t, f"Занято {reschedule.date}"))
+                if not vac_repo.get_active_vacations(reschedule.user, reschedule.date):
+                    time_with_reschedules.append((t, f"Занято {reschedule.date}"))
             else:
                 time_with_reschedules.append((t, ""))
         return time_with_reschedules

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from aiogram import F
+from aiogram import F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -10,11 +11,18 @@ from sqlalchemy.orm import Session
 
 from config import config
 from errors import AiogramTelegramError, NoTextMessageError, PermissionDeniedError
+from help import Commands
 from messages import replies
+from middlewares import DatabaseMiddleware
 from models import Teacher, Vacations
-from routers.set_working_hours.config import router
+from repositories import UserRepo, VacationsRepo
 from utils import inline_keyboard
 
+COMMAND = "/edit_vacations"
+
+router = Router()
+router.message.middleware(DatabaseMiddleware())
+router.callback_query.middleware(DatabaseMiddleware())
 
 class States(StatesGroup):
     edit_vacation = State()
@@ -24,29 +32,31 @@ class States(StatesGroup):
     edit_vacation_time = State()
 
 
-@router.callback_query(F.data.startswith("swh:edit_vacations"))
-async def edit_vacations_hanlder(callback: CallbackQuery, state: FSMContext, db: Session):
+@router.message(Command(COMMAND))
+@router.message(F.text == Commands.VACATIONS.value)
+async def vacations_hanlder(message: Message, state: FSMContext, db: Session):
     """Handler for editing vacations."""
-    if not isinstance(callback.message, Message):
+    if not isinstance(message, Message):
         raise AiogramTelegramError
-    teacher = db.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
-    if teacher is None:
+    user = UserRepo(db).get_by_telegram_id(message.from_user.id)
+    if user is None:
         raise PermissionDeniedError
-    buttons = [(f"Убрать отпуск {h.start_date} - {h.end_date}", f"swh:rm_vacation_{h.id}") for h in teacher.holidays]
-    buttons.append(("Добавить отпуск", "swh:add_vacation_start"))
+    buttons = [(f"Убрать каникулы {h.start_date} - {h.end_date}", f"vacations:rm_v_{h.id}") for h in
+               user.holidays]
+    buttons.append(("Добавить каникулы", "vacations:add_vacation_start"))
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
-    await state.update_data(teacher=teacher)
-    await callback.message.answer(replies.EDIT_VACATIONS, reply_markup=keyboard.as_markup())
+    await state.update_data(user=user)
+    await message.answer(replies.EDIT_VACATIONS, reply_markup=keyboard.as_markup())
 
 
-@router.callback_query(F.data == "swh:add_vacation_start")
+@router.callback_query(F.data == "vacations:add_vacation_start")
 async def add_vacation_start(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Handler for adding vacations."""
     if not isinstance(callback.message, Message):
         raise AiogramTelegramError
-    teacher = db.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
-    if teacher is None:
+    user = UserRepo(db).get_by_telegram_id(callback.from_user.id)
+    if user is None:
         raise PermissionDeniedError
     await state.set_state(States.add_vacation_start)
     await callback.message.answer(replies.CHOOSE_START)
@@ -67,8 +77,8 @@ async def add_vacation_end(message: Message, state: FSMContext, db: Session) -> 
         await message.answer("Операция отменена")
         return
     await state.update_data(start=start)
-    teacher = db.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
-    if teacher is None:
+    user = UserRepo(db).get_by_telegram_id(message.from_user.id)
+    if user is None:
         raise PermissionDeniedError
     await state.set_state(States.add_vacation_end)
     await message.answer(replies.CHOOSE_END)
@@ -92,27 +102,25 @@ async def add_vacation_finish(message: Message, state: FSMContext, db: Session) 
         await message.answer(replies.START_IS_AFTER_END)
         await state.set_state(States.add_vacation_start)
         return
-    teacher = db.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
-    if teacher is None:
+    user = UserRepo(db).get_by_telegram_id(message.from_user.id)
+    if user is None:
         raise PermissionDeniedError
-    vacation = Vacations(start_date=state_data["start"], end_date=end, teacher=teacher)
-    db.add(vacation)
+    VacationsRepo(db).new(user, state_data["start"], end)
     db.commit()
     await state.clear()
     await message.answer(replies.VACATION_ADDED)
 
 
-@router.callback_query(F.data.startswith("swh:rm_vacation_"))
+@router.callback_query(F.data.startswith("vacations:rm_v_"))
 async def remove_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:  # noqa: ARG001
     """Handler for removing breaks."""
     if not isinstance(callback.message, Message):
         raise AiogramTelegramError
-    teacher = db.query(Teacher).filter(Teacher.telegram_id == callback.from_user.id).first()
-    if teacher is None:
+    user = UserRepo(db).get_by_telegram_id(callback.from_user.id)
+    if user is None:
         raise PermissionDeniedError
-    wb = db.query(Vacations).filter(Vacations.id == int(callback.data.replace("swh:rm_vacation_", ""))).first()  # type: ignore  # noqa: PGH003
-    if wb:
-        db.delete(wb)
+    v_id = int(callback.data.replace("vacations:rm_v_", ""))
+    VacationsRepo(db).delete(Vacations.id == v_id)
     db.commit()
 
     await callback.message.answer(replies.VACATION_DELETED)

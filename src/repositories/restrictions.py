@@ -5,7 +5,7 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from models import RestrictedTime, Teacher, User, Vacations, Weekend, WorkBreak, Base
+from models import RestrictedTime, Teacher, User, Vacations, Weekend, WorkBreak
 from repositories import Repository
 
 
@@ -41,22 +41,26 @@ class VacationsRepo(Repository):
         """Initialize vacations repository class."""
         super().__init__(Vacations, session)
 
-    def new(self, teacher: Teacher, start_date: date, end_date: date) -> None:
+    def get_active_vacations(self, user: User, day: date):
+        return self.session.query(Vacations).filter(Vacations.user_id == user.id, Vacations.start_date <= day,
+                                                    Vacations.end_date >= day).all()
+
+    def new(self, user: User, start_date: date, end_date: date) -> None:
         """Add new entry of model to the database."""
         vacation = Vacations(
-            teacher_id=teacher.id,
-            teacher=teacher,
+            user_id=user.id,
+            user=user,
             start_date=start_date,
             end_date=end_date,
         )
         self.session.add(vacation)
 
-    def all(self, teacher: Teacher | None = None, start_date: date | None = None, end_date: date | None = None):
+    def all(self, user: User | None = None, start_date: date | None = None, end_date: date | None = None):
         """Get all entries of model from the database."""
         query = self.session.query(Vacations)
         filters = {}
-        if teacher:
-            filters["teacher"] = teacher
+        if user:
+            filters["user"] = user
         if start_date:
             filters["start_date"] = start_date
         if end_date:
@@ -102,7 +106,8 @@ class RestrictedTimeRepo(Repository):
         """Initialize restricted time repository class."""
         super().__init__(RestrictedTime, session)
 
-    def new(self, user: User, weekday: int, start_time: time, end_time: time, whole_day: bool = False) -> None:  # noqa: FBT002, FBT001
+    def new(self, user: User, weekday: int, start_time: time, end_time: time,
+            whole_day: bool = False) -> None:  # noqa: FBT002, FBT001
         """Add new entry of model to the database."""
         restricted_time = RestrictedTime(
             user_id=user.id,
@@ -134,11 +139,11 @@ class TeacherRestTimeRepo(Repository):
         return repo.new(*args, **kwargs)
 
     def all(
-        self,
-        teacher: Teacher | None = None,
-        weekday: int | None = None,
-        date: date | None = None,
-        time: time | None = None,
+            self,
+            teacher: Teacher | None = None,
+            weekday: int | None = None,
+            date: date | None = None,
+            time: time | None = None,
     ):
         """Get all entries of model from the database."""
         work_breaks = WorkBreakRepo(self.session).all(teacher, weekday, time)

@@ -8,6 +8,7 @@ from routers.send_to_everyone import router as send_to_every1_router
 from routers.set_working_hours import router as set_working_hours_router
 from routers.today_schedule import router as today_schedule_router
 from routers.week_schedule import router as week_schedule_router
+from routers.vacations import  router as vacations_router
 
 all_routers = [
     start_router,
@@ -20,6 +21,7 @@ all_routers = [
     add_lesson_router,
     set_working_hours_router,
     reschedule_router,
+    vacations_router
 ]
 
 __all__ = ["all_routers"]
