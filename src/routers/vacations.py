@@ -41,9 +41,9 @@ async def vacations_hanlder(message: Message, state: FSMContext, db: Session):
     user = UserRepo(db).get_by_telegram_id(message.from_user.id)
     if user is None:
         raise PermissionDeniedError
-    buttons = [(f"Убрать отпуск {h.start_date} - {h.end_date}", f"vacations:rm_v_{h.id}") for h in
+    buttons = [(f"Убрать каникулы {h.start_date} - {h.end_date}", f"vacations:rm_v_{h.id}") for h in
                user.holidays]
-    buttons.append(("Добавить отпуск", "vacations:add_vacation_start"))
+    buttons.append(("Добавить каникулы", "vacations:add_vacation_start"))
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
     await state.update_data(user=user)

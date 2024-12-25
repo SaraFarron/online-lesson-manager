@@ -33,7 +33,7 @@ async def set_working_hours_handler(message: Message, db: Session) -> None:
         ],
         ("Добавить выходной", "swh:add_weekend"),
         ("Изменить перерывы", "swh:edit_breaks"),
-        ("Изменить отпуска", "swh:edit_vacations"),
+        ("Изменить каникулы", "swh:edit_vacations"),
     ]
     keyboard = inline_keyboard(buttons)
     keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
