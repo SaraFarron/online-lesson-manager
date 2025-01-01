@@ -420,10 +420,10 @@ class Schedule(EventsService):
     def lessons_week_message(self, user: User, start_date: date):
         """Get message with lessons for week."""
 
-        # Get the number of days in the current month
-        _, last_day_of_month = calendar.monthrange(start_date.year, start_date.month)
-        end_date = min(start_date.day + 7, last_day_of_month + 1)
-        week = [date(start_date.year, start_date.month, day) for day in range(start_date.day, end_date)]
+        days_to_subtract = start_date.weekday()  # Monday is 0, Sunday is 6
+        monday_start = start_date - timedelta(days=days_to_subtract)
+
+        week = [monday_start + timedelta(days=i) for i in range(7)]
         teacher = TeacherRepo(self.session).get_by_telegram_id(user.telegram_id)
         days = []
         for day in week:
