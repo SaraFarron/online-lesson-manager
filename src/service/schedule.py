@@ -6,7 +6,7 @@ from itertools import chain
 
 from aiogram import html
 from sqlalchemy.orm import Session
-
+import calendar
 from config.config import HRS_TO_CANCEL, TIMEZONE
 from models import Lesson, Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Vacations, WorkBreak
 from repositories import LessonCollectionRepo, TeacherRepo, WeekendRepo, WorkBreakRepo, RescheduleRepo, VacationsRepo
@@ -419,7 +419,11 @@ class Schedule(EventsService):
 
     def lessons_week_message(self, user: User, start_date: date):
         """Get message with lessons for week."""
-        week = [date(start_date.year, start_date.month, day) for day in range(start_date.day, start_date.day + 7)]
+
+        # Get the number of days in the current month
+        _, last_day_of_month = calendar.monthrange(start_date.year, start_date.month)
+        end_date = min(start_date.day + 7, last_day_of_month + 1)
+        week = [date(start_date.year, start_date.month, day) for day in range(start_date.day, end_date)]
         teacher = TeacherRepo(self.session).get_by_telegram_id(user.telegram_id)
         days = []
         for day in week:
