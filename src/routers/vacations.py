@@ -14,15 +14,16 @@ from errors import AiogramTelegramError, NoTextMessageError, PermissionDeniedErr
 from help import Commands
 from messages import replies
 from middlewares import DatabaseMiddleware
-from models import Teacher, Vacations
+from models import Vacations
 from repositories import UserRepo, VacationsRepo
-from utils import inline_keyboard
+from utils import inline_keyboard, send_message
 
 COMMAND = "/edit_vacations"
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
+
 
 class States(StatesGroup):
     edit_vacation = State()
@@ -105,10 +106,14 @@ async def add_vacation_finish(message: Message, state: FSMContext, db: Session) 
     user = UserRepo(db).get_by_telegram_id(message.from_user.id)
     if user is None:
         raise PermissionDeniedError
-    VacationsRepo(db).new(user, state_data["start"], end)
+    vacation = VacationsRepo(db).new(user, state_data["start"], end)
     db.commit()
     await state.clear()
     await message.answer(replies.VACATION_ADDED)
+    await send_message(
+        user.teacher.telegram_id,
+       replies.USER_ADDED_VACATION % (user.username_dog, vacation.start_date, vacation.end_date),
+    )
 
 
 @router.callback_query(F.data.startswith("vacations:rm_v_"))
@@ -124,3 +129,4 @@ async def remove_break(callback: CallbackQuery, state: FSMContext, db: Session) 
     db.commit()
 
     await callback.message.answer(replies.VACATION_DELETED)
+    await send_message(user.teacher.telegram_id, replies.USER_DELETED_VACATION % user.username_dog)

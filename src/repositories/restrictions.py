@@ -45,7 +45,7 @@ class VacationsRepo(Repository):
         return self.session.query(Vacations).filter(Vacations.user_id == user.id, Vacations.start_date <= day,
                                                     Vacations.end_date >= day).all()
 
-    def new(self, user: User, start_date: date, end_date: date) -> None:
+    def new(self, user: User, start_date: date, end_date: date) -> Vacations:
         """Add new entry of model to the database."""
         vacation = Vacations(
             user_id=user.id,
@@ -54,6 +54,7 @@ class VacationsRepo(Repository):
             end_date=end_date,
         )
         self.session.add(vacation)
+        return vacation
 
     def all(self, user: User | None = None, start_date: date | None = None, end_date: date | None = None):
         """Get all entries of model from the database."""

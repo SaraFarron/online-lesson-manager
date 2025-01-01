@@ -22,7 +22,7 @@ class Config:
 
 
 def load_config() -> Config:
-    """Parse a `.env` file and load the variables into environment valriables."""
+    """Parse a `.env` file and load the variables into environment variables."""
     load_dotenv()
 
     return Config(tg_bot=TelegramBotConfig(token=getenv("BOT_TOKEN")))
