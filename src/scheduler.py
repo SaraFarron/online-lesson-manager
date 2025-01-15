@@ -22,7 +22,7 @@ async def send_notifications(now: datetime):
         schedule = Schedule(db)
         for user in users:
             text = schedule.lessons_day_message(user, now.date())
-            if not text:
+            if not text or "занятий нет" in text:
                 continue
             notifies.add(user.username_dog)
             message = replies.LESSONS_ARE_COMING + text
