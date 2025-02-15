@@ -56,7 +56,7 @@ class RescheduleRepo(Repository):
         source_date: date,
         new_date: date | None = None,
         new_time: time | None = None,
-    ):
+    ) -> Reschedule:
         """Add new entry of model to the database."""
         reschedule = Reschedule(
             user=user,

@@ -9,6 +9,7 @@ from routers.set_working_hours import router as set_working_hours_router
 from routers.today_schedule import router as today_schedule_router
 from routers.week_schedule import router as week_schedule_router
 from routers.vacations import  router as vacations_router
+from routers.add_one_lesson import router as add_one_lesson_router
 
 all_routers = [
     start_router,
@@ -21,7 +22,8 @@ all_routers = [
     add_lesson_router,
     set_working_hours_router,
     reschedule_router,
-    vacations_router
+    vacations_router,
+    add_one_lesson_router,
 ]
 
 __all__ = ["all_routers"]

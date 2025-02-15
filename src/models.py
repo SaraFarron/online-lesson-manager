@@ -141,7 +141,7 @@ class Lesson(BordersMixin, Base):
 
     def __repr__(self) -> str:
         """String model represetation."""
-        return f"Lesson(id={self.id!r}, date={self.date!r}, time={self.start_time!r}, user_id={self.user_id!r})"
+        return f"Урок на {self.date} в {self.st_str}"
 
 
 class ScheduledLesson(WeekdayMixin, BordersMixin, Base):

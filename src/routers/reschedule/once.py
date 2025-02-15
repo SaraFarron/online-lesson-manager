@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 
 from config import config
 from messages import buttons, replies
-from models import Reschedule, ScheduledLesson, User
-from repositories import RescheduleRepo, ScheduledLessonRepo, UserRepo
-from routers.reschedule.config import ORL_RS_CALLBACK, ORL_START_CALLBACK, router
+from models import Reschedule, ScheduledLesson, User, Lesson
+from repositories import RescheduleRepo, ScheduledLessonRepo, UserRepo, LessonRepo
+from routers.reschedule.config import ORL_RS_CALLBACK, ORL_START_CALLBACK, ORL_ONE_START_CALLBACK, router
 from service import Schedule
 from utils import calc_end_time, inline_keyboard, send_message
 
@@ -27,6 +27,23 @@ class Callbacks:
     CONFIRM = "orl_confirm:"
     CHOOSE_DATE = "orl_choose_date:"
     CHOOSE_TIME = "orl_choose_time:"
+
+
+@router.callback_query(F.data.startswith(ORL_ONE_START_CALLBACK))
+async def orl_type_date(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+    """Handler receives messages with `reschesule_lesson_choose_sl` state."""
+    if not isinstance(callback.message, Message):
+        return
+    event: Lesson | None = LessonRepo(db).get(int(callback.data.split(":")[-1]))
+    await state.update_data(date=event.date, event=event, user_telegram_id=event.user.telegram_id)
+    keyboard = inline_keyboard(
+        [
+            (buttons.CANCEL_LESSON, Callbacks.CONFIRM),
+            (buttons.CHOOSE_NEW_DATE, Callbacks.CHOOSE_DATE),
+        ],
+    ).as_markup()
+    await callback.message.answer(replies.CONFIRM, reply_markup=keyboard)
+
 
 
 @router.callback_query(F.data.startswith(ORL_START_CALLBACK))
@@ -128,6 +145,9 @@ async def orl_cancel_lesson(callback: CallbackQuery, state: FSMContext, db: Sess
     if isinstance(state_data["event"], Reschedule):
         event = RescheduleRepo(db).get(state_data["event"].id)
         db.delete(event)
+    elif isinstance(state_data["event"], Lesson):
+        event = LessonRepo(db).get(state_data["event"].id)
+        db.delete(event)
     else:
         event: ScheduledLesson = ScheduledLessonRepo(db).get(state_data["lesson"])
         reschedule = Reschedule(
@@ -227,6 +247,12 @@ async def reschedule_lesson_create_reschedule(callback: CallbackQuery, state: FS
     if isinstance(event, Reschedule):
         event: Reschedule = RescheduleRepo(db).get(event.id)
         old_date, old_time = event.source_date, event.start_time
+        event.date = state_data["new_date"]
+        event.start_time = time
+        event.end_time = calc_end_time(time)
+    elif isinstance(event, Lesson):
+        event: Lesson = LessonRepo(db).get(event.id)
+        old_date, old_time = event.date, event.start_time
         event.date = state_data["new_date"]
         event.start_time = time
         event.end_time = calc_end_time(time)

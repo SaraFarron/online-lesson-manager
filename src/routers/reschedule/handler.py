@@ -12,9 +12,9 @@ from config import config
 from errors import AiogramTelegramError
 from help import Commands
 from messages import buttons, replies
-from models import Reschedule
+from models import Reschedule, Lesson
 from repositories import UserRepo
-from routers.reschedule.config import FRL_START_CALLBACK, ORL_RS_CALLBACK, ORL_START_CALLBACK, router
+from routers.reschedule.config import FRL_START_CALLBACK, ORL_RS_CALLBACK, ORL_START_CALLBACK, ORL_ONE_START_CALLBACK, router
 from service import Schedule
 from utils import inline_keyboard
 
@@ -49,6 +49,10 @@ async def reschedule_lesson_handler(message: Message, state: FSMContext, db: Ses
         if isinstance(event, Reschedule):
             buttons.append(
                 (f"{event!s}", ORL_RS_CALLBACK + str(event.id)),
+            )
+        elif isinstance(event, Lesson):
+            buttons.append(
+                (f"{event!s}", ORL_ONE_START_CALLBACK + str(event.id)),
             )
         else:
             buttons.append(
