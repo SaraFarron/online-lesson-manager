@@ -12,5 +12,4 @@ DELETE_TYPE = "Навсегда"
 ONE_TYPE = "Только на одну дату"
 
 CANCEL_LESSON = "Отменить урок"
-CHOOSE_NEW_DATE = "Перенести на новую дату"
 

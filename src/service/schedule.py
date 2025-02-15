@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from datetime import date, datetime, time, timedelta
 from itertools import chain
 
 from aiogram import html
 from sqlalchemy.orm import Session
-import calendar
+
 from config.config import HRS_TO_CANCEL, TIMEZONE
-from models import Lesson, Reschedule, RestrictedTime, ScheduledLesson, Teacher, User, Vacations, WorkBreak
+from models import Lesson, Reschedule, ScheduledLesson, Teacher, User, Vacations, WorkBreak
 from repositories import LessonCollectionRepo, TeacherRepo, WeekendRepo, WorkBreakRepo, RescheduleRepo, VacationsRepo
 
 MAX_HOUR = 23
@@ -144,11 +144,13 @@ class EventsService(SessionBase):
             .filter(ScheduledLesson.weekday == day.weekday(), ScheduledLesson.id.not_in(cancellations))
             .all()
         )
+        lessons = self.session.query(Lesson).filter(Lesson.date == day).all()
         if user:
             reschedules = [r for r in reschedules if r.user_id == user.id]
             scheduled_lessons = [sl for sl in scheduled_lessons if sl.user_id == user.id]
+            lessons = [ls for ls in lessons if ls.user_id == user.id]
 
-        return sorted(reschedules + scheduled_lessons, key=lambda x: x.edges[0])
+        return sorted(lessons + reschedules + scheduled_lessons, key=lambda x: x.edges[0])
 
     def events_day(self, day: date | int, teacher: Teacher, user: User | None = None):
         """Get events for day."""
