@@ -31,10 +31,11 @@ async def send_to_everyone_handler(message: Message, state: FSMContext, db: Sess
     """First handler, gives a list of available weekdays."""
     if not message.from_user:
         raise AiogramTelegramError
-    teacher = TeacherRepo(db).get_by_telegram_id(message.from_user.id)
-    if teacher is None:
-        raise PermissionDeniedError
+
+    service = Service(db)
+    service.get_teacher(message.from_user.id)
     await state.set_state(ChooseSendToEveryone.write_message)
+
     await message.answer(replies.WRITE_MESSAGE)
 
 
@@ -45,12 +46,13 @@ async def send_to_everyone_write_message(message: Message, state: FSMContext, db
         raise AiogramTelegramError
     if not message.text:
         raise NoTextMessageError
-    teacher = TeacherRepo(db).get_by_telegram_id(message.from_user.id)
-    if teacher is None:
-        raise PermissionDeniedError
+
+    service = Service(db)
+    teacher = service.get_teacher(message.from_user.id)
     receivers = []
     for student in teacher.students:
         receivers.append(student.username_dog)
         await send_message(student.telegram_id, message.text.replace("\n", "%0A"))
+
     await message.answer(replies.MESSAGES_SENT % ", ".join(receivers))
     await state.clear()

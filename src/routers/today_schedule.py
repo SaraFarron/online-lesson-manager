@@ -27,9 +27,9 @@ async def today_schedule_handler(message: Message, db: Session) -> None:
     t_user = message.from_user
     if not t_user:
         raise AiogramTelegramError
-    user = UserRepo(db).get_by_telegram_id(t_user.id)
-    if user:
-        schedule = Schedule(db)
-        await message.answer(schedule.lessons_day_message(user, datetime.now(TIMEZONE).date()))
-    else:
-        await message.answer(replies.NOT_REGISTERED)
+
+    service = Service(db)
+    user = service.get_user(message.from_user.id)
+    lessons = service.get_lessons(user)
+
+    await message.answer(lessons)
