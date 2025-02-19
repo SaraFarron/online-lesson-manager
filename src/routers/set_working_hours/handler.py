@@ -6,9 +6,8 @@ from aiogram.types import Message
 from sqlalchemy.orm import Session
 
 from config import config
-from errors import AiogramTelegramError, PermissionDeniedError
+from errors import AiogramTelegramError
 from help import AdminCommands
-from models import Teacher
 from routers.set_working_hours.config import router
 from utils import inline_keyboard
 
@@ -21,9 +20,9 @@ async def set_working_hours_handler(message: Message, db: Session) -> None:
     """Handler receives messages with `/reschedule` command."""
     if not message.from_user:
         raise AiogramTelegramError
-    teacher = db.query(Teacher).filter(Teacher.telegram_id == message.from_user.id).first()
-    if not teacher:
-        raise PermissionDeniedError
+
+    service = Service(db)
+    teacher = service.get_teacher(message.from_user.id)
     buttons = [
         (f"Изменить начало рабочего дня: {teacher.work_start.strftime('%H:%M')}", "swh:start"),
         (f"Изменить конец рабочего дня: {teacher.work_end.strftime('%H:%M')}", "swh:end"),
@@ -36,5 +35,4 @@ async def set_working_hours_handler(message: Message, db: Session) -> None:
         ("Изменить каникулы", "swh:edit_vacations"),
     ]
     keyboard = inline_keyboard(buttons)
-    keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
     await message.answer("Выберите действие", reply_markup=keyboard.as_markup())
