@@ -12,10 +12,7 @@ from config import config
 from errors import AiogramTelegramError
 from help import Commands
 from messages import buttons, replies
-from models import Reschedule, Lesson
-from repositories import UserRepo
-from routers.reschedule.config import FRL_START_CALLBACK, ORL_RS_CALLBACK, ORL_START_CALLBACK, ORL_ONE_START_CALLBACK, router
-from service import Schedule
+from routers.reschedule.config import FRL_START_CALLBACK, ORL_START_CALLBACK, router
 from utils import inline_keyboard
 
 COMMAND = "/reschedule"
@@ -33,42 +30,31 @@ async def reschedule_lesson_handler(message: Message, state: FSMContext, db: Ses
     """Handler receives messages with `/reschedule` command."""
     if not message.from_user:
         raise AiogramTelegramError
-    user_id = message.from_user.id
-    user = UserRepo(db).get_by_telegram_id(user_id)
-    if user_id in config.BANNED_USERS or user is None:
-        raise PermissionError
-    await state.update_data(user_id=user.id)
-    schedule = Schedule(db)
-    cancellable_events = schedule.events_to_cancel(user, datetime.now(config.TIMEZONE).date())
+
+    service = Service(db)
+    user = service.get_user(message.from_user.id)
+
+    cancellable_events = service.events_to_cancel(user, datetime.now(config.TIMEZONE).date())
     if not cancellable_events:
         await message.answer(replies.NO_LESSONS)
         return
 
-    buttons = []
-    for event in cancellable_events:
-        if isinstance(event, Reschedule):
-            buttons.append(
-                (f"{event!s}", ORL_RS_CALLBACK + str(event.id)),
-            )
-        elif isinstance(event, Lesson):
-            buttons.append(
-                (f"{event!s}", ORL_ONE_START_CALLBACK + str(event.id)),
-            )
-        else:
-            buttons.append(
-                (f"{event!s}", Callbacks.CHOOSE_CANCEL_TYPE + str(event.id)),
-            )
-
+    buttons = service.create_cancel_buttons(cancellable_events)
     keyboard = inline_keyboard(buttons)
-    keyboard.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
+
     await message.answer(replies.CHOOSE_LESSON, reply_markup=keyboard.as_markup())
 
 
 @router.callback_query(F.data.startswith(Callbacks.CHOOSE_CANCEL_TYPE))
 async def reschedule_lesson_choose_cancel_type_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Handler receives messages with `reschesule_lesson_choose_sl` state."""
-    if not isinstance(callback.message, Message):
+    message = callback.message
+    if not isinstance(message, Message):
         raise AiogramTelegramError
+
+    service = Service(db)
+    service.get_user(message.from_user.id)
+
     lesson_id = int(callback.data.split(":")[1])  # type: ignore  # noqa: PGH003
     await state.update_data(lesson=lesson_id)
     btns = [
@@ -76,5 +62,5 @@ async def reschedule_lesson_choose_cancel_type_handler(callback: CallbackQuery, 
         (buttons.DELETE_TYPE, FRL_START_CALLBACK),
     ]
     keyboard = inline_keyboard(btns)
-    keyboard.adjust(1 if len(btns) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
-    await callback.message.answer(replies.CANCEL_TYPE, reply_markup=keyboard.as_markup())
+
+    await message.answer(replies.CANCEL_TYPE, reply_markup=keyboard.as_markup())
