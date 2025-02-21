@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 
 Base = declarative_base()
 
+TIME_FMT = "%H:%M"
+
 
 class Model:
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -40,8 +42,22 @@ class Event(Model, Base):
     cancelled = Column(Boolean, default=False)
     reschedule_id = Column(Integer, ForeignKey('events.id'), nullable=True, default=None)
     reschedule = relationship('Event')
-    is_rescheduled = Column(Boolean, default=False)
+    is_reschedule = Column(Boolean, default=False)
 
+    @property
+    def st_str(self):
+        """Start time as a string."""
+        return self.start_time.strftime(TIME_FMT)
+
+    @property
+    def et_str(self):
+        """End time as a string."""
+        return self.end_time.strftime(TIME_FMT)
+
+    def __str__(self):
+        if self.is_reschedule:
+            return f"Перенос в {self.st_str}-{self.et_str}"
+        return f"Урок в {self.st_str}-{self.et_str}"
 
 class RecurrentEvent(Model, Base):
     __tablename__ = 'recurrent_events'
@@ -54,6 +70,19 @@ class RecurrentEvent(Model, Base):
     interval = Column(Integer)
     start = Column(DateTime)
     end = Column(DateTime, nullable=True)
+
+    @property
+    def st_str(self):
+        """Start time as a string."""
+        return self.start_time.strftime(TIME_FMT)
+
+    @property
+    def et_str(self):
+        """End time as a string."""
+        return self.end_time.strftime(TIME_FMT)
+
+    def __str__(self):
+        return f"Урок в {self.st_str}-{self.et_str}"
 
     def get_next_occurrence(self, after: datetime, before: datetime | None = None):
         """
@@ -68,7 +97,6 @@ class RecurrentEvent(Model, Base):
         if before and occur > before:
             return None
         return occur
-
 
 
 class EventBreak(Model, Base):

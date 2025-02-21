@@ -4,8 +4,10 @@ from collections.abc import Iterable
 from datetime import datetime, time, timedelta
 
 import aiohttp
+from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.orm import Session
+from errors import AiogramTelegramError
 
 from config import config
 from config.base import getenv
@@ -15,6 +17,17 @@ from logger import logger
 from models import Reschedule, ScheduledLesson, User
 
 MAX_HOUR = 23
+
+
+def telegram_checks(event: Message | CallbackQuery):
+    if isinstance(event, Message):
+        if not event.from_user:
+            raise AiogramTelegramError
+        return event
+    else:
+        if not isinstance(event.message, Message):
+            raise AiogramTelegramError
+        return event.message
 
 
 def calc_end_time(time: time):
@@ -46,7 +59,14 @@ def inline_keyboard(buttons: dict[str, str] | Iterable[tuple[str, str]]):
     else:
         for text, callback_data in buttons:
             builder.button(text=text, callback_data=callback_data)
+    builder.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
     return builder
+
+
+def callback_buttons(objs: list, callback_data: str):
+    return [
+        (obj, callback_data + str(obj)) for obj in objs
+    ]
 
 
 def this_week():

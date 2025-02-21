@@ -1,8 +1,8 @@
 from datetime import date, datetime, timedelta, time
-
+from typing import Iterable
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-
+from utils import inline_keyboard
 from src.models import Event, User, Executor, RecurrentEvent
 from src.repositories import EventRepo, RecurrentEventRepo
 
@@ -141,5 +141,25 @@ class EventService:
         return not bool(events)
 
 
+class KeyboardFactory:
+    def callbacks(self, buttons: dict[str, str] | Iterable[tuple[str, str]]):
+        return inline_keyboard(buttons)
+
+
 class Service:
-    pass
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_user(self, telegram_id: int):
+        """
+        Get user by telegram id. If no user exists, raise PermissionError.
+        Returns User
+        """
+
+    def events_to_cancel(self, user: User, day: date):
+        """
+        Get all cancellable events for a user for a day.
+        """
+
+    def
+
