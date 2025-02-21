@@ -14,7 +14,7 @@ from help import Commands
 from messages import replies
 from middlewares import DatabaseMiddleware
 from aiogram.fsm.state import State, StatesGroup
-
+from service import Service
 from utils import inline_keyboard
 
 COMMAND = "/add_ol"

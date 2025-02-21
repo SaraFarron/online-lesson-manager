@@ -4,7 +4,7 @@ from aiogram import F
 from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.orm import Session
-
+from service import Service
 from config import config
 from errors import AiogramTelegramError
 from help import AdminCommands

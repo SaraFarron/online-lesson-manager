@@ -6,12 +6,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 from sqlalchemy.orm import Session
-
-from errors import AiogramTelegramError, NoTextMessageError, PermissionDeniedError
+from service import Service
+from errors import AiogramTelegramError, NoTextMessageError
 from help import AdminCommands
 from messages import replies
 from middlewares import DatabaseMiddleware
-from repositories import TeacherRepo
 from utils import send_message
 
 COMMAND = "/send_to_everyone"

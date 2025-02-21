@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
-
+from service import Service
 from errors import AiogramTelegramError, NoTextMessageError
 from help import Commands
 from messages import replies

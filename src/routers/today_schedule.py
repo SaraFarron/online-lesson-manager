@@ -1,19 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.orm import Session
-
-from config.config import TIMEZONE
+from service import Service
 from errors import AiogramTelegramError
 from help import Commands
-from messages import replies
 from middlewares import DatabaseMiddleware
-from repositories import UserRepo
-from service import Schedule
 
 COMMAND = "today_schedule"
 router: Router = Router()

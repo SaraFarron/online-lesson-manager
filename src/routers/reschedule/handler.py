@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
-
+from service import Service
 from config import config
 from errors import AiogramTelegramError
 from help import Commands

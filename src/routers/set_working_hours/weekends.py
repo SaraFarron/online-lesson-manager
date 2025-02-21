@@ -4,7 +4,7 @@ from aiogram import F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
-
+from service import Service
 from errors import AiogramTelegramError
 from messages import replies
 from routers.set_working_hours.config import router

@@ -139,3 +139,7 @@ class EventService:
         end = datetime.combine(day, end_time)
         events = self.events_for_period(start, end, executor)
         return not bool(events)
+
+
+class Service:
+    pass

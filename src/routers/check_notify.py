@@ -1,19 +1,13 @@
-from pyexpat.errors import messages
-
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
-
-from errors import AiogramTelegramError, PermissionDeniedError
+from service import Service
+from errors import AiogramTelegramError
 from help import AdminCommands
-from messages import replies
 from middlewares import DatabaseMiddleware
-from models import Reschedule, ScheduledLesson
-from repositories import TeacherRepo
-from service import Schedule
-from utils import inline_keyboard, send_message
+from utils import inline_keyboard
 
 router: Router = Router()
 router.message.middleware(DatabaseMiddleware())

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-
+from service import Service
 from aiogram import F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup

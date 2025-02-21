@@ -7,6 +7,7 @@ from config import config
 from errors import AiogramTelegramError, PermissionDeniedError
 from messages import replies
 from middlewares import DatabaseMiddleware
+from service import Service
 
 router: Router = Router()
 router.message.middleware(DatabaseMiddleware())

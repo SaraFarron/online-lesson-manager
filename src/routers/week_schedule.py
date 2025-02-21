@@ -4,7 +4,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from sqlalchemy.orm import Session
-
+from service import Service
 from help import Commands
 from middlewares import DatabaseMiddleware
 from utils import inline_keyboard
