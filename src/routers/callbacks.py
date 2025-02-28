@@ -4,3 +4,7 @@ class Reschedule:
     choose_lesson_sl = f"{choose_lesson}sl/"
     choose_lesson_rs = f"{choose_lesson}rs/"
     choose_lesson_ls = f"{choose_lesson}ls/"
+    choose_sl_entity = f"{base}choose_entity/"
+    rm_cancel = f"{base}rm_cancel/"
+    choose_date = f"{base}choose_date/"
+    choose_time = f"{base}choose_time/"
