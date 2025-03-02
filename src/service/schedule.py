@@ -225,19 +225,28 @@ class Schedule(EventsService):
         """Check schedule consistency. E.g. if lessons collide - return these lessons."""
         weekends = [we.weekday for we in WeekendRepo(self.session).all(teacher)]
         work_beaks = {wb.weekday: (wb.start_time, wb.end_time) for wb in WorkBreakRepo(self.session).all(teacher)}
-        lessons: list[Reschedule | ScheduledLesson] = []
+        lessons: list[Reschedule | ScheduledLesson | Lesson] = []
         for s in teacher.students:
             lessons.extend(LessonCollectionRepo(self.session).all(s))
         collisions = Collisions()
+
         for lesson in lessons:
+            if isinstance(lesson, (Lesson, Reschedule)):
+                lesson_weekday = lesson.date.weekday()
+            elif isinstance(lesson, ScheduledLesson):
+                lesson_weekday = lesson.weekday
+            else:
+                lesson_weekday = None
+
             if isinstance(lesson, Reschedule) and lesson.date is None:
                 continue
             if not self.time_overlapse(lesson.edges, (teacher.work_start, teacher.work_end)):
                 collisions.work_borders.append(lesson)
-            elif lesson.weekday in weekends:
+            elif lesson_weekday in weekends:
                 collisions.weekends.append(lesson)
-            elif lesson.weekday in work_beaks and self.time_overlapse(work_beaks[lesson.weekday], lesson.edges):
+            elif lesson_weekday in work_beaks and self.time_overlapse(work_beaks[lesson_weekday], lesson.edges):
                 collisions.work_breaks.append(lesson)
+
         return collisions
 
     def lessons_day_message(self, user: User, day: date):
