@@ -141,7 +141,10 @@ async def orl_cancel_lesson(callback: CallbackQuery, state: FSMContext, db: Sess
     if not isinstance(callback.message, Message):
         return
     state_data = await state.get_data()
-    user: User = UserRepo(db).get(state_data["user_id"])
+    if "user_id" in state_data:
+        user: User = UserRepo(db).get(state_data["user_id"])
+    else:
+        user: User = UserRepo(db).get_by_telegram_id(callback.message.from_user.telegram_id)
     if isinstance(state_data["event"], Reschedule):
         event = RescheduleRepo(db).get(state_data["event"].id)
         db.delete(event)
