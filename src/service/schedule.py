@@ -231,15 +231,15 @@ class Schedule(EventsService):
         collisions = Collisions()
 
         for lesson in lessons:
+            if isinstance(lesson, Reschedule) and lesson.date is None:
+                continue
+
             if isinstance(lesson, (Lesson, Reschedule)):
                 lesson_weekday = lesson.date.weekday()
             elif isinstance(lesson, ScheduledLesson):
                 lesson_weekday = lesson.weekday
             else:
                 lesson_weekday = None
-
-            if isinstance(lesson, Reschedule) and lesson.date is None:
-                continue
             if not self.time_overlapse(lesson.edges, (teacher.work_start, teacher.work_end)):
                 collisions.work_borders.append(lesson)
             elif lesson_weekday in weekends:
