@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from config import config
 from help import Commands
 from messages import replies
-from models import RecurrentEvent
+from db.models import RecurrentEvent
 from routers import callbacks
 from routers.reschedule.config import router
 from service import Service

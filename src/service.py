@@ -3,8 +3,8 @@ from typing import Iterable
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from utils import inline_keyboard
-from src.models import Event, User, Executor, RecurrentEvent
-from src.repositories import EventRepo, RecurrentEventRepo
+from src.db.models import Event, User, Executor, RecurrentEvent
+from src.db.repositories import EventRepo, RecurrentEventRepo
 
 
 class EventService:
@@ -160,6 +160,3 @@ class Service:
         """
         Get all cancellable events for a user for a day.
         """
-
-    def
-

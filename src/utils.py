@@ -4,17 +4,20 @@ from collections.abc import Iterable
 from datetime import datetime, time, timedelta
 
 import aiohttp
-from aiogram.types import CallbackQuery, Message
+from aiogram import Dispatcher, F
+from aiogram.filters.exception import ExceptionTypeFilter
+from aiogram.types import CallbackQuery
+from aiogram.types.error_event import ErrorEvent
+from aiogram.types.message import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from sqlalchemy.orm import Session
-from errors import AiogramTelegramError
 
 from config import config
 from config.base import getenv
-from config.config import ADMINS, TIMEZONE
-from database import engine
+from config.config import ADMINS
+from config.config import TIMEZONE
+from errors import AiogramTelegramError, PermissionDeniedError, NoTextMessageError
 from logger import logger
-from models import Reschedule, ScheduledLesson, User
+from messages import errors as err_msgs
 
 MAX_HOUR = 23
 
@@ -89,18 +92,26 @@ def daterange(start: datetime, end: datetime, step: int = 1) -> Iterable[datetim
     return date_range
 
 
-def delete_banned_users():
-    """Delete banned users."""
-    counter = 0
-    with Session(engine) as session:
-        for user_id in config.BANNED_USERS:
-            user = session.query(User).filter(User.telegram_id == user_id).first()
-            if user is None:
-                continue
-            counter += 1
-            session.query(Reschedule).filter(Reschedule.user_id == user.id).delete()
-            session.query(ScheduledLesson).filter(ScheduledLesson.user_id == user.id).delete()
-            session.query(User).filter(User.telegram_id == user_id).delete()
-        session.commit()
+def add_errors(dp: Dispatcher):
+    """Adds all errors to dispatcher."""
 
-    logger.info(f"Deleted {counter} banned users")
+    @dp.errors(ExceptionTypeFilter(PermissionDeniedError), F.update.message.as_("message"))
+    async def permission_denied(event: ErrorEvent, message: Message) -> None:  # noqa: ARG001
+        await message.answer(err_msgs.PERMISSION_DENIED)
+
+    @dp.errors(ExceptionTypeFilter(AiogramTelegramError), F.update.message.as_("message"))
+    async def aiogram_telegram_error(event: ErrorEvent, message: Message) -> None:
+        await send_message(ADMINS["sara_farron"], f"error occured: {event.exception}\nmessage: {message}")
+        await message.answer(err_msgs.TELEGRAM_ERROR_OCCURED)
+
+    @dp.errors(ExceptionTypeFilter(NoTextMessageError), F.update.message.as_("message"))
+    async def no_text_message_error(event: ErrorEvent, message: Message) -> None:  # noqa: ARG001
+        await message.answer(err_msgs.NOT_TEXT_MESSAGE)
+
+    @dp.errors(ExceptionTypeFilter(Exception), F.update.message.as_("message"))
+    async def value_error(event: ErrorEvent, message: Message) -> None:
+        logger.exception(event.exception)
+        await message.answer(err_msgs.UNKNOWN)
+
+    return dp
+

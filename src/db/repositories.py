@@ -2,7 +2,7 @@ from datetime import datetime, date, time, timedelta
 
 from sqlalchemy.orm import Session
 
-from src.models import Event, User, RecurrentEvent, EventBreak, Base, Executor
+from src.db.models import Event, User, RecurrentEvent, EventBreak, Base, Executor
 
 
 class Repository:

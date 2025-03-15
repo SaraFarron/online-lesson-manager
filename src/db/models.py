@@ -110,8 +110,8 @@ class EventBreak(Model, Base):
 
 class EventHistory(Model, Base):
     __tablename__ = 'event_history'
-    author = Column(String, primary_key=True)
-    scene = Column(String, primary_key=True)
+    author = Column(String)
+    scene = Column(String)
     event_type = Column(String)
     event_value = Column(String)
     created_at = Column(DateTime, default=datetime.now)
