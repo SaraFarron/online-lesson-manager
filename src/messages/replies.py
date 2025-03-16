@@ -119,3 +119,4 @@ NO_AVAILABLE_TIME = "Нет доступного времени"
 
 USER_ADDED_VACATION = "Пользователь %s добавил каникулы на %s - %s"
 USER_DELETED_VACATION = "Пользователь %s удалил каникулы"
+CHOOSE_LESSON_TYPE = "Выберите тип занятия"

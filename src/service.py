@@ -2,9 +2,49 @@ from datetime import date, datetime, timedelta, time
 from typing import Iterable
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from utils import inline_keyboard
+from config.config import MAX_BUTTON_ROWS
 from src.db.models import Event, User, Executor, RecurrentEvent
 from src.db.repositories import EventRepo, RecurrentEventRepo
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+
+class Keyboards:
+    @classmethod
+    def inline_keyboard(cls, buttons: dict[str, str] | Iterable[tuple[str, str]], as_markup=True):
+        """Create an inline keyboard."""
+        builder = InlineKeyboardBuilder()
+        if isinstance(buttons, dict):
+            for callback_data, text in buttons.items():
+                builder.button(text=text, callback_data=callback_data)  # type: ignore  # noqa: PGH003
+        else:
+            for text, callback_data in buttons:
+                builder.button(text=text, callback_data=callback_data)
+        builder.adjust(1 if len(buttons) <= MAX_BUTTON_ROWS else 2, repeat=True)
+        if as_markup:
+            return builder.as_markup()
+        return builder
+
+    @classmethod
+    def choose_lesson_type(cls, recurrent_type_callback: str, single_type_callback: str):
+        buttons = {
+            recurrent_type_callback: "Еженедельное занятие",
+            single_type_callback: "Одноразовое занятие"
+        }
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def weekdays(cls, days: list[int], callback: str, short=False):
+        buttons = {}
+        for day in days:
+            match day:
+                case 0: buttons[callback + "/0"] = "ПН" if short else "Понедельник"
+                case 1: buttons[callback + "/1"] = "ВТ" if short else "Вторник"
+                case 2: buttons[callback + "/2"] = "СР" if short else "Среда"
+                case 3: buttons[callback + "/3"] = "ЧТ" if short else "Четверг"
+                case 4: buttons[callback + "/4"] = "ПТ" if short else "Пятница"
+                case 5: buttons[callback + "/5"] = "СБ" if short else "Суббота"
+                case 6: buttons[callback + "/6"] = "ВС" if short else "Воскресенье"
+        return cls.inline_keyboard(buttons)
 
 
 class EventService:
@@ -141,22 +181,19 @@ class EventService:
         return not bool(events)
 
 
-class KeyboardFactory:
-    def callbacks(self, buttons: dict[str, str] | Iterable[tuple[str, str]]):
-        return inline_keyboard(buttons)
-
-
 class Service:
     def __init__(self, db: Session):
         self.db = db
+        self.event_service = EventService(db)
 
     def get_user(self, telegram_id: int):
-        """
-        Get user by telegram id. If no user exists, raise PermissionError.
-        Returns User
-        """
+        pass
 
     def events_to_cancel(self, user: User, day: date):
-        """
-        Get all cancellable events for a user for a day.
-        """
+        pass
+
+    def available_weekdays(self, user: User):
+        for wd in range(6):
+            free = self.event_service.is_available_weekday(user, wd)
+            if free:
+                yield wd

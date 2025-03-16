@@ -53,19 +53,6 @@ async def notify_admins(message: str) -> None:
         await send_message(tg_id, message)
 
 
-def inline_keyboard(buttons: dict[str, str] | Iterable[tuple[str, str]]):
-    """Create an inline keyboard."""
-    builder = InlineKeyboardBuilder()
-    if isinstance(buttons, dict):
-        for callback_data, text in buttons.items():
-            builder.button(text=text, callback_data=callback_data)  # type: ignore  # noqa: PGH003
-    else:
-        for text, callback_data in buttons:
-            builder.button(text=text, callback_data=callback_data)
-    builder.adjust(1 if len(buttons) <= config.MAX_BUTTON_ROWS else 2, repeat=True)
-    return builder
-
-
 def callback_buttons(objs: list, callback_data: str):
     return [
         (obj, callback_data + str(obj)) for obj in objs

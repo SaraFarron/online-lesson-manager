@@ -8,3 +8,10 @@ class Reschedule:
     rm_cancel = f"{base}rm_cancel/"
     choose_date = f"{base}choose_date/"
     choose_time = f"{base}choose_time/"
+
+
+class AddLesson:
+    base = "add_lesson/"
+    choose_weekday = f"{base}choose_weekday/"
+    choose_day = f"{base}choose_day/"
+    choose_time = f"{base}choose_time/"
