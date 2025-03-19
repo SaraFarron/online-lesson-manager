@@ -11,7 +11,7 @@ from service import Service
 from utils import telegram_checks
 
 
-@router.callback_query(F.data.startswith(callbacks.Reschedule.choose_lesson_rs))
+@router.callback_query(F.data.startswith(callbacks.RescheduleCallback.choose_lesson_rs))
 async def choose_lesson_rs(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
 
@@ -21,7 +21,7 @@ async def choose_lesson_rs(callback: CallbackQuery, state: FSMContext, db: Sessi
     # Choose do you need new date/time
 
 
-@router.callback_query(F.data.startswith(callbacks.Reschedule.choose_lesson_ls))
+@router.callback_query(F.data.startswith(callbacks.RescheduleCallback.choose_lesson_ls))
 async def choose_lesson_ls(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
 
@@ -31,7 +31,7 @@ async def choose_lesson_ls(callback: CallbackQuery, state: FSMContext, db: Sessi
     # Choose do you need new date/time
 
 
-@router.callback_query(F.data.startswith(callbacks.Reschedule.choose_lesson_sl))
+@router.callback_query(F.data.startswith(callbacks.RescheduleCallback.choose_lesson_sl))
 async def choose_lesson_sl(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
 
@@ -41,7 +41,7 @@ async def choose_lesson_sl(callback: CallbackQuery, state: FSMContext, db: Sessi
     # Choose entity
 
 
-@router.callback_query(F.data.startswith(callbacks.Reschedule.choose_sl_entity))
+@router.callback_query(F.data.startswith(callbacks.RescheduleCallback.choose_sl_entity))
 async def choose_sl_entity(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
 

@@ -37,11 +37,11 @@ async def reschedule(message: Message, state: FSMContext, db: Session) -> None:
     kb_buttons = {}
     for event in cancellable_events:
         if isinstance(event, RecurrentEvent):
-            key = callbacks.Reschedule.choose_lesson_sl
+            key = callbacks.RescheduleCallback.choose_lesson_sl
         elif event.is_reschedule:
-            key = callbacks.Reschedule.choose_lesson_rs
+            key = callbacks.RescheduleCallback.choose_lesson_rs
         else:
-            key = callbacks.Reschedule.choose_lesson_ls
+            key = callbacks.RescheduleCallback.choose_lesson_ls
         kb_buttons[f"{key}{event.id}"] = str(event)
     keyboard = inline_keyboard(kb_buttons)
 

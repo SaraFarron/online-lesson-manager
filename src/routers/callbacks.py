@@ -1,4 +1,4 @@
-class Reschedule:
+class RescheduleCallback:
     base = "reschedule/"
     choose_lesson = f"{base}choose_lesson/"
     choose_lesson_sl = f"{choose_lesson}sl/"
@@ -10,8 +10,9 @@ class Reschedule:
     choose_time = f"{base}choose_time/"
 
 
-class AddLesson:
+class AddLessonCallback:
     base = "add_lesson/"
     choose_weekday = f"{base}choose_weekday/"
     choose_day = f"{base}choose_day/"
     choose_time = f"{base}choose_time/"
+    finish = f"{base}finish/"

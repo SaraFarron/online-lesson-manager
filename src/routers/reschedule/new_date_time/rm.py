@@ -11,7 +11,7 @@ from service import Service
 from utils import telegram_checks
 
 
-@router.callback_query(F.data.startswith(callbacks.Reschedule.rm_cancel))
+@router.callback_query(F.data.startswith(callbacks.RescheduleCallback.rm_cancel))
 async def rm_event(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
 

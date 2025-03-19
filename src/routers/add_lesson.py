@@ -6,15 +6,17 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils import keyboard
 from sqlalchemy.orm import Session
 
-from callbacks import AddLesson
+from callbacks import AddLessonCallback
+from states import AddLessonState
 from errors import AiogramTelegramError
 from help import Commands
 from messages import replies
 from middlewares import DatabaseMiddleware
 from service import Service, Keyboards
-from utils import telegram_checks
+from utils import telegram_checks, parse_date, get_callback_arg
 
 COMMAND = "/add_sl"
 
@@ -30,23 +32,57 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 
     service = Service(db)
     user = service.get_user(message.from_user.id)
-    keyboard = Keyboards.choose_lesson_type(AddLesson.choose_weekday, AddLesson.choose_day)
+    keyboard = Keyboards.choose_lesson_type(AddLessonCallback.choose_weekday, AddLessonCallback.choose_day)
 
     await message.answer(replies.CHOOSE_LESSON_TYPE, reply_markup=keyboard)
 
 
-@router.callback_query(F.data.startswith(AddLesson.choose_weekday))
+@router.callback_query(F.data.startswith(AddLessonCallback.choose_weekday))
 async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
 
     service = Service(db)
     user = service.get_user(message.from_user.id)
     weekdays = service.available_weekdays(user)
-    keyboard = Keyboards.weekdays(weekdays, AddLesson.choose_time)
+    keyboard = Keyboards.weekdays(weekdays, AddLessonCallback.choose_time)
 
     await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=keyboard)
 
 
+@router.callback_query(F.data.startswith(AddLessonCallback.choose_time))
+async def choose_day(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+    message = telegram_checks(callback)
+
+    service = Service(db)
+    user = service.get_user(message.from_user.id)
+    await state.set_state(AddLessonState.choose_day)
+    await message.answer(replies.CHOOSE_ONE_DATE)
+
+
+
+@router.callback_query(F.data.startswith(AddLessonCallback.choose_time))
+@router.message(AddLessonState.choose_day)
+async def choose_time(event: CallbackQuery | Message, state: FSMContext, db: Session) -> None:
+    message = telegram_checks(event)
+
+    service = Service(db)
+    user = service.get_user(message.from_user.id)
+
+    if isinstance(event, Message):
+        day = parse_date(message.text)
+        if day is None:
+            await state.set_state(AddLessonState.choose_day)
+            await message.answer(replies.WRONG_DATE)
+        await state.update_data(day=day)
+        available_time = service.available_time(user, day)
+    else:
+        weekday = get_callback_arg(event.data, AddLessonCallback.choose_time)
+        await state.update_data(weekday=weekday)
+        available_time = service.available_time(user, weekday)
+    keyboard = Keyboards.choose_time(available_time, AddLessonCallback.finish)
+
+    await state.clear()
+    await message.answer(replies.CHOOSE_TIME, reply_markup=keyboard)
 
 
 
@@ -57,8 +93,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
 
 
 
-
-@router.callback_query(F.data.startswith(AddLesson.CHOOSE_WEEKDAY))
+@router.callback_query(F.data.startswith(AddLessonCallback.CHOOSE_WEEKDAY))
 async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Second handler, gives a list of available times."""
     message = callback.message
@@ -75,7 +110,7 @@ async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMC
     await message.answer(replies.CHOOSE_TIME, reply_markup=keyboard.as_markup())
 
 
-@router.callback_query(F.data.startswith(AddLesson.choose_time))
+@router.callback_query(F.data.startswith(AddLessonCallback.choose_time))
 async def add_lesson_choose_time_handler(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     """Last handler, saves scheduled lesson."""
     message = callback.message

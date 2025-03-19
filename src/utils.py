@@ -33,6 +33,20 @@ def telegram_checks(event: Message | CallbackQuery):
         return event.message
 
 
+def parse_date(text: str):
+    for fmt in ("%Y-%m-%d", "%Y %m %d", "%Y.%m.%d"):
+        try:
+            date = datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        return date
+    return None
+
+
+def get_callback_arg(callback_data: str, callback: str):
+    return callback_data.replace(callback, "")
+
+
 def calc_end_time(time: time):
     """Calculate end time."""
     return time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0)

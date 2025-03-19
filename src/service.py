@@ -46,6 +46,10 @@ class Keyboards:
                 case 6: buttons[callback + "/6"] = "ВС" if short else "Воскресенье"
         return cls.inline_keyboard(buttons)
 
+    @classmethod
+    def choose_time(cls, times: list[time], callback: str):
+        buttons = {callback + str(t): str(t) for t in times}
+        return cls.inline_keyboard(buttons)
 
 class EventService:
     def __init__(self, db: Session):

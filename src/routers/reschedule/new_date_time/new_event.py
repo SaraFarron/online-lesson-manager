@@ -11,7 +11,7 @@ from service import Service
 from utils import telegram_checks
 
 
-@router.callback_query(F.data.startswith(callbacks.Reschedule.choose_date))
+@router.callback_query(F.data.startswith(callbacks.RescheduleCallback.choose_date))
 async def choose_date(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
 
@@ -21,7 +21,7 @@ async def choose_date(callback: CallbackQuery, state: FSMContext, db: Session) -
     # Choose time
 
 
-@router.callback_query(F.data.startswith(callbacks.Reschedule.choose_date))
+@router.callback_query(F.data.startswith(callbacks.RescheduleCallback.choose_date))
 async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
 
