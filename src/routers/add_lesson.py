@@ -1,21 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-from aiogram.utils import keyboard
 from sqlalchemy.orm import Session
 
 from callbacks import AddLessonCallback
-from states import AddLessonState
-from errors import AiogramTelegramError
 from help import Commands
 from messages import replies
 from middlewares import DatabaseMiddleware
 from service import Service, Keyboards
+from states import AddLessonState
 from utils import telegram_checks, parse_date, get_callback_arg
 
 COMMAND = "/add_sl"
@@ -59,7 +55,6 @@ async def choose_day(callback: CallbackQuery, state: FSMContext, db: Session) ->
     await message.answer(replies.CHOOSE_ONE_DATE)
 
 
-
 @router.callback_query(F.data.startswith(AddLessonCallback.choose_time))
 @router.message(AddLessonState.choose_day)
 async def choose_time(event: CallbackQuery | Message, state: FSMContext, db: Session) -> None:
@@ -85,44 +80,21 @@ async def choose_time(event: CallbackQuery | Message, state: FSMContext, db: Ses
     await message.answer(replies.CHOOSE_TIME, reply_markup=keyboard)
 
 
+@router.callback_query(F.data.startswith(AddLessonCallback.finish))
+async def finish(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+    message = telegram_checks(callback)
 
-
-
-
-
-
-
-
-@router.callback_query(F.data.startswith(AddLessonCallback.CHOOSE_WEEKDAY))
-async def add_lesson_choose_weekday_handler(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    """Second handler, gives a list of available times."""
-    message = callback.message
-    if not isinstance(message, Message):
-        raise AiogramTelegramError
-
-    weekday = int(callback.data.split(":")[1])  # type: ignore  # noqa: PGH003
-    await state.update_data(weekday=weekday)
     service = Service(db)
     user = service.get_user(message.from_user.id)
-    available_time = service.get_available_time(user, weekday)
-    keyboard = inline_keyboard(buttons(available_time))
 
-    await message.answer(replies.CHOOSE_TIME, reply_markup=keyboard.as_markup())
-
-
-@router.callback_query(F.data.startswith(AddLessonCallback.choose_time))
-async def add_lesson_choose_time_handler(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    """Last handler, saves scheduled lesson."""
-    message = callback.message
-    if not isinstance(message, Message):
-        raise AiogramTelegramError
-
-    time_str = callback.data.split(":")[1]  # type: ignore  # noqa: PGH003
-    time = datetime.strptime(time_str, "%H.%M").time()  # noqa: DTZ007
+    time = get_callback_arg(callback.data, AddLessonCallback.finish)
     state_data = await state.get_data()
-    service = Service(db)
-    user = service.get_user(message.from_user.id)
-    service.create_sl(user, state_data["weekday"], time)
-    db.commit()
+
+    if "day" in state_data:
+        service.create_lesson(user, state_data["day"], time)
+    elif "weekday" in state_data:
+        service.create_weekly_lesson(user, state_data["weekday"], time)
+    else:
+        raise ValueError(f"Unknown state data: {state_data}")
 
     await message.answer(replies.LESSON_ADDED)
