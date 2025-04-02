@@ -14,8 +14,8 @@ from messages import replies
 from db.models import RecurrentEvent
 from routers import callbacks
 from routers.reschedule.config import router
-from service import Service
-from utils import inline_keyboard, telegram_checks
+from service import Service,Keyboards
+from utils import telegram_checks
 
 COMMAND = "/reschedule"
 
@@ -43,6 +43,6 @@ async def reschedule(message: Message, state: FSMContext, db: Session) -> None:
         else:
             key = callbacks.RescheduleCallback.choose_lesson_ls
         kb_buttons[f"{key}{event.id}"] = str(event)
-    keyboard = inline_keyboard(kb_buttons)
+    keyboard = Keyboards.inline_keyboard(kb_buttons)
 
-    await message.answer(replies.CHOOSE_LESSON, reply_markup=keyboard.as_markup())
+    await message.answer(replies.CHOOSE_LESSON, reply_markup=keyboard)

@@ -4,10 +4,9 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from sqlalchemy.orm import Session
-from service import Service
+from service import Service, Keyboards
 from help import Commands
 from middlewares import DatabaseMiddleware
-from utils import inline_keyboard
 
 COMMAND = "week_schedule"
 router: Router = Router()
@@ -29,10 +28,10 @@ async def week_schedule_handler(event: Message | CallbackQuery, db: Session) -> 
     user = service.get_user(message.from_user.id)
 
     start_of_week, previous_week_start, next_week_start = get_week_params(event)
-    buttons = inline_keyboard((
+    keyboard = Keyboards.inline_keyboard((
         ("Предыдущая неделя", Callbacks.WEEK_START + previous_week_start),
         ("Следующая неделя", Callbacks.WEEK_START + next_week_start),
-    )).as_markup()
+    ))
     text = service.lessons_week_message(user, start_of_week.date())
 
-    await message.answer(text, reply_markup=buttons)
+    await message.answer(text, reply_markup=keyboard)

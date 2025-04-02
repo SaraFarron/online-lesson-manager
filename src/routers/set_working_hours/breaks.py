@@ -7,12 +7,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
-from service import Service
+from service import Service, Keyboards
 from config import config
 from errors import AiogramTelegramError
 from messages import replies
 from routers.set_working_hours.config import router
-from utils import inline_keyboard
 
 
 class SetWorkingHoursState(StatesGroup):
@@ -38,8 +37,8 @@ async def edit_breaks(callback: CallbackQuery, state: FSMContext, db: Session) -
         for b in breaks
     ]
 
-    keyboard = inline_keyboard([*breaks, ("Добавить перерыв", "swh:add_break")])
-    await message.answer(replies.EDIT_BREAKS, reply_markup=keyboard.as_markup())
+    keyboard = Keyboards.inline_keyboard([*breaks, ("Добавить перерыв", "swh:add_break")])
+    await message.answer(replies.EDIT_BREAKS, reply_markup=keyboard)
 
 
 @router.callback_query(F.data == "swh:add_break")
@@ -52,7 +51,7 @@ async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> 
     service = Service(db)
     teacher = service.get_teacher(message.from_user.id)
 
-    keyboard = inline_keyboard(
+    keyboard = Keyboards.inline_keyboard(
         [
             (config.WEEKDAY_MAP[d], f"swh:add_break_{d}")
             for d in range(7)
@@ -60,7 +59,7 @@ async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> 
         ],
     )
 
-    await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup())
+    await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=keyboard)
 
 
 @router.callback_query(F.data.startswith("swh:add_break_"))

@@ -4,11 +4,10 @@ from aiogram import F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
-from service import Service
+from service import Service, Keyboards
 from errors import AiogramTelegramError
 from messages import replies
 from routers.set_working_hours.config import router
-from utils import inline_keyboard
 
 
 @router.callback_query(F.data.startswith("swh:rm_weekend_"))
@@ -37,9 +36,9 @@ async def add_weekend(callback: CallbackQuery, state: FSMContext, db: Session) -
     teacher = service.get_teacher(message.from_user.id)
 
     existing_weekends = service.get_weekends(teacher)
-    keyboard = inline_keyboard(existing_weekends)
+    keyboard = Keyboards.inline_keyboard(existing_weekends)
 
-    await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=keyboard.as_markup())
+    await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=keyboard)
 
 
 @router.callback_query(F.data.startswith("swh:add_weekend_"))

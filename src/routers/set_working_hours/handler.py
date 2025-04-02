@@ -4,12 +4,11 @@ from aiogram import F
 from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.orm import Session
-from service import Service
+from service import Service, Keyboards
 from config import config
 from errors import AiogramTelegramError
 from help import AdminCommands
 from routers.set_working_hours.config import router
-from utils import inline_keyboard
 
 COMMAND = "/reschedule"
 
@@ -34,5 +33,5 @@ async def set_working_hours_handler(message: Message, db: Session) -> None:
         ("Изменить перерывы", "swh:edit_breaks"),
         ("Изменить каникулы", "swh:edit_vacations"),
     ]
-    keyboard = inline_keyboard(buttons)
-    await message.answer("Выберите действие", reply_markup=keyboard.as_markup())
+    keyboard = Keyboards.inline_keyboard(buttons)
+    await message.answer("Выберите действие", reply_markup=keyboard)

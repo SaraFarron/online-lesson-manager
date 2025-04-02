@@ -8,12 +8,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
-from service import Service
+from service import Service, Keyboards
 from errors import AiogramTelegramError, NoTextMessageError
 from help import Commands
 from messages import replies
 from middlewares import DatabaseMiddleware
-from utils import inline_keyboard
 
 COMMAND = "/edit_vacations"
 
@@ -42,10 +41,10 @@ async def vacations_hanlder(message: Message, state: FSMContext, db: Session):
     buttons = [(f"Убрать каникулы {h.start_date} - {h.end_date}", f"vacations:rm_v_{h.id}") for h in
                user.holidays]
     buttons.append(("Добавить каникулы", "vacations:add_vacation_start"))
-    keyboard = inline_keyboard(buttons)
+    keyboard = Keyboards.inline_keyboard(buttons)
 
     await state.update_data(user=user)
-    await message.answer(replies.EDIT_VACATIONS, reply_markup=keyboard.as_markup())
+    await message.answer(replies.EDIT_VACATIONS, reply_markup=keyboard)
 
 
 @router.callback_query(F.data == "vacations:add_vacation_start")

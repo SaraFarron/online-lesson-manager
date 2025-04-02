@@ -6,12 +6,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from callbacks import AddLessonCallback
+from routers.callbacks import AddLessonCallback
 from help import Commands
 from messages import replies
 from middlewares import DatabaseMiddleware
 from service import Service, Keyboards
-from states import AddLessonState
+from routers.states import AddLessonState
 from utils import telegram_checks, parse_date, get_callback_arg
 
 COMMAND = "/add_sl"

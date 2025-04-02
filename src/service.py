@@ -8,6 +8,7 @@ from src.db.repositories import EventRepo, RecurrentEventRepo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
+
 class Keyboards:
     @classmethod
     def inline_keyboard(cls, buttons: dict[str, str] | Iterable[tuple[str, str]], as_markup=True):
@@ -50,6 +51,15 @@ class Keyboards:
     def choose_time(cls, times: list[time], callback: str):
         buttons = {callback + str(t): str(t) for t in times}
         return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def check_notify(cls, callback: str):
+        buttons = {
+            "Отправить сообщения": callback + "send",
+            "Отмена": callback + "cancel",
+        }
+        return cls.inline_keyboard(buttons)
+
 
 class EventService:
     def __init__(self, db: Session):

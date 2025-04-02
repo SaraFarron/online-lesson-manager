@@ -16,3 +16,7 @@ class AddLessonCallback:
     choose_day = f"{base}choose_day/"
     choose_time = f"{base}choose_time/"
     finish = f"{base}finish/"
+
+
+class CheckNotifyCallbacks:
+    check_notify = "check_notify/"
