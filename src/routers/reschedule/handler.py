@@ -37,6 +37,8 @@ async def reschedule_lesson_handler(message: Message, state: FSMContext, db: Ses
     user = UserRepo(db).get_by_telegram_id(user_id)
     if user_id in config.BANNED_USERS or user is None:
         raise PermissionError
+
+    await state.clear()
     await state.update_data(user_id=user.id)
     schedule = Schedule(db)
     cancellable_events = schedule.events_to_cancel(user, datetime.now(config.TIMEZONE).date())

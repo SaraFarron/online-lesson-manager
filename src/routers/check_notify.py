@@ -31,6 +31,8 @@ async def check_notify_handler(message: Message, state: FSMContext, db: Session)
     """Handler receives messages with `/check_notify` command."""
     if message.from_user is None:
         raise AiogramTelegramError
+    await state.clear()
+
     teacher = TeacherRepo(db).get_by_telegram_id(message.from_user.id)
     if teacher is None:
         raise PermissionDeniedError
