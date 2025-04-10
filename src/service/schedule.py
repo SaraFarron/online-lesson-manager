@@ -75,7 +75,7 @@ class EventsService(SessionBase):
 
     def lessons_day(self, user: User, day: date, teacher: Teacher | None = None):
         """Get lessons for day."""
-        active_vacations = VacationsRepo(self.session).get_active_vacations(user, day)
+        active_vacations = VacationsRepo(self.session).has_active_vacations(user, day, teacher)
         if active_vacations:
             return []
 
@@ -316,7 +316,7 @@ class Schedule(EventsService):
                 return []
             events = []
             for e in self.events_day(day, user.teacher, None):
-                if vac_repo.get_active_vacations(e.user, day):
+                if vac_repo.has_active_vacations(e.user, day):
                     continue
                 events.append((e.start_time, e.end_time))
         else:
@@ -341,7 +341,7 @@ class Schedule(EventsService):
                 reschedule = res_repo.get_by_where(
                     (Reschedule.date == closest_date, Reschedule.start_time == t))
             if reschedule:
-                if not vac_repo.get_active_vacations(reschedule.user, reschedule.date):
+                if not vac_repo.has_active_vacations(reschedule.user, reschedule.date):
                     time_with_reschedules.append((t, f"Занято {reschedule.date}"))
             else:
                 time_with_reschedules.append((t, ""))

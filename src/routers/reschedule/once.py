@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from config import config
 from messages import buttons, replies
 from models import Reschedule, ScheduledLesson, User, Lesson
-from repositories import RescheduleRepo, ScheduledLessonRepo, UserRepo, LessonRepo
+from repositories import RescheduleRepo, ScheduledLessonRepo, UserRepo, LessonRepo, VacationsRepo
 from routers.reschedule.config import ORL_RS_CALLBACK, ORL_START_CALLBACK, ORL_ONE_START_CALLBACK, router
 from service import Schedule
 from utils import calc_end_time, inline_keyboard, send_message
@@ -209,6 +209,11 @@ async def orl_choose_time(message: Message, state: FSMContext, db: Session) -> N
     if not user:
         await state.clear()
         raise PermissionError
+
+    if VacationsRepo(db).has_active_vacations(user, date.date()):
+        await state.set_state(ChooseNewDateTime.time)
+        await message.answer(replies.DATE_IN_VACATIONS)
+        return
 
     schedule = Schedule(db)
     weekday = date if isinstance(date, int) else date.weekday()

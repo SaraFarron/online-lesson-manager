@@ -14,7 +14,7 @@ from help import Commands
 from messages import replies
 from middlewares import DatabaseMiddleware
 from models import Lesson
-from repositories import UserRepo
+from repositories import UserRepo, VacationsRepo
 from service import Schedule
 from aiogram.fsm.state import State, StatesGroup
 
@@ -78,6 +78,11 @@ async def add_lesson_choose_day_handler(message: Message, state: FSMContext, db:
     user = UserRepo(db).get(state_data["user_id"])
     if not user:
         raise PermissionDeniedError
+
+    if VacationsRepo(db).has_active_vacations(user, day):
+        await state.set_state(CreateNewLesson.new_date)
+        await message.answer(replies.DATE_IN_VACATIONS)
+        return
     available_time = Schedule(db).available_time_with_reschedules(user, day)
 
     buttons = []
