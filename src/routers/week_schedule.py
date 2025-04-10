@@ -35,6 +35,7 @@ async def week_schedule_handler(event: Message | CallbackQuery, db: Session) -> 
     t_user = event.from_user
     if not t_user:
         raise AiogramTelegramError
+
     user = UserRepo(db).get_by_telegram_id(t_user.id)
     message = event if isinstance(event, Message) else event.message
     start_date = dt.now(TIMEZONE) if isinstance(event, Message) else dt.strptime(event.data.split(":")[-1], "%d-%m-%Y")

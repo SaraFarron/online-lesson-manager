@@ -39,6 +39,8 @@ async def vacations_hanlder(message: Message, state: FSMContext, db: Session):
     """Handler for editing vacations."""
     if not isinstance(message, Message):
         raise AiogramTelegramError
+    await state.clear()
+
     user = UserRepo(db).get_by_telegram_id(message.from_user.id)
     if user is None:
         raise PermissionDeniedError

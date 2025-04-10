@@ -31,6 +31,8 @@ async def send_to_everyone_handler(message: Message, state: FSMContext, db: Sess
     """First handler, gives a list of available weekdays."""
     if not message.from_user:
         raise AiogramTelegramError
+    await state.clear()
+
     teacher = TeacherRepo(db).get_by_telegram_id(message.from_user.id)
     if teacher is None:
         raise PermissionDeniedError

@@ -37,6 +37,7 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
     """First handler, gives a list of available weekdays."""
     if message.from_user is None:
         raise AiogramTelegramError
+    await state.clear()
 
     user = UserRepo(db).get_by_telegram_id(message.from_user.id)
 
