@@ -73,23 +73,29 @@ class EventsService(SessionBase):
         start2, end2 = borders2
         return start1 < end2 and start2 < end1
 
+    def events_for_day(self, day: date, events: list[Reschedule | ScheduledLesson | Lesson]):
+        vac_repo = VacationsRepo(self.session)
+        return [
+             e for e in events if not vac_repo.has_active_vacations(e.user, day)
+        ]
+
     def lessons_day(self, user: User, day: date, teacher: Teacher | None = None):
         """Get lessons for day."""
-        active_vacations = VacationsRepo(self.session).has_active_vacations(user, day, teacher)
+        vac_repo = VacationsRepo(self.session)
+        active_vacations = vac_repo.has_active_vacations(user, day)
         if active_vacations:
             return []
 
-        reschedules = self.session.query(Reschedule).filter(Reschedule.date == day).all()
-        lessons = self.session.query(Lesson).filter(Lesson.date == day).all()
+        reschedules = self.events_for_day(day, self.session.query(Reschedule).filter(Reschedule.date == day).all())
+        lessons = self.events_for_day(day, self.session.query(Lesson).filter(Lesson.date == day).all())
         cancellations = [c.source_id for c in
                          self.session.query(Reschedule).filter(Reschedule.source_date == day).all()]
-        scheduled_lessons = (
-            self.session.query(ScheduledLesson)
-            .filter(
+        scheduled_lessons = self.events_for_day(
+            day,
+            self.session.query(ScheduledLesson).filter(
                 ScheduledLesson.weekday == day.weekday(),
                 ScheduledLesson.id.not_in(cancellations),
-            )
-            .all()
+            ).all()
         )
         reschedules_times = [r.start_time for r in reschedules]
 
