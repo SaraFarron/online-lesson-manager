@@ -132,16 +132,16 @@ class Lesson(BordersMixin, Base):
     @property
     def short_repr(self) -> str:
         """String model represetation."""
-        return f"Урок в {self.st_str}-{self.et_str}"
+        return f"Разовый урок в {self.st_str}-{self.et_str}"
 
     @property
     def long_repr(self):
         """String model represetation."""
-        return f"Урок в {self.st_str}-{self.et_str} у {self.user.username_dog}"
+        return f"Разовый урок в {self.st_str}-{self.et_str} у {self.user.username_dog}"
 
     def __repr__(self) -> str:
         """String model represetation."""
-        return f"Урок на {self.date} в {self.st_str}"
+        return f"Разовый урок на {self.date} в {self.st_str}"
 
 
 class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
