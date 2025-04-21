@@ -84,7 +84,20 @@ async def add_lesson_choose_day_handler(message: Message, state: FSMContext, db:
         await state.set_state(CreateNewLesson.new_date)
         await message.answer(replies.DATE_IN_VACATIONS)
         return
-    available_time = Schedule(db).available_time_with_reschedules(user, day)
+
+    schedule = Schedule(db)
+
+    weekday = day.weekday()
+    if weekday not in schedule.available_weekdays(user):
+        await state.set_state(CreateNewLesson.new_date)
+        await message.answer(replies.WRONG_WEEKDAY % config.WEEKDAY_MAP_FULL[weekday])
+        return
+    if not schedule.available_time(user, day):
+        await message.answer(replies.NO_AVAILABLE_TIME)
+        await state.clear()
+        return
+
+    available_time = schedule.available_time_with_reschedules(user, day)
 
     buttons = []
     for t, s in available_time:
