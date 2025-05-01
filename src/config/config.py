@@ -8,7 +8,7 @@ import pytz
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from config.base import getenv
+from src.config.base import getenv
 
 
 @dataclass
@@ -35,45 +35,11 @@ TIMEZONE = pytz.timezone("Europe/Moscow")
 
 MAX_BUTTON_ROWS = 10
 
-ADMINS = {
-    "irina_gambal": int(getenv("IRINA_TG_ID")),
-    "sara_farron": int(getenv("SARA_TG_ID")),
-}
-
 WORK_START = time(hour=9, minute=0, tzinfo=TIMEZONE)
 WORK_END = time(hour=21, minute=0, tzinfo=TIMEZONE)
 HRS_TO_CANCEL = 3
 
 WORK_SCHEDULE_TIMETABLE_PATH = Path(__file__).parent.parent.parent / "db/work_schedule.json"
-WEEKDAYS = {
-    "ПН": "Понедельник",
-    "ВТ": "Вторник",
-    "СР": "Среда",
-    "ЧТ": "Четверг",
-    "ПТ": "Пятница",
-    "СБ": "Суббота",
-    "ВС": "Воскресенье",
-}
-WEEKDAY_MAP = {
-    0: "ПН",
-    1: "ВТ",
-    2: "СР",
-    3: "ЧТ",
-    4: "ПТ",
-    5: "СБ",
-    6: "ВС",
-}
-WEEKDAY_MAP_FULL = {
-    0: "Понедельник",
-    1: "Вторник",
-    2: "Среда",
-    3: "Четверг",
-    4: "Пятница",
-    5: "Суббота",
-    6: "Воскресенье",
-}
-
-BANNED_USERS = []  # 5224132707, 5138705886, 6435412623, 1279494544, 568291561, 1101945040, 1690341677
 
 
 class Weekday(BaseModel):

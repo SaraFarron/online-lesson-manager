@@ -3,10 +3,8 @@ from aiogram.filters.exception import ExceptionTypeFilter
 from aiogram.types.error_event import ErrorEvent
 from aiogram.types.message import Message
 
-from config.config import ADMINS
 from logger import logger
 from messages import errors as err_msgs
-from utils import send_message
 
 
 class NoTextMessageError(Exception):
@@ -30,7 +28,7 @@ def add_errors(dp: Dispatcher):
 
     @dp.errors(ExceptionTypeFilter(AiogramTelegramError), F.update.message.as_("message"))
     async def aiogram_telegram_error(event: ErrorEvent, message: Message) -> None:
-        await send_message(ADMINS["sara_farron"], f"error occured: {event.exception}\nmessage: {message}")
+        # await send_message(ADMINS["sara_farron"], f"error occured: {event.exception}\nmessage: {message}")
         await message.answer(err_msgs.TELEGRAM_ERROR_OCCURED)
 
     @dp.errors(ExceptionTypeFilter(NoTextMessageError), F.update.message.as_("message"))

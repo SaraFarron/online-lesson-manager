@@ -13,6 +13,7 @@ class Model:
 
 class Executor(Model, Base):
     __tablename__ = 'executors'
+    code = Column(String, unique=True)
     user = relationship('User', backref='executor')
     jobs = relationship('Event', back_populates='executor')
     recurrent_jobs = relationship('RecurrentEvent', back_populates='executor')
@@ -20,7 +21,9 @@ class Executor(Model, Base):
 
 class User(Model, Base):
     __tablename__ = 'users'
-    name = Column(String)
+    telegram_id = Column(Integer, unique=True)
+    username = Column(String)
+    full_name = Column(String)
     role = Column(String)
     events = relationship('Event', back_populates='user')
     recurrent_events = relationship('RecurrentEvent', back_populates='user')
