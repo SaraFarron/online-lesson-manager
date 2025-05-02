@@ -1,9 +1,29 @@
+from collections.abc import Iterable
 from datetime import time
-from typing import Iterable
-from config.config import MAX_BUTTON_ROWS
+from enum import Enum
+
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
-from help import Commands, AdminCommands
+
+from config.config import MAX_BUTTON_ROWS
 from src.models import User
+
+
+class Commands(Enum):
+    ADD_SCHEDULED_LESSON = "Добавить урок"
+    ADD_ONE_LESSON = "Добавить разовый урок"
+    RESCHEDULE = "Отменить/перенести урок"
+    TODAY_SCHEDULE = "Расписание на сегодня"
+    WEEK_SCHEDULE = "Расписание на неделю"
+    VACATIONS = "Расписание каникул"
+
+
+class AdminCommands(Enum):
+    TODAY_SCHEDULE = "Расписание на сегодня"
+    WEEK_SCHEDULE = "Расписание на неделю"
+    EDIT_WORKING_HOURS = "Рабочее время"
+    CHECK_SCHEDULE = "Проверить расписание"
+    SEND_TO_EVERYONE = "Рассылка всем ученикам"
+    STUDENTS = "Ученики"
 
 
 class Keyboards:
@@ -26,7 +46,7 @@ class Keyboards:
     def choose_lesson_type(cls, recurrent_type_callback: str, single_type_callback: str):
         buttons = {
             recurrent_type_callback: "Еженедельное занятие",
-            single_type_callback: "Одноразовое занятие"
+            single_type_callback: "Одноразовое занятие",
         }
         return cls.inline_keyboard(buttons)
 
@@ -61,10 +81,13 @@ class Keyboards:
     def all_commands(cls, role: User.Roles):
         """Create a keyboard with available commands."""
         builder = ReplyKeyboardBuilder()
-        for command in Commands:
-            builder.button(text=command.value)
-        if role == User.Roles.TEACHER:
-            for command in AdminCommands:
-                builder.button(text=command.value)
+        match role:
+            case User.Roles.STUDENT:
+                for command in Commands:
+                    builder.button(text=command.value)
+            case User.Roles.TEACHER:
+                for command in AdminCommands:
+                    builder.button(text=command.value)
+            case _: raise Exception("message", "", "Unknown role")
         builder.adjust(2, repeat=True)
         return builder.as_markup()

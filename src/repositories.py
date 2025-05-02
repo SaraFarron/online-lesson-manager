@@ -26,7 +26,7 @@ class UserRepo:
 
         executor = self.db.query(Executor).filter(Executor.code == code).first()
         if executor is None:
-            raise Exception("Произошла ошибка, скорее всего ссылка на бота неверна")
+            raise Exception("message", "Произошла ошибка, скорее всего ссылка на бота неверна", "executor is None")
 
         user = User(
             telegram_id=tg_id,

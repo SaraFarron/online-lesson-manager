@@ -13,14 +13,14 @@ def add_errors(dp: Dispatcher):
     @dp.errors(ExceptionTypeFilter(Exception), F.update.message.as_("message"))
     async def value_error(event: ErrorEvent, message: Message) -> None:
         err_data = event.exception.args
-        if len(err_data) > 0 and err_data[0]:
-            await message.answer(err_data[0])
+        if not err_data:
+            logger.error(err_data)
+            logger.exception(event.exception)
+        elif err_data[0] == "message":
+            await message.answer(err_data[1])
+            logger.error(err_data[2])
         else:
             await message.answer(err_msgs.UNKNOWN)
-        if len(err_data) > 1 and err_data[1]:
-            logger.error(err_data[1])
-        else:
             logger.error(err_data)
-
-
+            logger.exception(event.exception)
     return dp
