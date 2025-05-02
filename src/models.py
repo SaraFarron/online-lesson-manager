@@ -30,6 +30,10 @@ class User(Model, Base):
     event_breaks = relationship('EventBreak', back_populates='user')
     executor_id = Column(Integer, ForeignKey('executors.id'), nullable=True, default=None)
 
+    class Roles:
+        TEACHER = "TEACHER"
+        STUDENT = "STUDENT"
+
 
 class Event(Model, Base):
     __tablename__ = 'events'

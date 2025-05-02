@@ -7,6 +7,10 @@ class UserRepo:
     def __init__(self, db: Session):
         self.db = db
 
+    @property
+    def roles(self):
+        return User.Roles
+
     def get_by_telegram_id(self, telegram_id: int):
         """Retrieve a user by telegram id."""
         return self.db.query(User).filter(User.telegram_id == telegram_id).first()
