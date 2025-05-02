@@ -3,7 +3,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from messages import replies
+from src.messages import replies
 
 COMMAND = "cancel"
 
@@ -19,4 +19,4 @@ async def cancel_handler(message: Message, state: FSMContext) -> None:
         return
 
     await state.clear()
-    await message.answer(replies.CANCEL)  # , reply_markup=ReplyKeyboardRemove()
+    await message.answer(replies.CANCEL)
