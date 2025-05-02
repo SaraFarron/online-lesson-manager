@@ -11,9 +11,12 @@ class UserRepo:
     def roles(self):
         return User.Roles
 
-    def get_by_telegram_id(self, telegram_id: int):
+    def get_by_telegram_id(self, telegram_id: int, raise_error: bool = False):
         """Retrieve a user by telegram id."""
-        return self.db.query(User).filter(User.telegram_id == telegram_id).first()
+        user = self.db.query(User).filter(User.telegram_id == telegram_id).first()
+        if user is None and raise_error:
+            raise Exception("message", "У вас нет прав на эту команду", "permission denied user is None")
+        return user
 
     def register(self, tg_id: int, tg_full_name: str, tg_username: str, role: str, code: str):
         """Register a user."""
@@ -36,4 +39,19 @@ class UserRepo:
             executor_id=executor.id,
         )
         self.db.add_all([user, event_log])
+        self.db.commit()
+
+
+class EventHistoryRepo:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create(self, author: str, scene: str, event_type: str, event_value: str):
+        log = EventHistory(
+            author=author,
+            scene=scene,
+            event_type=event_type,
+            event_value=event_value
+        )
+        self.db.add(log)
         self.db.commit()
