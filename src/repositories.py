@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from src.models import User, EventHistory, Executor
-from src.errors import PermissionDeniedError
+
+from src.models import EventHistory, Executor, User
 
 
 class UserRepo:
@@ -24,16 +24,16 @@ class UserRepo:
             event_value=f"tg_id: {tg_id}, tg_full_name: {tg_full_name}, tg_username: {tg_username}, role: {role}, executor: {code}",
         )
 
-        executor = self.db.query(Executor).filter(code=code).first()
+        executor = self.db.query(Executor).filter(Executor.code == code).first()
         if executor is None:
-            raise PermissionDeniedError
+            raise Exception("Произошла ошибка, скорее всего ссылка на бота неверна")
 
         user = User(
             telegram_id=tg_id,
             username=tg_username,
             full_name=tg_full_name,
             role=role,
-            executor_id=executor.id
+            executor_id=executor.id,
         )
         self.db.add_all([user, event_log])
         self.db.commit()
