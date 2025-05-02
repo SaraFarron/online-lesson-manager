@@ -33,7 +33,7 @@ DATE_FORMAT_HR = "%d.%m"
 TIME_FORMAT = "%H.%M"
 TIMEZONE = pytz.timezone("Europe/Moscow")
 
-MAX_BUTTON_ROWS = 10
+MAX_BUTTON_ROWS = 8
 
 WORK_START = time(hour=9, minute=0, tzinfo=TIMEZONE)
 WORK_END = time(hour=21, minute=0, tzinfo=TIMEZONE)
