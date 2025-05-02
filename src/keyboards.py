@@ -1,0 +1,70 @@
+from datetime import time
+from typing import Iterable
+from config.config import MAX_BUTTON_ROWS
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from help import Commands, AdminCommands
+from src.models import User
+
+
+class Keyboards:
+    @classmethod
+    def inline_keyboard(cls, buttons: dict[str, str] | Iterable[tuple[str, str]], as_markup=True):
+        """Create an inline keyboard."""
+        builder = InlineKeyboardBuilder()
+        if isinstance(buttons, dict):
+            for callback_data, text in buttons.items():
+                builder.button(text=text, callback_data=callback_data)
+        else:
+            for text, callback_data in buttons:
+                builder.button(text=text, callback_data=callback_data)
+        builder.adjust(1 if len(buttons) <= MAX_BUTTON_ROWS else 2, repeat=True)
+        if as_markup:
+            return builder.as_markup()
+        return builder
+
+    @classmethod
+    def choose_lesson_type(cls, recurrent_type_callback: str, single_type_callback: str):
+        buttons = {
+            recurrent_type_callback: "Еженедельное занятие",
+            single_type_callback: "Одноразовое занятие"
+        }
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def weekdays(cls, days: list[int], callback: str, short=False):
+        buttons = {}
+        for day in days:
+            match day:
+                case 0: buttons[callback + "/0"] = "ПН" if short else "Понедельник"
+                case 1: buttons[callback + "/1"] = "ВТ" if short else "Вторник"
+                case 2: buttons[callback + "/2"] = "СР" if short else "Среда"
+                case 3: buttons[callback + "/3"] = "ЧТ" if short else "Четверг"
+                case 4: buttons[callback + "/4"] = "ПТ" if short else "Пятница"
+                case 5: buttons[callback + "/5"] = "СБ" if short else "Суббота"
+                case 6: buttons[callback + "/6"] = "ВС" if short else "Воскресенье"
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def choose_time(cls, times: list[time], callback: str):
+        buttons = {callback + str(t): str(t) for t in times}
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def check_notify(cls, callback: str):
+        buttons = {
+            "Отправить сообщения": callback + "send",
+            "Отмена": callback + "cancel",
+        }
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def all_commands(cls, role: User.Roles):
+        """Create a keyboard with available commands."""
+        builder = ReplyKeyboardBuilder()
+        for command in Commands:
+            builder.button(text=command.value)
+        if role == User.Roles.TEACHER:
+            for command in AdminCommands:
+                builder.button(text=command.value)
+        builder.adjust(2, repeat=True)
+        return builder.as_markup()
