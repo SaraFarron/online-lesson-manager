@@ -61,11 +61,13 @@ class EventHistoryRepo(Repo):
 
 class EventRepo(Repo):
     def events_for_day(self, executor_id: int, day: date):
+        day_start = datetime.combine(day, time(0, 0))
+        day_end = datetime.combine(day, time(23, 59))
         events = self.db.execute(text("""
-            select start_time, end_time, user_id, event_type, is_reschedule from events
-            where executor_id = :executor_id and date = :day and cancelled is false
-            order by start_time desc
-        """), {"executor_id": executor_id, "day": day})
+            select start, end, user_id, event_type, is_reschedule from events
+            where executor_id = :executor_id and start >= :day_start and end <= :day_end and cancelled is false
+            order by start desc
+        """), {"executor_id": executor_id, "day_start": day_start, "day_end": day_end})
         return list(events)
 
     def available_time(self, executor_id: int, day: date):
