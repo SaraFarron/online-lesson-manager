@@ -42,10 +42,8 @@ class Event(Model, Base):
     executor_id = Column(Integer, ForeignKey('executors.id'), nullable=False)
     executor = relationship(Executor, back_populates='jobs')
     event_type = Column(String)
-    start_time = Column(Time)
-    end_time = Column(Time)
-    date = Column(Date)
-    weekday = Column(Integer)
+    start = Column(DateTime)
+    end = Column(DateTime)
     cancelled = Column(Boolean, default=False)
     reschedule_id = Column(Integer, ForeignKey('events.id'), nullable=True, default=None)
     reschedule = relationship('Event')
@@ -60,6 +58,10 @@ class Event(Model, Base):
     def et_str(self):
         """End time as a string."""
         return self.end_time.strftime(TIME_FMT)
+
+    class EventTypes:
+        LESSON = "Урок"
+        MOVED_LESSON = "Перенос"
 
     def __str__(self):
         if self.is_reschedule:
