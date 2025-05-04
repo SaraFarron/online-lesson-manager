@@ -1,12 +1,17 @@
+from datetime import date, datetime, timedelta, time
+
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.models import EventHistory, Executor, User
 
 
-class UserRepo:
+class Repo:
     def __init__(self, db: Session):
         self.db = db
 
+
+class UserRepo(Repo):
     @property
     def roles(self):
         return User.Roles
@@ -42,16 +47,51 @@ class UserRepo:
         self.db.commit()
 
 
-class EventHistoryRepo:
-    def __init__(self, db: Session):
-        self.db = db
-
+class EventHistoryRepo(Repo):
     def create(self, author: str, scene: str, event_type: str, event_value: str):
         log = EventHistory(
             author=author,
             scene=scene,
             event_type=event_type,
-            event_value=event_value
+            event_value=event_value,
         )
         self.db.add(log)
         self.db.commit()
+
+
+class EventRepo(Repo):
+    def events_for_day(self, executor_id: int, day: date):
+        events = self.db.execute(text("""
+            select start_time, end_time, user_id, event_type, is_reschedule from events
+            where executor_id = :executor_id and date = :day and cancelled is false
+            order by start_time desc
+        """), {"executor_id": executor_id, "day": day})
+        return list(events)
+
+    def available_time(self, executor_id: int, day: date):
+        events = self.events_for_day(executor_id, day)
+        start = datetime.combine(day, time(0, 0))
+        end = datetime.combine(day, time(23, 59))
+        return self._get_available_slots(start, end, timedelta(hours=1), events)
+
+    @staticmethod
+    def _get_available_slots(start: datetime, end: datetime, slot_size: timedelta, events: list):
+        # Generate all slots
+        all_slots = []
+        current_slot = start
+
+        while current_slot + slot_size <= end:
+            all_slots.append((current_slot, current_slot + slot_size))
+            current_slot += slot_size  # Move to the next slot
+
+        # Function to check if a slot overlaps with any occupied period
+        def is_occupied(slot):
+            slot_start, slot_end = slot
+            for occupied in events:
+                occupied_start, occupied_end = occupied[0], occupied[1]
+                if not (slot_end <= occupied_start or slot_start >= occupied_end):
+                    return True  # The slot is occupied
+            return False  # The slot is available
+
+        # Filter out occupied slots
+        return [slot for slot in all_slots if not is_occupied(slot)]

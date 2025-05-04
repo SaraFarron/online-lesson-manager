@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from datetime import time
+from datetime import time, datetime
 from enum import Enum
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
@@ -65,7 +65,8 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def choose_time(cls, times: list[time], callback: str):
+    def choose_time(cls, times: list[datetime], callback: str):
+        times = [datetime.strftime(t, "%H:%M") for t in times]
         buttons = {callback + str(t): str(t) for t in times}
         return cls.inline_keyboard(buttons)
 

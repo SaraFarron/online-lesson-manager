@@ -3,10 +3,16 @@ from datetime import datetime, time
 import aiohttp
 from aiogram.types import CallbackQuery
 from aiogram.types.message import Message
+from aiogram.fsm.state import State
 
 from src.config.base import getenv
 
 MAX_HOUR = 23
+
+
+class RouterConf:
+    scene = ""
+    command = "/" + scene
 
 
 def telegram_checks(event: Message | CallbackQuery):
