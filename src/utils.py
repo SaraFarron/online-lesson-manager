@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery
 from aiogram.types.message import Message
 from aiogram.fsm.state import State
 
-from src.config.base import getenv
+from src.core.base import getenv
 
 MAX_HOUR = 23
 

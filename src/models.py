@@ -1,11 +1,11 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Time, Boolean, Date, DateTime
-from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime, timedelta
 
-Base = declarative_base()
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import declarative_base, relationship
 
-TIME_FMT = "%H:%M"
-DATETIME_FMT = "%m.%d %H:%M"
+from src.core.config import DATETIME_FMT
+
+Base = declarative_base()
 
 
 class Model:
@@ -78,19 +78,6 @@ class RecurrentEvent(Model, Base):
     interval = Column(Integer)
     start = Column(DateTime)
     end = Column(DateTime, nullable=True)
-
-    @property
-    def st_str(self):
-        """Start time as a string."""
-        return self.start_time.strftime(TIME_FMT)
-
-    @property
-    def et_str(self):
-        """End time as a string."""
-        return self.end_time.strftime(TIME_FMT)
-
-    def __str__(self):
-        return f"Урок в {self.st_str}-{self.et_str}"
 
     def get_next_occurrence(self, after: datetime, before: datetime | None = None):
         """

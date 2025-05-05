@@ -4,7 +4,7 @@ from enum import Enum
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from config.config import MAX_BUTTON_ROWS
+from core.config import MAX_BUTTON_ROWS
 from src.models import User
 
 

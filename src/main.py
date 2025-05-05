@@ -3,9 +3,9 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
-from config import logs
-from config.config import Config, load_config
-from config.menu import ALL_COMMANDS
+from core import logs
+from core.config import Config, load_config
+from core.menu import ALL_COMMANDS
 from errors import add_errors
 from logger import logger
 from middlewares import LoggingMiddleware

@@ -4,8 +4,8 @@ from datetime import datetime, time
 import aiojobs
 from sqlalchemy.orm import Session
 
-from config import logs
-from config.config import TIMEZONE
+from core import logs
+from core.config import TIMEZONE
 from database import engine
 from logger import logger
 from messages import replies

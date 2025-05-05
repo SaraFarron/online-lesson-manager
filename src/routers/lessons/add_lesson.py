@@ -14,6 +14,7 @@ from src.middlewares import DatabaseMiddleware
 from src.models import Event
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
 from src.utils import get_callback_arg, parse_date, telegram_checks
+from src import config
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -59,7 +60,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     date = state_data["day"]
     time = datetime.strptime(
         get_callback_arg(callback.data, AddLessonCallback.choose_time),
-        "%H:%M"
+        config.TIME_FMT
     ).time()
 
     lesson = Event(

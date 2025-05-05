@@ -8,7 +8,7 @@ import pytz
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from src.config.base import getenv
+from src.core.base import getenv
 
 
 @dataclass
@@ -59,3 +59,8 @@ WEEKDAYS_MODEL = [
 ]
 
 MAX_HOUR = 23
+
+# New
+
+TIME_FMT = "%H:%M"
+DATETIME_FMT = "%Y.%m.%d %H:%M"
