@@ -33,7 +33,6 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
     await state.update_data(user_id=user.telegram_id)
     await message.answer("Введите дату занятия, формат ГГГГ ММ ДД")
     await state.set_state(AddLesson.choose_date)
-    EventHistoryRepo(db).create(user.username, AddLesson.scene, "handler", "")
 
 
 @router.message(AddLesson.choose_date)
@@ -44,16 +43,12 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     if date is None:
         await state.set_state(AddLesson.choose_date)
         await message.answer("Неверный формат даты, допустимые: ГГГГ ММ ДД, ГГГГ.ММ.ДД, ГГГГ-ММ-ДД")
-        EventHistoryRepo(db).create(
-            user.username, AddLesson.scene, "choose_date", f"wrong date fmt `{message.text}`"
-        )
         return
     await state.update_data(day=date)
 
     available_time = EventRepo(db).available_time(user.executor_id, date)
     available_time = [s for s, e in available_time]
     await message.answer("Выберите время", reply_markup=Keyboards.choose_time(available_time, AddLessonCallback.choose_time))
-    EventHistoryRepo(db).create(user.username, AddLesson.scene, "choose_date", str(date))
 
 
 @router.callback_query(F.data.startswith(AddLessonCallback.choose_time))
@@ -77,5 +72,5 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     db.add(lesson)
     db.commit()
     await message.answer("Занятие добавлено")
-    EventHistoryRepo(db).create(user.username, AddLesson.scene, "choose_time", str(time))
+    EventHistoryRepo(db).create(user.username, AddLesson.scene, "added_lesson", str(lesson))
     await state.clear()

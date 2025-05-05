@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 Base = declarative_base()
 
 TIME_FMT = "%H:%M"
+DATETIME_FMT = "%m.%d %H:%M"
 
 
 class Model:
@@ -52,21 +53,19 @@ class Event(Model, Base):
     @property
     def st_str(self):
         """Start time as a string."""
-        return self.start_time.strftime(TIME_FMT)
+        return self.start.strftime(DATETIME_FMT)
 
     @property
     def et_str(self):
         """End time as a string."""
-        return self.end_time.strftime(TIME_FMT)
+        return self.end.strftime(DATETIME_FMT)
 
     class EventTypes:
         LESSON = "Урок"
         MOVED_LESSON = "Перенос"
 
     def __str__(self):
-        if self.is_reschedule:
-            return f"Перенос в {self.st_str}-{self.et_str}"
-        return f"Урок в {self.st_str}-{self.et_str}"
+        return f"{self.event_type} {self.st_str}-{self.et_str}"
 
 class RecurrentEvent(Model, Base):
     __tablename__ = 'recurrent_events'

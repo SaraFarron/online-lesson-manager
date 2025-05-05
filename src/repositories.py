@@ -90,7 +90,8 @@ class EventRepo(Repo):
         def is_occupied(slot):
             slot_start, slot_end = slot
             for occupied in events:
-                occupied_start, occupied_end = occupied[0], occupied[1]
+                occupied_start = datetime.strptime(occupied[0], "%Y-%m-%d %H:%M:%S.%f")
+                occupied_end = datetime.strptime(occupied[1], "%Y-%m-%d %H:%M:%S.%f")
                 if not (slot_end <= occupied_start or slot_start >= occupied_end):
                     return True  # The slot is occupied
             return False  # The slot is available
