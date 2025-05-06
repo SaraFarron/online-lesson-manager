@@ -5,13 +5,13 @@ REMOVE_LESSON = "Отменить урок"
 GET_SCHEDULE = "Расписание на сегодня"
 GET_SCHEDULE_WEEK = "Расписание на неделю"
 EDIT_WORKING_HOURS = "Редактировать рабочие часы"
-ADD_SCHEDULED_LESSON = "Добавить урок в расписание"
+ADD_RECURRENT_LESSON = "Добавить урок в расписание"
 CREATE_SCHEDULED_LESSON = "Создать расписание"
 
 
 class Commands(Enum):
-    ADD_SCHEDULED_LESSON = "Добавить урок"
-    ADD_ONE_LESSON = "Добавить разовый урок"
+    ADD_RECURRENT_LESSON = "Добавить урок"
+    ADD_LESSON = "Добавить разовый урок"
     RESCHEDULE = "Отменить/перенести урок"
     TODAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"

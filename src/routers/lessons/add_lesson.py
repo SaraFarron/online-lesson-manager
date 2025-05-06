@@ -8,13 +8,14 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.callbacks import AddLessonCallback
-from src.help import Commands
+from src.core import config
+from src.core.help import Commands
 from src.keyboards import Keyboards
+from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import Event
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
 from src.utils import get_callback_arg, parse_date, telegram_checks
-from src import config
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -27,12 +28,12 @@ class AddLesson(StatesGroup):
 
 
 @router.message(Command(AddLesson.command))
-@router.message(F.text == Commands.ADD_ONE_LESSON.value)
+@router.message(F.text == Commands.ADD_LESSON.value)
 async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
     await state.update_data(user_id=user.telegram_id)
-    await message.answer("Введите дату занятия, формат ГГГГ ММ ДД")
+    await message.answer(replies.CHOOSE_LESSON_DATE)
     await state.set_state(AddLesson.choose_date)
 
 
@@ -43,13 +44,15 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     date = parse_date(message.text)
     if date is None:
         await state.set_state(AddLesson.choose_date)
-        await message.answer("Неверный формат даты, допустимые: ГГГГ ММ ДД, ГГГГ.ММ.ДД, ГГГГ-ММ-ДД")
+        await message.answer(replies.WRONG_DATE_FMT)
         return
     await state.update_data(day=date)
 
     available_time = EventRepo(db).available_time(user.executor_id, date)
     available_time = [s for s, e in available_time]
-    await message.answer("Выберите время", reply_markup=Keyboards.choose_time(available_time, AddLessonCallback.choose_time))
+    await message.answer(
+        replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLessonCallback.choose_time)
+    )
 
 
 @router.callback_query(F.data.startswith(AddLessonCallback.choose_time))
@@ -72,6 +75,6 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     )
     db.add(lesson)
     db.commit()
-    await message.answer("Занятие добавлено")
+    await message.answer(replies.LESSON_ADDED)
     EventHistoryRepo(db).create(user.username, AddLesson.scene, "added_lesson", str(lesson))
     await state.clear()
