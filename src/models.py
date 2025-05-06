@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-
+from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -9,7 +9,9 @@ Base = declarative_base()
 
 
 class Model:
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    @declared_attr
+    def id(cls):
+        return Column(Integer, primary_key=True, autoincrement=True)
 
 
 class Executor(Model, Base):
@@ -36,15 +38,38 @@ class User(Model, Base):
         STUDENT = "STUDENT"
 
 
-class Event(Model, Base):
+class EventModel(Model):
+    @declared_attr
+    def user_id(cls):
+        return Column(Integer, ForeignKey("users.id"))
+
+    @declared_attr
+    def user(cls):
+        return relationship(User, back_populates="events")
+
+    @declared_attr
+    def executor_id(cls):
+        return Column(Integer, ForeignKey("executors.id"), nullable=False)
+
+    @declared_attr
+    def executor(cls):
+        return relationship(Executor, back_populates="jobs")
+
+    @declared_attr
+    def event_type(cls):
+        return Column(String)
+
+    @declared_attr
+    def start(cls):
+        return Column(DateTime)
+
+    @declared_attr
+    def end(cls):
+        return Column(DateTime)
+
+
+class Event(EventModel, Base):
     __tablename__ = 'events'
-    user_id = Column(Integer, ForeignKey('users.id'))
-    user = relationship(User, back_populates='events')
-    executor_id = Column(Integer, ForeignKey('executors.id'), nullable=False)
-    executor = relationship(Executor, back_populates='jobs')
-    event_type = Column(String)
-    start = Column(DateTime)
-    end = Column(DateTime)
     cancelled = Column(Boolean, default=False)
     reschedule_id = Column(Integer, ForeignKey('events.id'), nullable=True, default=None)
     reschedule = relationship('Event')
@@ -67,17 +92,11 @@ class Event(Model, Base):
     def __str__(self):
         return f"{self.event_type} {self.st_str}-{self.et_str}"
 
-class RecurrentEvent(Model, Base):
+
+class RecurrentEvent(EventModel, Base):
     __tablename__ = 'recurrent_events'
-    user_id = Column(Integer, ForeignKey('users.id'))
-    user = relationship(User, back_populates='recurrent_events')
-    executor_id = Column(Integer, ForeignKey('executors.id'), nullable=False)
-    executor = relationship(Executor, back_populates='recurrent_jobs')
-    event_id = Column(Integer, ForeignKey('events.id'))
-    event = relationship(Event)
     interval = Column(Integer)
-    start = Column(DateTime)
-    end = Column(DateTime, nullable=True)
+    interval_end = Column(DateTime, nullable=True)
 
     def get_next_occurrence(self, after: datetime, before: datetime | None = None):
         """
@@ -94,10 +113,10 @@ class RecurrentEvent(Model, Base):
         return occur
 
 
-class EventBreak(Model, Base):
+class CancelledRecurrentEvent(Model, Base):
     __tablename__ = 'event_breaks'
-    user_id = Column(Integer, ForeignKey('users.id'))
-    user = relationship(User, back_populates='event_breaks')
+    event_id = Column(Integer, ForeignKey('recurrent_events.id'))
+    event = relationship(RecurrentEvent, back_populates="cancels")
     break_type = Column(String)
     start = Column(DateTime)
     end = Column(DateTime)
