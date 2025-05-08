@@ -60,6 +60,76 @@ class EventHistoryRepo(Repo):
 
 
 class EventRepo(Repo):
+    def recurrent_events(self, executor_id: int):
+        today = datetime.now().date()
+        events = self.db.execute(text("""
+            select start, end, user_id, event_type, interval, interval_end, id from recurrent_events
+            where executor_id = :executor_id and interval_end > :today
+            order by start desc
+        """), {"executor_id": executor_id, "today": today},
+        )
+        events = list(events)
+        if events:
+            cancellations = list(
+                self.db.execute(
+                    text("""
+                select event_id, break_type, start, end from event_breaks
+                where event_id in :event_ids
+            """),
+                    {"event_ids": [e[-1] for e in events]},
+                )
+            )
+        else:
+            cancellations = []
+        return events, list(cancellations)
+
+    def recurrent_events_for_day(self, executor_id: int, day: date):
+        events, cancels = self.recurrent_events(executor_id)
+        result = []
+        for event in events:
+            start_dt, end_dt, user_id, event_type, interval, interval_end, event_id = event
+
+            # Skip if event recurrence has ended before our target date
+            if interval_end and interval_end.date() < day:
+                continue
+
+            # Calculate the time difference between original start and target date
+            days_diff = (day - start_dt.date()).days
+
+            # Check if this event should occur on target_date based on interval
+            if interval > 0 and days_diff % interval == 0:
+                # Calculate the exact datetime on target_date
+                event_time = start_dt.time()
+                event_start = datetime.combine(day, event_time)
+                event_end = event_start + (end_dt - start_dt)
+
+                # Check if this occurrence is cancelled
+                is_cancelled = False
+                for cancel in cancels:
+                    c_event_id, break_type, c_start, c_end = cancel
+
+                    # Skip if cancellation is for a different event
+                    if c_event_id != event_id:
+                        continue
+
+                    # Check if cancellation overlaps with this event occurrence
+                    if (event_start < c_end) and (event_end > c_start):
+                        is_cancelled = True
+                        break
+
+                if not is_cancelled:
+                    # result.append(
+                    #     {
+                    #         "start": event_start,
+                    #         "end": event_end,
+                    #         "user_id": user_id,
+                    #         "event_type": event_type,
+                    #         "original_event_id": event_id,
+                    #     }
+                    # )
+                    result.append((event_start, event_end, user_id, event_type, False))
+        return result
+
     def events_for_day(self, executor_id: int, day: date):
         day_start = datetime.combine(day, time(0, 0))
         day_end = datetime.combine(day, time(23, 59))
@@ -69,6 +139,27 @@ class EventRepo(Repo):
             order by start desc
         """), {"executor_id": executor_id, "day_start": day_start, "day_end": day_end})
         return list(events)
+
+    def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
+        events = self.events_for_day(executor_id, day) + self.recurrent_events_for_day(executor_id, day)
+        events = sorted(events, key=lambda x: x[0])
+        if user_id is not None:
+            events = filter(lambda x: x[2] == user_id, events)
+        return events
+
+    def available_weekdays(self, executor_id: int):
+        start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
+        result = []
+        for i in range(7):
+            current_day = start_of_week + timedelta(days=i)
+            events = self.recurrent_events_for_day(executor_id, current_day)
+            start = datetime.combine(current_day, time(0, 0))
+            end = datetime.combine(current_day, time(23, 59))
+            available_time = self._get_available_slots(start, end, timedelta(hours=1), events)
+            if available_time:
+                result.append(i)
+        return result
+
 
     def available_time(self, executor_id: int, day: date):
         events = self.events_for_day(executor_id, day)
