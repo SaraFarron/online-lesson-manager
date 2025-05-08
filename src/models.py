@@ -18,8 +18,6 @@ class Executor(Model, Base):
     __tablename__ = 'executors'
     code = Column(String, unique=True)
     user = relationship('User', backref='executor')
-    jobs = relationship('Event', back_populates='executor')
-    recurrent_jobs = relationship('RecurrentEvent', back_populates='executor')
 
 
 class User(Model, Base):
@@ -28,9 +26,6 @@ class User(Model, Base):
     username = Column(String)
     full_name = Column(String)
     role = Column(String)
-    events = relationship('Event', back_populates='user')
-    recurrent_events = relationship('RecurrentEvent', back_populates='user')
-    event_breaks = relationship('EventBreak', back_populates='user')
     executor_id = Column(Integer, ForeignKey('executors.id'), nullable=True, default=None)
 
     class Roles:
@@ -45,7 +40,7 @@ class EventModel(Model):
 
     @declared_attr
     def user(cls):
-        return relationship(User, back_populates="events")
+        return relationship(User)
 
     @declared_attr
     def executor_id(cls):
@@ -53,7 +48,7 @@ class EventModel(Model):
 
     @declared_attr
     def executor(cls):
-        return relationship(Executor, back_populates="jobs")
+        return relationship(Executor)
 
     @declared_attr
     def event_type(cls):
@@ -116,7 +111,7 @@ class RecurrentEvent(EventModel, Base):
 class CancelledRecurrentEvent(Model, Base):
     __tablename__ = 'event_breaks'
     event_id = Column(Integer, ForeignKey('recurrent_events.id'))
-    event = relationship(RecurrentEvent, back_populates="cancels")
+    event = relationship(RecurrentEvent)
     break_type = Column(String)
     start = Column(DateTime)
     end = Column(DateTime)
