@@ -92,6 +92,14 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
+    def once_or_forever(cls, callback: str):
+        buttons = {
+            callback + "forever": "Навсегда",
+            callback + "once": "На одну дату",
+        }
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
     def check_notify(cls, callback: str):
         buttons = {
             "Отправить сообщения": callback + "send",

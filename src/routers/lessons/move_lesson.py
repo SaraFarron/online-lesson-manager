@@ -12,7 +12,7 @@ from src.core.help import Commands
 from src.keyboards import Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.models import Event
+from src.models import Event, RecurrentEvent
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
 from src.utils import get_callback_arg, parse_date, telegram_checks
 
@@ -28,6 +28,7 @@ class MoveLesson(StatesGroup):
     move_or_delete = f"{base_callback}move_or_delete/"
     type_date = State()
     choose_time = f"{base_callback}move/choose_time/"
+    once_or_forever = f"{base_callback}once_or_forever/"
 
 
 @router.message(Command(MoveLesson.command))
@@ -68,16 +69,17 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
         await message.answer(replies.LESSON_DELETED)
         return
     if action == "delete" and state_data["lesson"].startswith("re"):
-        pass
+        await state.update_data(action=action)
+        await message.answer(replies.DELETE_ONCE_OR_FOREVER, reply_markup=Keyboards.once_or_forever(MoveLesson.once_or_forever))
     elif action == "move" and state_data["lesson"].startswith("e"):
         await state.set_state(MoveLesson.type_date)
         await message.answer(replies.CHOOSE_LESSON_DATE)
     elif action == "move" and state_data["lesson"].startswith("re"):
-        pass
+        await state.update_data(action=action)
+        await message.answer(replies.MOVE_ONCE_OR_FOREVER, reply_markup=Keyboards.once_or_forever(MoveLesson.once_or_forever))
     else:
         await message.answer(replies.UNKNOWN_ACTION_ERR)
         await state.clear()
-    # TODO
 
 # ---- MOVE ONE LESSON ---- #
 
@@ -132,3 +134,32 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         user.username, MoveLesson.scene, "moved_one_lesson", f"{old_lesson} -> {new_lesson}"
     )
     await state.clear()
+
+# ---- RECURRENT LESSON ---- #
+
+@router.callback_query(F.data.startswith(MoveLesson.once_or_forever))
+async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+    message = telegram_checks(callback)
+    state_data = await state.get_data()
+    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+
+    mode = get_callback_arg(callback.data, MoveLesson.once_or_forever)
+    if mode == "once" and state_data["action"] == "delete":
+        pass
+    elif mode == "forever" and state_data["action"] == "delete":
+        lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("e", "")))
+        if lesson is None:
+            await message.answer(replies.LESSON_NOT_FOUND_ERR)
+            await state.clear()
+            return
+        lesson_str = str(lesson)
+        db.delete(lesson)
+        db.commit()
+        EventHistoryRepo(db).create(user.username, MoveLesson.scene, "deleted_recur_lesson", lesson_str)
+    elif mode == "once" and state_data["action"] == "move":
+        pass
+    elif mode == "forever" and state_data["action"] == "move":
+        pass
+
+# ---- RECURRENT LESSON MOVE FOREVER ---- #
+
