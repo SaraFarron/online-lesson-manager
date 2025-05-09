@@ -1,19 +1,19 @@
+from datetime import datetime, timedelta
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.state import StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core.help import Commands
-from datetime import timedelta, datetime
 from src.keyboards import Keyboards
+from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import RecurrentEvent
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import get_callback_arg, parse_date, telegram_checks
-from src.core import config
-from src.messages import replies
+from src.utils import get_callback_arg, telegram_checks
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())

@@ -4,8 +4,8 @@ from enum import Enum
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from core.config import MAX_BUTTON_ROWS
-from src.models import User
+from core.config import MAX_BUTTON_ROWS, TIME_FMT
+from src.models import User, RecurrentEvent, Event
 
 
 class Commands(Enum):
@@ -66,8 +66,20 @@ class Keyboards:
 
     @classmethod
     def choose_time(cls, times: list[datetime], callback: str):
-        times = [datetime.strftime(t, "%H:%M") for t in times]
+        times = [datetime.strftime(t, TIME_FMT) for t in times]
         buttons = {callback + str(t): str(t) for t in times}
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def choose_lesson(cls, lessons: list[tuple], callback: str):
+        buttons = {}
+        for lesson in lessons:
+            if lesson[3] == RecurrentEvent.EventTypes.LESSON:
+                buttons[callback + "re" + lesson[-1]] = f"{lesson[3]} в {datetime.strftime(lesson[0], TIME_FMT)}"
+            elif lesson[3] in (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON):
+                buttons[callback + "e" + lesson[-1]] = f"{lesson[3]} в {datetime.strftime(lesson[0], TIME_FMT)}"
+            else:
+                continue
         return cls.inline_keyboard(buttons)
 
     @classmethod

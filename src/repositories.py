@@ -1,9 +1,9 @@
-from datetime import date, datetime, timedelta, time
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.models import EventHistory, Executor, User
+from src.models import EventHistory, Executor, User, Event, RecurrentEvent
 
 
 class Repo:
@@ -60,28 +60,51 @@ class EventHistoryRepo(Repo):
 
 
 class EventRepo(Repo):
-    def recurrent_events(self, executor_id: int):
+    LESSON_TYPES = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
+
+    def _events_executor(self, executor_id: int):
         today = datetime.now().date()
-        events = self.db.execute(text("""
-            select start, end, user_id, event_type, interval, interval_end, id from recurrent_events
-            where executor_id = :executor_id and interval_end > :today
-            order by start desc
-        """), {"executor_id": executor_id, "today": today},
+        return list(
+            self.db.execute(
+                text("""
+                        select start, end, user_id, event_type, is_reschedule, id from events
+                        where executor_id = :executor_id and start >= :today and cancelled is false
+                        order by start desc
+                """),
+                {"executor_id": executor_id, "today": today},
+            )
         )
-        events = list(events)
+
+    def _recurrent_events_executor(self, executor_id: int):
+        today = datetime.now().date()
+        return list(
+            self.db.execute(
+                text("""
+                        select start, end, user_id, event_type, interval, interval_end, id from recurrent_events
+                        where executor_id = :executor_id and interval_end > :today
+                        order by start desc
+                """),
+                {"executor_id": executor_id, "today": today},
+            )
+        )
+
+    def recurrent_events_cancels(self, events: list[tuple]):
         if events:
-            cancellations = list(
+            return list(
                 self.db.execute(
                     text("""
                 select event_id, break_type, start, end from event_breaks
                 where event_id in :event_ids
             """),
                     {"event_ids": [e[-1] for e in events]},
-                )
+                ),
             )
-        else:
-            cancellations = []
-        return events, list(cancellations)
+        return []
+
+    def recurrent_events(self, executor_id: int):
+        events = self._recurrent_events_executor(executor_id)
+        cancellations = self.recurrent_events_cancels(events)
+        return events, cancellations
 
     def recurrent_events_for_day(self, executor_id: int, day: date):
         events, cancels = self.recurrent_events(executor_id)
@@ -196,3 +219,13 @@ class EventRepo(Repo):
 
         # Filter out occupied slots
         return [slot for slot in all_slots if not is_occupied(slot)]
+
+    def all_user_lessons(self, user: User):
+        recurs = self._recurrent_events_executor(user.executor_id)
+        events = self._events_executor(user.executor_id)
+        result = []
+        for e in recurs + events:
+            if e.event_type not in self.LESSON_TYPES or e.user_id != user.id:
+                continue
+            result.append(e)
+        return result

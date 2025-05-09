@@ -12,7 +12,7 @@ CREATE_SCHEDULED_LESSON = "Создать расписание"
 class Commands(Enum):
     ADD_RECURRENT_LESSON = "Добавить урок"
     ADD_LESSON = "Добавить разовый урок"
-    RESCHEDULE = "Отменить/перенести урок"
+    MOVE_LESSON = "Отменить/перенести урок"
     TODAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
     VACATIONS = "Расписание каникул"

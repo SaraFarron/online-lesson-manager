@@ -108,7 +108,7 @@ class RecurrentEvent(EventModel, Base):
         return occur
 
     class EventTypes:
-        LESSON = "Урок"
+        LESSON = "Еженедельный урок"
 
 
 class CancelledRecurrentEvent(Model, Base):
