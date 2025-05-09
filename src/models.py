@@ -119,6 +119,9 @@ class CancelledRecurrentEvent(Model, Base):
     start = Column(DateTime)
     end = Column(DateTime)
 
+    class CancelTypes:
+        LESSON_CANCELED = "Отмена занятия"
+
 
 class EventHistory(Model, Base):
     __tablename__ = 'event_history'
