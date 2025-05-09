@@ -224,7 +224,6 @@ class EventRepo(Repo):
         recurs = self._recurrent_events_executor(user.executor_id)
         events = self._events_executor(user.executor_id)
         result = []
-        print(events)
         for e in recurs + events:
             if e.event_type not in self.LESSON_TYPES or e.user_id != user.id:
                 continue

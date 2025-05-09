@@ -76,7 +76,6 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
         pass
     else:
         await message.answer(replies.UNKNOWN_ACTION_ERR)
-        print(action)
         await state.clear()
     # TODO
 
