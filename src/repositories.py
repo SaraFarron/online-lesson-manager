@@ -160,11 +160,18 @@ class EventRepo(Repo):
                 result.append(i)
         return result
 
-
     def available_time(self, executor_id: int, day: date):
         events = self.events_for_day(executor_id, day)
         start = datetime.combine(day, time(0, 0))
         end = datetime.combine(day, time(23, 59))
+        return self._get_available_slots(start, end, timedelta(hours=1), events)
+
+    def available_time_weekday(self, executor_id: int, weekday: int):
+        start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
+        current_day = start_of_week + timedelta(days=weekday)
+        events = self.recurrent_events_for_day(executor_id, current_day)
+        start = datetime.combine(current_day, time(0, 0))
+        end = datetime.combine(current_day, time(23, 59))
         return self._get_available_slots(start, end, timedelta(hours=1), events)
 
     @staticmethod

@@ -55,13 +55,13 @@ class Keyboards:
         buttons = {}
         for day in days:
             match day:
-                case 0: buttons[callback + "/0"] = "ПН" if short else "Понедельник"
-                case 1: buttons[callback + "/1"] = "ВТ" if short else "Вторник"
-                case 2: buttons[callback + "/2"] = "СР" if short else "Среда"
-                case 3: buttons[callback + "/3"] = "ЧТ" if short else "Четверг"
-                case 4: buttons[callback + "/4"] = "ПТ" if short else "Пятница"
-                case 5: buttons[callback + "/5"] = "СБ" if short else "Суббота"
-                case 6: buttons[callback + "/6"] = "ВС" if short else "Воскресенье"
+                case 0: buttons[callback + "0"] = "ПН" if short else "Понедельник"
+                case 1: buttons[callback + "1"] = "ВТ" if short else "Вторник"
+                case 2: buttons[callback + "2"] = "СР" if short else "Среда"
+                case 3: buttons[callback + "3"] = "ЧТ" if short else "Четверг"
+                case 4: buttons[callback + "4"] = "ПТ" if short else "Пятница"
+                case 5: buttons[callback + "5"] = "СБ" if short else "Суббота"
+                case 6: buttons[callback + "6"] = "ВС" if short else "Воскресенье"
         return cls.inline_keyboard(buttons)
 
     @classmethod

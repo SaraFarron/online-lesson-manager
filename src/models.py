@@ -90,8 +90,8 @@ class Event(EventModel, Base):
 
 class RecurrentEvent(EventModel, Base):
     __tablename__ = 'recurrent_events'
-    interval = Column(Integer)
-    interval_end = Column(DateTime, nullable=True)
+    interval = Column(Integer)  # days
+    interval_end = Column(DateTime, nullable=True, default=None)
 
     def get_next_occurrence(self, after: datetime, before: datetime | None = None):
         """
@@ -106,6 +106,9 @@ class RecurrentEvent(EventModel, Base):
         if before and occur > before:
             return None
         return occur
+
+    class EventTypes:
+        LESSON = "Урок"
 
 
 class CancelledRecurrentEvent(Model, Base):
