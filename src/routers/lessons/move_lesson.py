@@ -282,6 +282,7 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
         replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_new_time)
     )
 
+
 @router.callback_query(F.data.startswith(MoveLesson.choose_weekday))
 async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
