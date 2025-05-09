@@ -6,6 +6,7 @@ from src.routers.common.help import router as help_router
 # Lessons
 from src.routers.lessons.add_lesson import router as add_lesson_router
 from src.routers.lessons.add_recurrent_lesson import router as add_rec_lesson_router
+from src.routers.lessons.move_lesson import router as move_lesson_router
 
 all_routers = [
     cancel_router,
@@ -13,6 +14,7 @@ all_routers = [
     help_router,
     add_lesson_router,
     add_rec_lesson_router,
+    move_lesson_router,
 ]
 
 __all__ = ["all_routers"]

@@ -69,7 +69,7 @@ class EventRepo(Repo):
                 text("""
                         select start, end, user_id, event_type, is_reschedule, id from events
                         where executor_id = :executor_id and start >= :today and cancelled is false
-                        order by start desc
+                        order by start
                 """),
                 {"executor_id": executor_id, "today": today},
             )
@@ -82,7 +82,7 @@ class EventRepo(Repo):
                 text("""
                         select start, end, user_id, event_type, interval, interval_end, id from recurrent_events
                         where executor_id = :executor_id and interval_end > :today
-                        order by start desc
+                        order by start
                 """),
                 {"executor_id": executor_id, "today": today},
             )
@@ -224,8 +224,17 @@ class EventRepo(Repo):
         recurs = self._recurrent_events_executor(user.executor_id)
         events = self._events_executor(user.executor_id)
         result = []
+        print(events)
         for e in recurs + events:
             if e.event_type not in self.LESSON_TYPES or e.user_id != user.id:
                 continue
             result.append(e)
         return result
+
+    def cancel_event(self, event_id: int):
+        event = self.db.get(Event, event_id)
+        if event:
+            event.cancelled = True
+            self.db.commit()
+            return event
+        raise Exception("message", "Урок не найден", f"event with id {event_id} does not exist")

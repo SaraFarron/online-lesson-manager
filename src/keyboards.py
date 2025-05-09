@@ -74,12 +74,21 @@ class Keyboards:
     def choose_lesson(cls, lessons: list[tuple], callback: str):
         buttons = {}
         for lesson in lessons:
+            lesson_time = datetime.strftime(datetime.strptime(lesson[0], "%Y-%m-%d %H:%M:%S.%f"), TIME_FMT)
             if lesson[3] == RecurrentEvent.EventTypes.LESSON:
-                buttons[callback + "re" + lesson[-1]] = f"{lesson[3]} в {datetime.strftime(lesson[0], TIME_FMT)}"
+                buttons[callback + "re" + str(lesson[-1])] = f"{lesson[3]} в {lesson_time}"
             elif lesson[3] in (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON):
-                buttons[callback + "e" + lesson[-1]] = f"{lesson[3]} в {datetime.strftime(lesson[0], TIME_FMT)}"
+                buttons[callback + "e" + str(lesson[-1])] = f"{lesson[3]} в {lesson_time}"
             else:
                 continue
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def move_or_delete(cls, callback: str):
+        buttons = {
+            callback + "move": "Перенести",
+            callback + "delete": "Отменить",
+        }
         return cls.inline_keyboard(buttons)
 
     @classmethod
