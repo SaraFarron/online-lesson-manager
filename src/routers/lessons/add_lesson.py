@@ -7,7 +7,6 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.callbacks import AddLessonCallback
 from src.core import config
 from src.core.help import Commands
 from src.keyboards import Keyboards
@@ -24,7 +23,10 @@ router.callback_query.middleware(DatabaseMiddleware())
 class AddLesson(StatesGroup):
     scene = "add_lesson"
     command = "/" + scene
+    base_callback = scene + "/"
     choose_date = State()
+    choose_time = f"{base_callback}choose_time/"
+    finish = f"{base_callback}finish/"
 
 
 @router.message(Command(AddLesson.command))
@@ -32,6 +34,7 @@ class AddLesson(StatesGroup):
 async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+
     await state.update_data(user_id=user.telegram_id)
     await message.answer(replies.CHOOSE_LESSON_DATE)
     await state.set_state(AddLesson.choose_date)
@@ -41,6 +44,7 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+
     date = parse_date(message.text)
     if date is None:
         await state.set_state(AddLesson.choose_date)
@@ -51,18 +55,19 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     available_time = EventRepo(db).available_time(user.executor_id, date)
     available_time = [s for s, e in available_time]
     await message.answer(
-        replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLessonCallback.choose_time)
+        replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time)
     )
 
 
-@router.callback_query(F.data.startswith(AddLessonCallback.choose_time))
+@router.callback_query(F.data.startswith(AddLesson.choose_time))
 async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+
     date = state_data["day"]
     time = datetime.strptime(
-        get_callback_arg(callback.data, AddLessonCallback.choose_time),
+        get_callback_arg(callback.data, AddLesson.choose_time),
         config.TIME_FMT
     ).time()
 
