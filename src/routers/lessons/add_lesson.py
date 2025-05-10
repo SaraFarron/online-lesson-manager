@@ -60,7 +60,6 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
         return
 
     available_time = EventRepo(db).available_time(user.executor_id, date)
-    available_time = [s for s, e in available_time]
     await message.answer(
         replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time)
     )
