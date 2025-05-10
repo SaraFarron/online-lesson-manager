@@ -33,6 +33,7 @@ UNKNOWN_ACTION_ERR = "Произошла ошибка: неизвестное д
 LESSON_NOT_FOUND_ERR = "Произошла ошибка: урок не найден"
 
 # Lessons
+CHOOSE_CURRENT_LESSON_DATE = "Введите дату занятия, формат ГГГГ ММ ДД"
 CHOOSE_LESSON_DATE = "Введите дату нового занятия, формат ГГГГ ММ ДД"
 CHOOSE_TIME = "Выберите время"
 LESSON_ADDED = "Занятие добавлено"

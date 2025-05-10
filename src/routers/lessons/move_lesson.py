@@ -152,7 +152,7 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
     mode = get_callback_arg(callback.data, MoveLesson.once_or_forever)
     if mode == "once" and state_data["action"] == "delete":
         await state.set_state(MoveLesson.type_recur_date)
-        await message.answer(replies.CHOOSE_LESSON_DATE)
+        await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
     elif mode == "forever" and state_data["action"] == "delete":
         lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("re", "")))
         if lesson is None:
@@ -162,10 +162,12 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
         lesson_str = str(lesson)
         db.delete(lesson)
         db.commit()
+        await message.answer(replies.LESSON_DELETED)
+        await state.clear()
         EventHistoryRepo(db).create(user.username, MoveLesson.scene, "deleted_recur_lesson", lesson_str)
     elif mode == "once" and state_data["action"] == "move":
         await state.set_state(MoveLesson.type_recur_date)
-        await message.answer(replies.CHOOSE_LESSON_DATE)
+        await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
     elif mode == "forever" and state_data["action"] == "move":
         weekdays = EventRepo(db).available_weekdays(user.id)
         await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, MoveLesson.choose_weekday))
@@ -283,26 +285,30 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
     )
 
 
-@router.callback_query(F.data.startswith(MoveLesson.choose_weekday))
+@router.callback_query(F.data.startswith(MoveLesson.choose_recur_new_time))
 async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
 
-    time = get_callback_arg(callback.data, MoveLesson.choose_recur_time)
+    time = get_callback_arg(callback.data, MoveLesson.choose_recur_new_time)
     start = datetime.combine(state_data["new_day"], datetime.strptime(time, TIME_FMT).time())
-    lesson = RecurrentEvent(
+    lesson = Event(
         user_id=user.id,
         executor_id=user.executor_id,
-        event_type=RecurrentEvent.EventTypes.LESSON,
+        event_type=Event.EventTypes.MOVED_LESSON,
         start=start,
         end=start + timedelta(hours=1),
-        interval=7,
+        is_reschedule=True,
     )
-    old_lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("re", "")))
-    old_lesson_str = str(old_lesson)
-    db.delete(old_lesson)
-    db.add(lesson)
+    cancel = CancelledRecurrentEvent(
+        event_id=int(state_data["lesson"].replace("re", "")),
+        break_type=CancelledRecurrentEvent.CancelTypes.LESSON_CANCELED,
+        start=start,
+        end=start + timedelta(hours=1),
+    )
+    old_lesson_str = f"{Event.EventTypes.LESSON} {state_data['day']} {time}"
+    db.add_all([lesson, cancel])
     db.commit()
     await message.answer(replies.LESSON_MOVED)
     EventHistoryRepo(db).create(
