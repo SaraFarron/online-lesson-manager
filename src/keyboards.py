@@ -4,7 +4,7 @@ from enum import Enum
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from core.config import MAX_BUTTON_ROWS, TIME_FMT, DATE_FMT, WEEKDAY_MAP
+from core.config import MAX_BUTTON_ROWS, TIME_FMT, DATE_FMT, WEEKDAY_MAP, DB_DATETIME
 from src.models import User, RecurrentEvent, Event
 
 
@@ -74,7 +74,7 @@ class Keyboards:
     def choose_lesson(cls, lessons: list[tuple], callback: str):
         buttons = {}
         for lesson in lessons:
-            lesson_datetime = datetime.strptime(lesson[0], "%Y-%m-%d %H:%M:%S.%f")
+            lesson_datetime = datetime.strptime(lesson[0], DB_DATETIME)
             lesson_date = datetime.strftime(lesson_datetime, DATE_FMT)
             lesson_weekday = WEEKDAY_MAP[lesson_datetime.weekday()]["short"]
             lesson_time = datetime.strftime(lesson_datetime, TIME_FMT)

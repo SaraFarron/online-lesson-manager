@@ -75,3 +75,4 @@ MAX_HOUR = 23
 TIME_FMT = "%H:%M"
 DATE_FMT = "%Y.%m.%d"
 DATETIME_FMT = "%Y.%m.%d %H:%M"
+DB_DATETIME = "%Y-%m-%d %H:%M:%S.%f"

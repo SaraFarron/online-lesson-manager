@@ -187,7 +187,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
     await message.answer(replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_time))
 
 
-@router.callback_query(F.data.startswith(MoveLesson.choose_weekday))
+@router.callback_query(F.data.startswith(MoveLesson.choose_recur_time))
 async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
@@ -196,7 +196,7 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     time = get_callback_arg(callback.data, MoveLesson.choose_recur_time)
     start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
     current_day = start_of_week + timedelta(days=state_data["weekday"])
-    start = datetime.combine(current_day, time)
+    start = datetime.combine(current_day, datetime.strptime(time, TIME_FMT).time())
     lesson = RecurrentEvent(
         user_id=user.id,
         executor_id=user.executor_id,

@@ -3,6 +3,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from src.core.config import DB_DATETIME
 from src.models import EventHistory, Executor, User, Event, RecurrentEvent
 
 
@@ -93,9 +94,9 @@ class EventRepo(Repo):
                 self.db.execute(
                     text("""
                 select event_id, break_type, start, end from event_breaks
-                where event_id in :event_ids
+                where event_id in (:event_ids)
             """),
-                    {"event_ids": [e[-1] for e in events]},
+                    {"event_ids": ",".join(str(e[-1]) for e in events)},
                 ),
             )
         return []
@@ -110,6 +111,8 @@ class EventRepo(Repo):
         result = []
         for event in events:
             start_dt, end_dt, user_id, event_type, interval, interval_end, event_id = event
+            start_dt = datetime.strptime(start_dt, DB_DATETIME)
+            end_dt = datetime.strptime(end_dt, DB_DATETIME)
 
             # Skip if event recurrence has ended before our target date
             if interval_end and interval_end.date() < day:
@@ -194,7 +197,7 @@ class EventRepo(Repo):
         events = self.recurrent_events_for_day(executor_id, current_day)
         start = datetime.combine(current_day, time(0, 0))
         end = datetime.combine(current_day, time(23, 59))
-        return self._get_available_slots(start, end, timedelta(hours=1), events)
+        return [s[0] for s in self._get_available_slots(start, end, timedelta(hours=1), events)]
 
     @staticmethod
     def _get_available_slots(start: datetime, end: datetime, slot_size: timedelta, events: list):
@@ -210,8 +213,8 @@ class EventRepo(Repo):
         def is_occupied(slot):
             slot_start, slot_end = slot
             for occupied in events:
-                occupied_start = datetime.strptime(occupied[0], "%Y-%m-%d %H:%M:%S.%f")
-                occupied_end = datetime.strptime(occupied[1], "%Y-%m-%d %H:%M:%S.%f")
+                occupied_start = datetime.strptime(occupied[0], DB_DATETIME) if isinstance(occupied[0], str) else occupied[0]
+                occupied_end = datetime.strptime(occupied[1], DB_DATETIME) if isinstance(occupied[1], str) else occupied[1]
                 if not (slot_end <= occupied_start or slot_start >= occupied_end):
                     return True  # The slot is occupied
             return False  # The slot is available
