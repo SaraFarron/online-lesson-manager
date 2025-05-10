@@ -52,6 +52,13 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
         return
     await state.update_data(day=date)
 
+    day = date.date()
+    today = datetime.now().date()
+    if today > day:
+        await state.set_state(AddLesson.choose_date)
+        await message.answer(replies.CHOOSE_FUTURE_DATE)
+        return
+
     available_time = EventRepo(db).available_time(user.executor_id, date)
     available_time = [s for s, e in available_time]
     await message.answer(

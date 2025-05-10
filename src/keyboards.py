@@ -4,7 +4,7 @@ from enum import Enum
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from core.config import MAX_BUTTON_ROWS, TIME_FMT
+from core.config import MAX_BUTTON_ROWS, TIME_FMT, DATE_FMT, WEEKDAY_MAP
 from src.models import User, RecurrentEvent, Event
 
 
@@ -74,11 +74,14 @@ class Keyboards:
     def choose_lesson(cls, lessons: list[tuple], callback: str):
         buttons = {}
         for lesson in lessons:
-            lesson_time = datetime.strftime(datetime.strptime(lesson[0], "%Y-%m-%d %H:%M:%S.%f"), TIME_FMT)
+            lesson_datetime = datetime.strptime(lesson[0], "%Y-%m-%d %H:%M:%S.%f")
+            lesson_date = datetime.strftime(lesson_datetime, DATE_FMT)
+            lesson_weekday = WEEKDAY_MAP[lesson_datetime.weekday()]["short"]
+            lesson_time = datetime.strftime(lesson_datetime, TIME_FMT)
             if lesson[3] == RecurrentEvent.EventTypes.LESSON:
-                buttons[callback + "re" + str(lesson[-1])] = f"{lesson[3]} в {lesson_time}"
+                buttons[callback + "re" + str(lesson[-1])] = f"{lesson[3]} {lesson_weekday} в {lesson_time}"
             elif lesson[3] in (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON):
-                buttons[callback + "e" + str(lesson[-1])] = f"{lesson[3]} в {lesson_time}"
+                buttons[callback + "e" + str(lesson[-1])] = f"{lesson[3]} {lesson_date} в {lesson_time}"
             else:
                 continue
         return cls.inline_keyboard(buttons)

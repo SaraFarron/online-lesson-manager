@@ -76,15 +76,14 @@ class EventRepo(Repo):
         )
 
     def _recurrent_events_executor(self, executor_id: int):
-        today = datetime.now().date()
         return list(
             self.db.execute(
                 text("""
                         select start, end, user_id, event_type, interval, interval_end, id from recurrent_events
-                        where executor_id = :executor_id and interval_end > :today
+                        where executor_id = :executor_id
                         order by start
                 """),
-                {"executor_id": executor_id, "today": today},
+                {"executor_id": executor_id},
             )
         )
 
@@ -234,6 +233,7 @@ class EventRepo(Repo):
         event = self.db.get(Event, event_id)
         if event:
             event.cancelled = True
+            self.db.add(event)
             self.db.commit()
             return event
         raise Exception("message", "Урок не найден", f"event with id {event_id} does not exist")

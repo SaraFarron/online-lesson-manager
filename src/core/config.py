@@ -58,9 +58,20 @@ WEEKDAYS_MODEL = [
     Weekday(number=6, short="ВС", long="Воскресенье"),
 ]
 
+WEEKDAY_MAP = {
+    0: {"long": "Понедельник", "short": "ПН"},
+    1: {"long": "Вторник", "short": "ВТ"},
+    2: {"long": "Среда", "short": "СР"},
+    3: {"long": "Четверг", "short": "ЧТ"},
+    4: {"long": "Пятница", "short": "ПТ"},
+    5: {"long": "Суббота", "short": "СБ"},
+    6: {"long": "Воскресенье", "short": "ВС"},
+}
+
 MAX_HOUR = 23
 
 # New
 
 TIME_FMT = "%H:%M"
+DATE_FMT = "%Y.%m.%d"
 DATETIME_FMT = "%Y.%m.%d %H:%M"
