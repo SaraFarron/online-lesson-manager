@@ -143,15 +143,6 @@ class EventRepo(Repo):
                         break
 
                 if not is_cancelled:
-                    # result.append(
-                    #     {
-                    #         "start": event_start,
-                    #         "end": event_end,
-                    #         "user_id": user_id,
-                    #         "event_type": event_type,
-                    #         "original_event_id": event_id,
-                    #     }
-                    # )
                     result.append((event_start, event_end, user_id, event_type, False))
         return result
 
@@ -163,7 +154,12 @@ class EventRepo(Repo):
             where executor_id = :executor_id and start >= :day_start and end <= :day_end and cancelled is false
             order by start desc
         """), {"executor_id": executor_id, "day_start": day_start, "day_end": day_end})
-        return list(events)
+        result = []
+        for e in events:
+            start_dt = datetime.strptime(e[0], DB_DATETIME)
+            end_dt = datetime.strptime(e[1], DB_DATETIME)
+            result.append((start_dt, end_dt, *e[2:]))
+        return result
 
     def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
         events = self.events_for_day(executor_id, day) + self.recurrent_events_for_day(executor_id, day)

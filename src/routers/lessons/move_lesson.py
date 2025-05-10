@@ -238,6 +238,8 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
         await state.set_state(MoveLesson.type_date)
         return
 
+    # TODO check if there is a lesson on input's date
+
     if state_data["action"] == "delete":
         lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("re", "")))
         start = datetime.combine(day, lesson.start.time())

@@ -81,7 +81,7 @@ class Event(EventModel, Base):
         return self.end.strftime(DATETIME_FMT)
 
     class EventTypes:
-        LESSON = "Урок"
+        LESSON = "Разовый урок"
         MOVED_LESSON = "Перенос"
 
     def __str__(self):

@@ -13,7 +13,7 @@ class Commands(Enum):
     ADD_RECURRENT_LESSON = "Добавить урок"
     ADD_LESSON = "Добавить разовый урок"
     MOVE_LESSON = "Отменить/перенести урок"
-    TODAY_SCHEDULE = "Расписание на сегодня"
+    DAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
     VACATIONS = "Расписание каникул"
 
