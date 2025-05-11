@@ -1,11 +1,11 @@
 from collections.abc import Iterable
-from datetime import time, datetime
+from datetime import date, datetime, timedelta
 from enum import Enum
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from core.config import MAX_BUTTON_ROWS, TIME_FMT, DATE_FMT, WEEKDAY_MAP, DB_DATETIME
-from src.models import User, RecurrentEvent, Event
+from core.config import DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
+from src.models import Event, RecurrentEvent, User
 
 
 class Commands(Enum):
@@ -41,6 +41,16 @@ class Keyboards:
         if as_markup:
             return builder.as_markup()
         return builder
+
+    @classmethod
+    def choose_week(cls, current_monday: date, callback: str):
+        previous_week_start = datetime.strftime(current_monday - timedelta(days=7), DATE_FMT)
+        next_week_start = datetime.strftime(current_monday + timedelta(days=7), DATE_FMT)
+        buttons = {
+            callback + previous_week_start: "Предыдущая неделя",
+            callback + next_week_start: "Следующая неделя",
+        }
+        return cls.inline_keyboard(buttons)
 
     @classmethod
     def choose_lesson_type(cls, recurrent_type_callback: str, single_type_callback: str):

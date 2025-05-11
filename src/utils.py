@@ -3,9 +3,10 @@ from datetime import datetime, time
 import aiohttp
 from aiogram.types import CallbackQuery
 from aiogram.types.message import Message
-from aiogram.fsm.state import State
 
 from src.core.base import getenv
+from src.core.config import DATE_FMT, TIME_FMT, WEEKDAY_MAP
+from src.models import Event, RecurrentEvent, User
 
 MAX_HOUR = 23
 
@@ -51,3 +52,21 @@ async def send_message(telegram_id: int, message: str) -> None:
     url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={telegram_id}&text={message}&parse_mode=HTML"
     async with aiohttp.ClientSession() as session, session.get(url) as resp:
         await resp.text()
+
+
+def day_schedule_text(lessons: list, users_map: dict, user: User):
+    result = []
+    for lesson in lessons:
+        if lesson[3] in (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON):
+            dt = lesson[0]
+            lesson_str = f"{lesson[3]} {datetime.strftime(dt, DATE_FMT)} в {datetime.strftime(dt, TIME_FMT)}"
+        elif lesson[3] == RecurrentEvent.EventTypes.LESSON:
+            dt = lesson[0]
+            weekday = WEEKDAY_MAP[dt.weekday()]["short"]
+            lesson_str = f"{lesson[3]} {weekday} в {datetime.strftime(dt, TIME_FMT)}"
+        else:
+            continue
+        if user.role == User.Roles.TEACHER:
+            lesson_str += f"у {users_map[lesson[2]]}"
+        result.append(lesson_str)
+    return result

@@ -8,6 +8,7 @@ from src.routers.lessons.add_lesson import router as add_lesson_router
 from src.routers.lessons.add_recurrent_lesson import router as add_rec_lesson_router
 from src.routers.lessons.move_lesson import router as move_lesson_router
 from src.routers.lessons.day_schedule import router as day_schedule_router
+from src.routers.lessons.week_schedule import router as week_schedule_router
 
 all_routers = [
     cancel_router,
@@ -17,6 +18,7 @@ all_routers = [
     add_rec_lesson_router,
     move_lesson_router,
     day_schedule_router,
+    week_schedule_router,
 ]
 
 __all__ = ["all_routers"]
