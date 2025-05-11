@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.core.config import DATE_FMT, TIME_FMT, WEEKDAY_MAP
 from src.core.help import Commands
+from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import User, Event, RecurrentEvent
 from src.repositories import EventRepo, UserRepo
@@ -50,5 +51,5 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
         if user.role == User.Roles.TEACHER:
             lesson_str += f"у {users_map[lesson[2]]}"
         result.append(lesson_str)
-    await message.answer("\n\n".join(result))
+    await message.answer("\n\n".join(result) if result else replies.NO_LESSONS)
     await state.clear()

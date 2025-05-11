@@ -183,8 +183,10 @@ class EventRepo(Repo):
 
     def available_time(self, executor_id: int, day: date):
         events = self.events_for_day(executor_id, day)
+        # TODO start and end with consideration for work hours
         start = datetime.combine(day, time(0, 0))
         end = datetime.combine(day, time(23, 59))
+        # TODO slots by 15 minutes
         return [s[0] for s in self._get_available_slots(start, end, timedelta(hours=1), events)]
 
     def available_time_weekday(self, executor_id: int, weekday: int):
