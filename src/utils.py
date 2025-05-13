@@ -36,6 +36,16 @@ def parse_date(text: str):
     return None
 
 
+def parse_time(text: str):
+    for fmt in ("%H:%M", "%H %M"):
+        try:
+            time = datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        return time
+    return None
+
+
 def get_callback_arg(callback_data: str, callback: str):
     return callback_data.replace(callback, "")
 

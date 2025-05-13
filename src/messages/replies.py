@@ -31,6 +31,7 @@ BOT_DESCRIPTION = """
 WRONG_DATE_FMT = "Неверный формат даты, допустимые: ГГГГ ММ ДД, ГГГГ.ММ.ДД, ГГГГ-ММ-ДД"
 UNKNOWN_ACTION_ERR = "Произошла ошибка: неизвестное действие"
 LESSON_NOT_FOUND_ERR = "Произошла ошибка: урок не найден"
+PERMISSION_DENIED = "У вас нет доступа к этой команде"
 
 # Lessons
 CHOOSE_CURRENT_LESSON_DATE = "Введите дату занятия, формат ГГГГ ММ ДД"
@@ -52,6 +53,9 @@ CHOOSE_FUTURE_DATE = "Нельзя выбрать дату в прошлом"
 LESSON_MOVED = "Урок перенесён"
 DELETE_ONCE_OR_FOREVER = "Удалить урок навсегда или на одну дату?"
 MOVE_ONCE_OR_FOREVER = "Перенести урок навсегда или на одну дату?"
+
+# Schedule
+WORK_HOURS_DELETED = "Ограничение рабочего времени удалено"
 
 # NO_DATA = "Нет данных"
 #

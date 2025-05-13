@@ -134,3 +134,19 @@ class Keyboards:
             case _: raise Exception("message", "", "Unknown role")
         builder.adjust(2, repeat=True)
         return builder.as_markup()
+
+    @classmethod
+    def work_hours(cls, events: list, callback: str):
+        buttons = {}
+        events_types = [e.event_type for e in events]
+        if Event.EventTypes.WORK_START in events_types:
+            start = [e.end for e in events if e.event_type == Event.EventTypes.WORK_START][0]
+            buttons[callback + "delete_start"] = f"Удалить начало в {start}"
+        else:
+            buttons[callback + "add_start"] = "Добавить начало"
+        if Event.EventTypes.WORK_END in events_types:
+            end = [e.start for e in events if e.event_type == Event.EventTypes.WORK_END][0]
+            buttons[callback + "delete_end"] = f"Удалить конец в {end}"
+        else:
+            buttons[callback + "add_end"] = "Добавить конец"
+        return cls.inline_keyboard(buttons)

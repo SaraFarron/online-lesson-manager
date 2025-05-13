@@ -238,3 +238,8 @@ class EventRepo(Repo):
             self.db.commit()
             return event
         raise Exception("message", "Урок не найден", f"event with id {event_id} does not exist")
+
+    def work_hours(self, user: User):
+        events = self._recurrent_events_executor(user.executor_id)
+        work_hours = filter(lambda x: x.event_type in (Event.EventTypes.WORK_START, Event.EventTypes.WORK_END), events)
+        return work_hours
