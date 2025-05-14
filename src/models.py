@@ -83,8 +83,6 @@ class Event(EventModel, Base):
     class EventTypes:
         LESSON = "Разовый урок"
         MOVED_LESSON = "Перенос"
-        WORK_START = "Начало рабочего дня"
-        WORK_END = "Конец рабочего дня"
 
     def __str__(self):
         return f"{self.event_type} {self.st_str}-{self.et_str}"
@@ -111,6 +109,8 @@ class RecurrentEvent(EventModel, Base):
 
     class EventTypes:
         LESSON = "Еженедельный урок"
+        WORK_START = "Начало рабочего дня"
+        WORK_END = "Конец рабочего дня"
 
 
 class CancelledRecurrentEvent(Model, Base):

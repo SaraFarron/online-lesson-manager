@@ -77,21 +77,31 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    if user.role != User.Roles.TEACHER:
+        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
     time = parse_time(message.text).time()
     start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
     current_day = start_of_week + timedelta(days=state_data["weekday"])
     start = datetime.combine(current_day, time)
-    lesson = RecurrentEvent(
+    if state_data["mode"] == "start":
+        event_type = RecurrentEvent.EventTypes.WORK_START
+        start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start.replace(hour=time.hour, minute=time.minute)
+    elif state_data["mode"] == "end":
+        event_type = RecurrentEvent.EventTypes.WORK_END
+        end = datetime.now().replace(hour=23, minute=59, second=0, microsecond=0)
+        start = end.replace(hour=time.hour, minute=time.minute)
+    event = RecurrentEvent(
         user_id=user.id,
         executor_id=user.executor_id,
-        event_type=RecurrentEvent.EventTypes.LESSON,
+        event_type=event_type,
         start=start,
-        end=start + timedelta(hours=1),
-        interval=7,
+        end=end,
+        interval=1,
     )
-    db.add(lesson)
+    db.add(event)
     db.commit()
     await message.answer(replies.LESSON_ADDED)
-    EventHistoryRepo(db).create(user.username, WorkHours.scene, "added_lesson", str(lesson))
+    EventHistoryRepo(db).create(user.username, WorkHours.scene, f"added_{state_data['mode']}", str(event))
     await state.clear()
