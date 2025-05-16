@@ -9,18 +9,18 @@ from src.models import Event, RecurrentEvent, User
 
 
 class Commands(Enum):
-    ADD_SCHEDULED_LESSON = "Добавить урок"
-    ADD_ONE_LESSON = "Добавить разовый урок"
-    RESCHEDULE = "Отменить/перенести урок"
-    TODAY_SCHEDULE = "Расписание на сегодня"
+    ADD_RECURRENT_LESSON = "Добавить урок"
+    ADD_LESSON = "Добавить разовый урок"
+    MOVE_LESSON = "Отменить/перенести урок"
+    DAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
     VACATIONS = "Расписание каникул"
 
 
 class AdminCommands(Enum):
-    TODAY_SCHEDULE = "Расписание на сегодня"
+    DAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
-    EDIT_WORKING_HOURS = "Рабочее время"
+    MANAGE_WORK_HOURS = "Рабочее время"
     CHECK_SCHEDULE = "Проверить расписание"
     SEND_TO_EVERYONE = "Рассылка всем ученикам"
     STUDENTS = "Ученики"

@@ -4,7 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.core.config import DB_DATETIME
-from src.models import EventHistory, Executor, User, Event, RecurrentEvent
+from src.models import Event, EventHistory, Executor, RecurrentEvent, User
 
 
 class Repo:
@@ -73,7 +73,7 @@ class EventRepo(Repo):
                         order by start
                 """),
                 {"executor_id": executor_id, "today": today},
-            )
+            ),
         )
 
     def _recurrent_events_executor(self, executor_id: int):
@@ -85,7 +85,7 @@ class EventRepo(Repo):
                         order by start
                 """),
                 {"executor_id": executor_id},
-            )
+            ),
         )
 
     def recurrent_events_cancels(self, events: list[tuple]):
@@ -241,5 +241,31 @@ class EventRepo(Repo):
 
     def work_hours(self, user: User):
         events = self._recurrent_events_executor(user.executor_id)
-        work_hours = filter(lambda x: x.event_type in (Event.EventTypes.WORK_START, Event.EventTypes.WORK_END), events)
+        work_hours = filter(
+            lambda x: x.event_type in (RecurrentEvent.EventTypes.WORK_START, RecurrentEvent.EventTypes.WORK_END),
+            events,
+        )
         return work_hours
+
+    def delete_work_hour_setting(self, executor_id: int, kind: str):
+        if kind == "end":
+            event = (
+                self.db.query(RecurrentEvent)
+                .filter(
+                    RecurrentEvent.executor_id == executor_id,
+                    RecurrentEvent.event_type == RecurrentEvent.EventTypes.WORK_END,
+                )
+                .first()
+            )
+            event_time = event.start.time()
+        elif kind == "start":
+            event = self.db.query(RecurrentEvent).filter(
+                RecurrentEvent.executor_id == executor_id,
+                RecurrentEvent.event_type == RecurrentEvent.EventTypes.WORK_START,
+            ).first()
+            event_time = event.end.time()
+        else:
+            raise Exception("message", "Неизвестный тип события", f"unknown kind: {kind}")
+        self.db.delete(event)
+        self.db.commit()
+        return event_time

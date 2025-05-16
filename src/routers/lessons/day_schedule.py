@@ -7,8 +7,8 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
-from src.core.help import Commands
 from src.messages import replies
+from src.keyboards import Commands
 from src.middlewares import DatabaseMiddleware
 from src.models import User
 from src.repositories import EventRepo, UserRepo

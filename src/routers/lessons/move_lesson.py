@@ -9,8 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.core import config
 from src.core.config import TIME_FMT
-from src.core.help import Commands
-from src.keyboards import Keyboards
+from src.keyboards import Keyboards, Commands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import CancelledRecurrentEvent, Event, RecurrentEvent

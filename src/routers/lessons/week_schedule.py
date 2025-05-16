@@ -8,8 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core.config import DATE_FMT
-from src.core.help import Commands
-from src.keyboards import Keyboards
+from src.keyboards import Keyboards, Commands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import User
