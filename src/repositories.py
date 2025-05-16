@@ -245,7 +245,7 @@ class EventRepo(Repo):
             lambda x: x.event_type in (RecurrentEvent.EventTypes.WORK_START, RecurrentEvent.EventTypes.WORK_END),
             events,
         )
-        return work_hours
+        return list(work_hours)
 
     def delete_work_hour_setting(self, executor_id: int, kind: str):
         if kind == "end":

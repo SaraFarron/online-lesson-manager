@@ -139,14 +139,14 @@ class Keyboards:
     def work_hours(cls, events: list, callback: str):
         buttons = {}
         events_types = [e.event_type for e in events]
-        if Event.EventTypes.WORK_START in events_types:
-            start = [e.end for e in events if e.event_type == Event.EventTypes.WORK_START][0]
-            buttons[callback + "delete_start"] = f"Удалить начало в {start}"
+        if RecurrentEvent.EventTypes.WORK_START in events_types:
+            start = [datetime.strptime(e.end, DB_DATETIME) for e in events if e.event_type == RecurrentEvent.EventTypes.WORK_START][0]
+            buttons[callback + "delete_start"] = f"Удалить начало в {datetime.strftime(start, TIME_FMT)}"
         else:
             buttons[callback + "add_start"] = "Добавить начало"
-        if Event.EventTypes.WORK_END in events_types:
-            end = [e.start for e in events if e.event_type == Event.EventTypes.WORK_END][0]
-            buttons[callback + "delete_end"] = f"Удалить конец в {end}"
+        if RecurrentEvent.EventTypes.WORK_END in events_types:
+            end = [datetime.strptime(e.start, DB_DATETIME) for e in events if e.event_type == RecurrentEvent.EventTypes.WORK_END][0]
+            buttons[callback + "delete_end"] = f"Удалить конец в {datetime.strftime(end, TIME_FMT)}"
         else:
             buttons[callback + "add_end"] = "Добавить конец"
         return cls.inline_keyboard(buttons)
