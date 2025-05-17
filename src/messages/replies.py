@@ -58,6 +58,8 @@ MOVE_ONCE_OR_FOREVER = "Перенести урок навсегда или на
 WORK_HOURS_DELETED = "Ограничение рабочего времени удалено"
 CHOOSE_WH_ACTION = "Выберите действие"
 WH_CHANGED = "Расписание изменено"
+WEEKEND_DELETED = "Выходной удалён"
+WEEKEND_ADDED = "Выходной добавлен"
 
 # NO_DATA = "Нет данных"
 #

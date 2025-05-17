@@ -136,7 +136,7 @@ class Keyboards:
         return builder.as_markup()
 
     @classmethod
-    def work_hours(cls, events: list, callback: str):
+    def work_hours(cls, events: list, weekends: list, callback: str, callback2: str):
         buttons = {}
         events_types = [e.event_type for e in events]
         if RecurrentEvent.EventTypes.WORK_START in events_types:
@@ -149,4 +149,10 @@ class Keyboards:
             buttons[callback + "delete_end"] = f"Удалить конец в {datetime.strftime(end, TIME_FMT)}"
         else:
             buttons[callback + "add_end"] = "Добавить конец"
+
+        for weekend in weekends:
+            weekday = WEEKDAY_MAP[weekend.start.weekday()]["long"]
+            buttons[callback2 + f"delete_weekend/{weekend.id}"] = f"Удалить выходной в {weekday}"
+        buttons[callback2 + "add_weekend"] = "Добавить выходной"
+
         return cls.inline_keyboard(buttons)

@@ -111,6 +111,7 @@ class RecurrentEvent(EventModel, Base):
         LESSON = "Еженедельный урок"
         WORK_START = "Начало рабочего дня"
         WORK_END = "Конец рабочего дня"
+        WEEKEND = "Выходной"
 
 
 class CancelledRecurrentEvent(Model, Base):

@@ -239,8 +239,8 @@ class EventRepo(Repo):
             return event
         raise Exception("message", "Урок не найден", f"event with id {event_id} does not exist")
 
-    def work_hours(self, user: User):
-        events = self._recurrent_events_executor(user.executor_id)
+    def work_hours(self, executor_id: int):
+        events = self._recurrent_events_executor(executor_id)
         work_hours = filter(
             lambda x: x.event_type in (RecurrentEvent.EventTypes.WORK_START, RecurrentEvent.EventTypes.WORK_END),
             events,
@@ -269,3 +269,15 @@ class EventRepo(Repo):
         self.db.delete(event)
         self.db.commit()
         return event_time
+
+    def weekends(self, executor_id: int):
+        events = self._recurrent_events_executor(executor_id)
+        weekends = filter(
+            lambda x: x.event_type == RecurrentEvent.EventTypes.WEEKEND,
+            events,
+        )
+        return list(weekends)
+
+    def available_work_weekdays(self, executor_id: int):
+        weekends = [w.start.weekday() for w in self.weekends(executor_id)]
+        return [i for i in range(7) if i not in weekends]
