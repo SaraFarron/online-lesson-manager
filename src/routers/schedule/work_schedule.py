@@ -13,7 +13,7 @@ from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import RecurrentEvent, User
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import parse_time, telegram_checks, get_callback_arg
+from src.utils import get_callback_arg, parse_time, telegram_checks
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -31,7 +31,7 @@ class WorkSchedule(StatesGroup):
 
 @router.message(Command(WorkSchedule.command))
 @router.message(F.text == AdminCommands.MANAGE_WORK_HOURS.value)
-async def manage_work_hours_handler(message: Message, state: FSMContext, db: Session) -> None:
+async def manage_work_schedule_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
     if user.role != User.Roles.TEACHER:
@@ -118,7 +118,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
-    event_id = callback.data.split("/")[-1]
+    event_id = get_callback_arg(callback.data, WorkSchedule.choose_weekday)
     if "delete_weekend" in callback.data:
         event = db.get(RecurrentEvent, event_id)
         weekday = WEEKDAY_MAP[event.start.weekday()]["short"]

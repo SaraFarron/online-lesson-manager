@@ -281,3 +281,13 @@ class EventRepo(Repo):
     def available_work_weekdays(self, executor_id: int):
         weekends = [w.start.weekday() for w in self.weekends(executor_id)]
         return [i for i in range(7) if i not in weekends]
+
+    def vacations(self, user_id: int):
+        events = self.db.execute(
+            text("""
+                select start, end, id from events
+                where user_id = :user_id and event_type = :vacation and cancelled is false
+            """),
+            {"user_id": user_id, "vacation": Event.EventTypes.VACATION}
+        )
+        return list(events)

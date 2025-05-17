@@ -156,3 +156,12 @@ class Keyboards:
         buttons[callback2 + "add_weekend"] = "Добавить выходной"
 
         return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def vacations(cls, events: list, callback: str):
+        buttons = {}
+        for e in events:
+            event = f"{datetime.strftime(e.start, DATE_FMT)} - {datetime.strftime(e.end, DATE_FMT)}"
+            buttons[callback + f"delete_vacation/{e.id}"] = f"Удалить каникулы {event}"
+        buttons[callback + "add_vacation"] = "Добавить каникулы"
+        return cls.inline_keyboard(buttons)

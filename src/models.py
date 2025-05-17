@@ -83,6 +83,7 @@ class Event(EventModel, Base):
     class EventTypes:
         LESSON = "Разовый урок"
         MOVED_LESSON = "Перенос"
+        VACATION = "Каникулы"
 
     def __str__(self):
         return f"{self.event_type} {self.st_str}-{self.et_str}"

@@ -60,6 +60,7 @@ CHOOSE_WH_ACTION = "Выберите действие"
 WH_CHANGED = "Расписание изменено"
 WEEKEND_DELETED = "Выходной удалён"
 WEEKEND_ADDED = "Выходной добавлен"
+CHOOSE_ACTION = "Выберите действие"
 
 # NO_DATA = "Нет данных"
 #
