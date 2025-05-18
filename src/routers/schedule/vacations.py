@@ -19,7 +19,7 @@ router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
 class Vacations(StatesGroup):
-    scene = "manage_work_schedule"
+    scene = "vacations"
     command = "/" + scene
     base_callback = scene + "/"
     edit_vacations = f"{base_callback}edit_vacations"
@@ -28,7 +28,7 @@ class Vacations(StatesGroup):
 
 @router.message(Command(Vacations.command))
 @router.message(F.text == Commands.VACATIONS.value)
-async def manage_work_schedule_handler(message: Message, state: FSMContext, db: Session) -> None:
+async def vacations_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
     await state.update_data(user_id=user.telegram_id)

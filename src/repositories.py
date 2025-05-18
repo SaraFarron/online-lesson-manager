@@ -59,6 +59,18 @@ class EventHistoryRepo(Repo):
         self.db.add(log)
         self.db.commit()
 
+    def user_history(self, username: str):
+        events = self.db.execute(
+            text("""
+                select created_at, scene, event_type, event_value from event_history
+                where author = :author
+                order by created_at desc
+                limit 10
+            """),
+            {"author": username}
+        )
+        return list(events)
+
 
 class EventRepo(Repo):
     LESSON_TYPES = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)

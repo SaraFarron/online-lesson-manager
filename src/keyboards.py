@@ -165,3 +165,17 @@ class Keyboards:
             buttons[callback + f"delete_vacation/{e.id}"] = f"Удалить каникулы {event}"
         buttons[callback + "add_vacation"] = "Добавить каникулы"
         return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def users(cls, users: list[User], callback: str):
+        buttons = {}
+        for user in users:
+            buttons[callback + str(user.id)] = f"Профиль {user.username}"
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def profile(cls, user_id: int, callback: str):
+        buttons = {
+            callback + str(user_id): "Удалить пользователя (запросит подтверждение)"
+        }
+        return cls.inline_keyboard(buttons)
