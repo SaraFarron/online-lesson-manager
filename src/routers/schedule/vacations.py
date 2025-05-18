@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -7,13 +7,12 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.core.config import WEEKDAY_MAP
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.models import RecurrentEvent, User, Event
+from src.models import Event
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import parse_time, telegram_checks, get_callback_arg
+from src.utils import get_callback_arg, parse_date, telegram_checks
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -24,8 +23,7 @@ class Vacations(StatesGroup):
     command = "/" + scene
     base_callback = scene + "/"
     edit_vacations = f"{base_callback}edit_vacations"
-    add_vacation = f"{base_callback}add_vacation/"
-    remove_vacation = f"{base_callback}remove_vacation/"
+    choose_dates = State()
 
 
 @router.message(Command(Vacations.command))
@@ -49,4 +47,50 @@ async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session
     if action.startswith("delete_vacation"):
         event_id = int(action.split("/")[-1])
         event = db.get(Event, event_id)
-        # TODO
+        event_str = f"{event.start.date()} - {event.end.date()}"
+        db.delete(event)
+        db.commit()
+        await message.answer(replies.VACATION_DELETED)
+        await state.clear()
+        EventHistoryRepo(db).create(user.username, Vacations.scene, "delete_vacation", event_str)
+    elif action.startswith("add_vacation"):
+        await message.answer(replies.CHOOSE_DATES)
+        await state.set_state(Vacations.choose_dates)
+    else:
+        raise Exception("message", "Неизвестное событие", f"unknown action: {callback.data}")
+
+
+@router.message(Vacations.choose_dates)
+async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
+    message = telegram_checks(message)
+    state_data = await state.get_data()
+    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+
+    try:
+        dates = [d.strip() for d in message.text.split("-")]
+        start, end = parse_date(dates[0]), parse_date(dates[1])
+        assert start is not None
+        assert end is not None
+    except ValueError | IndexError | AssertionError:
+        await message.answer(replies.WRONG_DATES_FMT)
+        await state.set_state(Vacations.choose_dates)
+        return
+
+    if start > end:
+        await message.answer(replies.START_LT_END)
+        await state.set_state(Vacations.choose_dates)
+        return
+
+    event = Event(
+        user_id=user.id,
+        executor_id=user.executor_id,
+        event_type=Event.EventTypes.VACATION,
+        start=datetime.combine(start, datetime.now().time().replace(hour=0, minute=0)),
+        end=datetime.combine(end, datetime.now().time().replace(hour=23, minute=59)),
+    )
+    db.add(event)
+    db.commit()
+    await message.answer(replies.VACATION_ADDED)
+    await state.clear()
+    event_str = f"{event.start.date()} - {event.end.date()}"
+    EventHistoryRepo(db).create(user.username, Vacations.scene, "added_vacation", event_str)
