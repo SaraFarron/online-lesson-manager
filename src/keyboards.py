@@ -179,3 +179,11 @@ class Keyboards:
             callback + str(user_id): "Удалить пользователя (запросит подтверждение)"
         }
         return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def confirm(cls, callback: str):
+        buttons = {
+            callback + "yes": "Да",
+            callback + "no": "Нет",
+        }
+        return cls.inline_keyboard(buttons)

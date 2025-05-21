@@ -11,8 +11,11 @@ from src.routers.lessons.day_schedule import router as day_schedule_router
 from src.routers.lessons.week_schedule import router as week_schedule_router
 
 # Schedule
-from src.routers.schedule.work_schedule import router as work_scheduel_router
+from src.routers.schedule.work_schedule import router as work_schedule_router
 from src.routers.schedule.vacations import router as vacations_router
+
+# Users
+from src.routers.users.profile import router as profile_router
 
 all_routers = [
     cancel_router,
@@ -23,8 +26,9 @@ all_routers = [
     move_lesson_router,
     day_schedule_router,
     week_schedule_router,
-    work_scheduel_router,
+    work_schedule_router,
     vacations_router,
+    profile_router,
 ]
 
 __all__ = ["all_routers"]

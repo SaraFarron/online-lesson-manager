@@ -1,10 +1,11 @@
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import text
+from sqlalchemy.event import Events
 from sqlalchemy.orm import Session
 
 from src.core.config import DB_DATETIME
-from src.models import Event, EventHistory, Executor, RecurrentEvent, User
+from src.models import Event, EventHistory, Executor, RecurrentEvent, User, CancelledRecurrentEvent
 
 
 class Repo:
@@ -46,6 +47,20 @@ class UserRepo(Repo):
         )
         self.db.add_all([user, event_log])
         self.db.commit()
+
+    def delete(self, user_id: int):
+        user = self.db.get(User, user_id)
+        if user is None:
+            raise Exception("message", "Пользователь не найден", f"user not found {user_id}")
+
+        recur_events = self.db.query(RecurrentEvent).filter(RecurrentEvent.user_id == user_id)
+        events = self.db.query(Event).filter(Event.user_id == user_id)
+        history = self.db.query(EventHistory).filter(EventHistory.author == user.username)
+        event_breaks = self.db.query(CancelledRecurrentEvent).filter(CancelledRecurrentEvent.event_id.in_([re.id for re in recur_events]))
+        for e in list(event_breaks) + list(history) + list(recur_events) + list(events) + [user]:
+            self.db.delete(e)
+        self.db.commit()
+
 
 
 class EventHistoryRepo(Repo):
