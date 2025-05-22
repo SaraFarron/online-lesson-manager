@@ -16,6 +16,7 @@ from src.routers.schedule.vacations import router as vacations_router
 
 # Users
 from src.routers.users.profile import router as profile_router
+from src.routers.users.notifications import router as notifications_router
 
 all_routers = [
     cancel_router,
@@ -29,6 +30,7 @@ all_routers = [
     work_schedule_router,
     vacations_router,
     profile_router,
+    notifications_router,
 ]
 
 __all__ = ["all_routers"]
