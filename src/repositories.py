@@ -61,6 +61,9 @@ class UserRepo(Repo):
             self.db.delete(e)
         self.db.commit()
 
+    def executor_telegram_id(self, user: User):
+        executor = self.db.get(Executor, user.executor_id)
+        return executor.telegram_id
 
 
 class EventHistoryRepo(Repo):

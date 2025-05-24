@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import declarative_base, relationship
 
-from src.core.config import DATETIME_FMT
+from src.core.config import DATETIME_FMT, WEEKDAY_MAP, TIME_FMT
 
 Base = declarative_base()
 
@@ -18,6 +18,7 @@ class Executor(Model, Base):
     __tablename__ = 'executors'
     code = Column(String, unique=True)
     user = relationship('User', backref='executor')
+    telegram_id = Column(Integer, unique=True)
 
 
 class User(Model, Base):
@@ -113,6 +114,12 @@ class RecurrentEvent(EventModel, Base):
         WORK_START = "Начало рабочего дня"
         WORK_END = "Конец рабочего дня"
         WEEKEND = "Выходной"
+
+    def __str__(self):
+        if self.event_type == self.EventTypes.LESSON:
+            weekday = WEEKDAY_MAP[self.start.weekday()]["long"]
+            time = datetime.strftime(self.start, TIME_FMT)
+            return f"{self.event_type} {weekday} {time}"
 
 
 class CancelledRecurrentEvent(Model, Base):

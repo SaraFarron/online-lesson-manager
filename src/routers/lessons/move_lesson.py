@@ -14,7 +14,7 @@ from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import get_callback_arg, parse_date, telegram_checks
+from src.utils import get_callback_arg, parse_date, telegram_checks, send_message
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -35,6 +35,8 @@ class MoveLesson(StatesGroup):
     type_new_date = State()
     choose_recur_new_time = f"{base_callback}recur/new/choose_time/"
 
+
+# TODO: При переносе постоянного урока на одну дату идет лог учителю: Разовый урок -> Перенос
 
 @router.message(Command(MoveLesson.command))
 @router.message(F.text == Commands.MOVE_LESSON.value)
@@ -70,8 +72,10 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
     if action == "delete" and state_data["lesson"].startswith("e"):
         lesson = EventRepo(db).cancel_event(int(state_data["lesson"].replace("e", "")))
         EventHistoryRepo(db).create(user.username, MoveLesson.scene, "deleted_one_lesson", str(lesson))
-        await state.clear()
         await message.answer(replies.LESSON_DELETED)
+        executor_tg = UserRepo(db).executor_telegram_id(user)
+        await send_message(executor_tg, f"{user.username} отменил(а) {lesson}")
+        await state.clear()
         return
     if action == "delete" and state_data["lesson"].startswith("re"):
         await state.update_data(action=action)
@@ -138,6 +142,8 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     EventHistoryRepo(db).create(
         user.username, MoveLesson.scene, "moved_one_lesson", f"{old_lesson} -> {new_lesson}",
     )
+    executor_tg = UserRepo(db).executor_telegram_id(user)
+    await send_message(executor_tg, f"{user.username} перенес(ла) {old_lesson} -> {new_lesson}")
     await state.clear()
 
 # ---- RECURRENT LESSON ---- #
@@ -162,8 +168,10 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
         db.delete(lesson)
         db.commit()
         await message.answer(replies.LESSON_DELETED)
-        await state.clear()
         EventHistoryRepo(db).create(user.username, MoveLesson.scene, "deleted_recur_lesson", lesson_str)
+        executor_tg = UserRepo(db).executor_telegram_id(user)
+        await send_message(executor_tg, f"{user.username} отменил(ла) {lesson_str}")
+        await state.clear()
     elif mode == "once" and state_data["action"] == "move":
         await state.set_state(MoveLesson.type_recur_date)
         await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
@@ -215,6 +223,8 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     EventHistoryRepo(db).create(
         user.username, MoveLesson.scene, "moved_recur_lesson", f"{old_lesson_str} -> {lesson}",
     )
+    executor_tg = UserRepo(db).executor_telegram_id(user)
+    await send_message(executor_tg, f"{user.username} перенес(ла) {old_lesson_str} -> {lesson}")
     await state.clear()
 
 # ---- RECURRENT LESSON ONCE ---- #
@@ -252,6 +262,8 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
         db.commit()
         await message.answer(replies.LESSON_DELETED)
         EventHistoryRepo(db).create(user.username, MoveLesson.scene, "recur_lesson_deleted", str(cancel))
+        executor_tg = UserRepo(db).executor_telegram_id(user)
+        await send_message(executor_tg, f"{user.username} отменил(ла) {cancel}")
         await state.clear()
         return
 
@@ -315,4 +327,6 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
     EventHistoryRepo(db).create(
         user.username, MoveLesson.scene, "recur_lesson_moved", f"{old_lesson_str} -> {lesson}"
     )
+    executor_tg = UserRepo(db).executor_telegram_id(user)
+    await send_message(executor_tg, f"{user.username} перенес(ла) {old_lesson_str} -> {lesson}")
     await state.clear()

@@ -13,7 +13,7 @@ from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import Event
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import get_callback_arg, parse_date, telegram_checks
+from src.utils import get_callback_arg, parse_date, telegram_checks, send_message
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -87,4 +87,6 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     db.commit()
     await message.answer(replies.LESSON_ADDED)
     EventHistoryRepo(db).create(user.username, AddLesson.scene, "added_lesson", str(lesson))
+    executor_tg = UserRepo(db).executor_telegram_id(user)
+    await send_message(executor_tg, f"{user.username} добавил(а) {lesson}")
     await state.clear()

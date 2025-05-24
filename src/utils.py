@@ -60,7 +60,9 @@ async def send_message(telegram_id: int, message: str) -> None:
     message = message.replace("\n", "%0A")
     url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={telegram_id}&text={message}&parse_mode=HTML"
     async with aiohttp.ClientSession() as session, session.get(url) as resp:
-        await resp.text()
+        response = await resp.text()
+    if '"ok":false' in response:
+        print(f"tg_id:{telegram_id}\nmessage:{message}\nresponse:{response}")
 
 
 def day_schedule_text(lessons: list, users_map: dict, user: User):
