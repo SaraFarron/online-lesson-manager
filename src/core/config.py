@@ -28,6 +28,7 @@ def load_config() -> Config:
     return Config(tg_bot=TelegramBotConfig(token=getenv("BOT_TOKEN")))
 
 
+BOT_TOKEN = getenv("BOT_TOKEN")
 DATE_FORMAT = "%d.%m.%Y"
 DATE_FORMAT_HR = "%d.%m"
 TIME_FORMAT = "%H.%M"

@@ -1,10 +1,9 @@
 from datetime import datetime, time
+from os import getenv
 
 import aiohttp
-from aiogram.types import CallbackQuery
-from aiogram.types.message import Message
+from aiogram.types import CallbackQuery, Message
 
-from src.core.base import getenv
 from src.core.config import DATE_FMT, TIME_FMT, WEEKDAY_MAP
 from src.models import Event, RecurrentEvent, User
 
