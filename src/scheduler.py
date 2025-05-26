@@ -8,25 +8,34 @@ from core import logs
 from core.config import TIMEZONE
 from database import engine
 from logger import logger
-from messages import replies
-from repositories import UserRepo
-from service import Schedule
+from src.models import User
+from src.repositories import EventRepo
 from utils import send_message
+
+
+def notification(events: list, student_id: int | None):
+    rows = []
+    for event in events:
+        pass
+    if not rows:
+        return None
+    return "Скоро занятия:\n" + "\n".join(rows)
 
 
 async def send_notifications(now: datetime):
     logger.info(logs.NOTIFICATIONS_START)
     with Session(engine) as db:
         notifies = set()
-        users = UserRepo(db).all()
-        schedule = Schedule(db)
+        users = db.query(User).all()
+        repo = EventRepo(db)
         for user in users:
-            text = schedule.lessons_day_message(user, now.date())
-            if not text or "занятий нет" in text:
+            student_id = user.id if user.role == User.Roles.STUDENT else None
+            events = repo.day_schedule(user.executor_id, now.date(), student_id)
+            text = notification(events, student_id)
+            if not text:
                 continue
             notifies.add(user.username_dog)
-            message = replies.LESSONS_ARE_COMING + text
-            await send_message(user.telegram_id, message)
+            await send_message(user.telegram_id, text)
         logger.info(logs.NOTIFICATIONS_SENT, ", ".join(notifies))
 
 
