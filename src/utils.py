@@ -78,6 +78,6 @@ def day_schedule_text(lessons: list, users_map: dict, user: User):
         else:
             continue
         if user.role == User.Roles.TEACHER:
-            lesson_str += f"у {users_map[lesson[2]]}"
+            lesson_str += f" у {users_map[lesson[2]]}"
         result.append(lesson_str)
     return result

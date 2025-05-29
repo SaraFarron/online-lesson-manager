@@ -10,13 +10,11 @@ from database import engine
 from logger import logger
 from src.models import User
 from src.repositories import EventRepo
-from utils import send_message
+from utils import send_message, day_schedule_text
 
 
-def notification(events: list, student_id: int | None):
-    rows = []
-    for event in events:
-        pass
+def notification(events: list, user: User, users_map):
+    rows = day_schedule_text(events, users_map, user)
     if not rows:
         return None
     return "Скоро занятия:\n" + "\n".join(rows)
@@ -31,10 +29,12 @@ async def send_notifications(now: datetime):
         for user in users:
             student_id = user.id if user.role == User.Roles.STUDENT else None
             events = repo.day_schedule(user.executor_id, now.date(), student_id)
-            text = notification(events, student_id)
+            user_ids = [e[2] for e in events]
+            users_map = {u.id: u.username for u in db.query(User).filter(User.id.in_(user_ids))}
+            text = notification(events, user, users_map)
             if not text:
                 continue
-            notifies.add(user.username_dog)
+            notifies.add(user.username)
             await send_message(user.telegram_id, text)
         logger.info(logs.NOTIFICATIONS_SENT, ", ".join(notifies))
 
@@ -42,8 +42,8 @@ async def send_notifications(now: datetime):
 async def lessons_notifications(timeout: float):
     """Send notifications about lessons."""
     now = datetime.now(TIMEZONE)
-    if time(8, 15) <= now.time() < time(8, 20):
-        await send_notifications(now)
+    # if time(8, 15) <= now.time() < time(8, 20):
+    await send_notifications(now)
     await asyncio.sleep(timeout)
 
 

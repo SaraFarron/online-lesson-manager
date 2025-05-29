@@ -195,7 +195,7 @@ class EventRepo(Repo):
         events = self.events_for_day(executor_id, day) + self.recurrent_events_for_day(executor_id, day)
         events = sorted(events, key=lambda x: x[0])
         if user_id is not None:
-            events = filter(lambda x: x[2] == user_id, events)
+            events = list(filter(lambda x: x[2] == user_id, events))
         return events
 
     def available_weekdays(self, executor_id: int):
