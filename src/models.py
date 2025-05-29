@@ -120,6 +120,13 @@ class RecurrentEvent(EventModel, Base):
             weekday = WEEKDAY_MAP[self.start.weekday()]["long"]
             time = datetime.strftime(self.start, TIME_FMT)
             return f"{self.event_type} {weekday} {time}"
+        if self.event_type == self.EventTypes.WORK_START:
+            time = datetime.strftime(self.end, TIME_FMT)
+            return f"{self.event_type} в {time}"
+        if self.event_type == self.EventTypes.WORK_END:
+            time = datetime.strftime(self.start, TIME_FMT)
+            return f"{self.event_type} в {time}"
+        return f"{self.event_type} {self.start} {self.interval}"
 
 
 class CancelledRecurrentEvent(Model, Base):

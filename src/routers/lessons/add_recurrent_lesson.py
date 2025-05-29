@@ -7,6 +7,7 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
+from src.core.config import LESSON_SIZE
 from src.keyboards import Keyboards, Commands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -64,7 +65,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         executor_id=user.executor_id,
         event_type=RecurrentEvent.EventTypes.LESSON,
         start=start,
-        end=start + timedelta(hours=1),
+        end=start + LESSON_SIZE,
         interval=7,
     )
     db.add(lesson)

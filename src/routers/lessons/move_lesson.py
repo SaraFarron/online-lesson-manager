@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core import config
-from src.core.config import TIME_FMT
+from src.core.config import TIME_FMT, LESSON_SIZE
 from src.keyboards import Keyboards, Commands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -211,7 +211,7 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
         executor_id=user.executor_id,
         event_type=RecurrentEvent.EventTypes.LESSON,
         start=start,
-        end=start + timedelta(hours=1),
+        end=start + LESSON_SIZE,
         interval=7,
     )
     db.add(lesson)
@@ -256,7 +256,7 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
             event_id=lesson.id,
             break_type=CancelledRecurrentEvent.CancelTypes.LESSON_CANCELED,
             start=start,
-            end=start + timedelta(hours=1),
+            end=start + LESSON_SIZE,
         )
         db.add(cancel)
         db.commit()
@@ -311,14 +311,14 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
         executor_id=user.executor_id,
         event_type=Event.EventTypes.MOVED_LESSON,
         start=start,
-        end=start + timedelta(hours=1),
+        end=start + LESSON_SIZE,
         is_reschedule=True,
     )
     cancel = CancelledRecurrentEvent(
         event_id=int(state_data["lesson"].replace("re", "")),
         break_type=CancelledRecurrentEvent.CancelTypes.LESSON_CANCELED,
         start=start,
-        end=start + timedelta(hours=1),
+        end=start + LESSON_SIZE,
     )
     old_lesson_str = f"{Event.EventTypes.LESSON} {state_data['day']} {time}"
     db.add_all([lesson, cancel])

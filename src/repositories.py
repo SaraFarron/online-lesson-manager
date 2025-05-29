@@ -4,7 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.event import Events
 from sqlalchemy.orm import Session
 
-from src.core.config import DB_DATETIME
+from src.core.config import DB_DATETIME, SLOT_SIZE
 from src.models import Event, EventHistory, Executor, RecurrentEvent, User, CancelledRecurrentEvent
 
 
@@ -206,18 +206,17 @@ class EventRepo(Repo):
             events = self.recurrent_events_for_day(executor_id, current_day)
             start = datetime.combine(current_day, time(0, 0))
             end = datetime.combine(current_day, time(23, 59))
-            available_time = self._get_available_slots(start, end, timedelta(hours=1), events)
+            available_time = self._get_available_slots(start, end, SLOT_SIZE, events)
             if available_time:
                 result.append(i)
         return result
 
     def available_time(self, executor_id: int, day: date):
         events = self.events_for_day(executor_id, day)
-        # TODO start and end with consideration for work hours
+        # Default
         start = datetime.combine(day, time(0, 0))
         end = datetime.combine(day, time(23, 59))
-        # TODO slots by 15 minutes
-        return [s[0] for s in self._get_available_slots(start, end, timedelta(hours=1), events)]
+        return [s[0] for s in self._get_available_slots(start, end, SLOT_SIZE, events)]
 
     def available_time_weekday(self, executor_id: int, weekday: int):
         start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
@@ -225,7 +224,7 @@ class EventRepo(Repo):
         events = self.recurrent_events_for_day(executor_id, current_day)
         start = datetime.combine(current_day, time(0, 0))
         end = datetime.combine(current_day, time(23, 59))
-        return [s[0] for s in self._get_available_slots(start, end, timedelta(hours=1), events)]
+        return [s[0] for s in self._get_available_slots(start, end, SLOT_SIZE, events)]
 
     @staticmethod
     def _get_available_slots(start: datetime, end: datetime, slot_size: timedelta, events: list):
@@ -236,6 +235,8 @@ class EventRepo(Repo):
         while current_slot + slot_size <= end:
             all_slots.append((current_slot, current_slot + slot_size))
             current_slot += slot_size  # Move to the next slot
+
+        # TODO if lesson starts in 12 there should not be ability to add lesson at 11:15
 
         # Function to check if a slot overlaps with any occupied period
         def is_occupied(slot):
@@ -309,7 +310,13 @@ class EventRepo(Repo):
         return list(weekends)
 
     def available_work_weekdays(self, executor_id: int):
-        weekends = [w.start.weekday() for w in self.weekends(executor_id)]
+        weekends = []
+        for weekend in self.weekends(executor_id):
+            if not isinstance(weekend.start, datetime):
+                start = datetime.strptime(weekend.start, DB_DATETIME)
+            else:
+                start = weekend.start
+            weekends.append(start.weekday())
         return [i for i in range(7) if i not in weekends]
 
     def vacations(self, user_id: int):

@@ -37,7 +37,8 @@ class Keyboards:
         else:
             for text, callback_data in buttons:
                 builder.button(text=text, callback_data=callback_data)
-        builder.adjust(1 if len(buttons) <= MAX_BUTTON_ROWS else 2, repeat=True)
+        adjust = len(buttons) // MAX_BUTTON_ROWS
+        builder.adjust(1 if not adjust else adjust, repeat=True)
         if as_markup:
             return builder.as_markup()
         return builder
@@ -151,7 +152,11 @@ class Keyboards:
             buttons[callback + "add_end"] = "Добавить конец"
 
         for weekend in weekends:
-            weekday = WEEKDAY_MAP[weekend.start.weekday()]["long"]
+            if not isinstance(weekend.start, datetime):
+                start = datetime.strptime(weekend.start, DB_DATETIME)
+            else:
+                start = weekend.start
+            weekday = WEEKDAY_MAP[start.weekday()]["long"]
             buttons[callback2 + f"delete_weekend/{weekend.id}"] = f"Удалить выходной в {weekday}"
         buttons[callback2 + "add_weekend"] = "Добавить выходной"
 

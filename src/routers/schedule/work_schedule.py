@@ -129,7 +129,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
         EventHistoryRepo(db).create(user.username, WorkSchedule.scene, "deleted_weekend", weekday)
     elif "add_weekend" in callback.data:
         weekdays = EventRepo(db).available_work_weekdays(user.executor_id)
-        await message.answer(replies.CHOOSE_WEEKDAY, Keyboards.weekdays(weekdays, WorkSchedule.create_weekend))
+        await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, WorkSchedule.create_weekend))
     else:
         raise Exception("message", "Неизвестное событие", f"unknown weekend action {callback.data}")
 
@@ -142,7 +142,7 @@ async def create_weekend(callback: CallbackQuery, state: FSMContext, db: Session
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
-    weekday = get_callback_arg(callback.data, WorkSchedule.create_weekend)
+    weekday = int(get_callback_arg(callback.data, WorkSchedule.create_weekend))
     start_of_week = datetime.now() - timedelta(days=datetime.now().weekday())
     day = start_of_week + timedelta(days=weekday)
     event = RecurrentEvent(

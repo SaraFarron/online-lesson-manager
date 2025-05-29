@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import time
+from datetime import time, timedelta
 from pathlib import Path
 
 import pytz
@@ -34,7 +34,7 @@ DATE_FORMAT_HR = "%d.%m"
 TIME_FORMAT = "%H.%M"
 TIMEZONE = pytz.timezone("Europe/Moscow")
 
-MAX_BUTTON_ROWS = 8
+MAX_BUTTON_ROWS = 6
 
 WORK_START = time(hour=9, minute=0, tzinfo=TIMEZONE)
 WORK_END = time(hour=21, minute=0, tzinfo=TIMEZONE)
@@ -77,3 +77,6 @@ TIME_FMT = "%H:%M"
 DATE_FMT = "%Y.%m.%d"
 DATETIME_FMT = "%Y.%m.%d %H:%M"
 DB_DATETIME = "%Y-%m-%d %H:%M:%S.%f"
+
+SLOT_SIZE = timedelta(minutes=15)
+LESSON_SIZE = timedelta(hours=1)
