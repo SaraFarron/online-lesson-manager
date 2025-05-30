@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "online-lesson-manager"
-version = "1.0.3"
+version = "2.0.0"
 description = ""
 package-mode = false
 authors = ["SaraFarron <https://github.com/users/SaraFarron>"]
