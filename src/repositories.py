@@ -1,10 +1,9 @@
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import text
-from sqlalchemy.event import Events
 from sqlalchemy.orm import Session
 
-from src.core.config import DB_DATETIME, SLOT_SIZE
+from src.core.config import DB_DATETIME, SLOT_SIZE, LESSON_SIZE
 from src.models import Event, EventHistory, Executor, RecurrentEvent, User, CancelledRecurrentEvent
 
 
@@ -177,8 +176,9 @@ class EventRepo(Repo):
         return result
 
     def events_for_day(self, executor_id: int, day: date):
-        day_start = datetime.combine(day, time(0, 0))
-        day_end = datetime.combine(day, time(23, 59))
+        start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
+        day_start = datetime.combine(day, start)
+        day_end = datetime.combine(day, end)
         events = self.db.execute(text("""
             select start, end, user_id, event_type, is_reschedule from events
             where executor_id = :executor_id and start >= :day_start and end <= :day_end and cancelled is false
@@ -192,6 +192,8 @@ class EventRepo(Repo):
         return result
 
     def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
+        if self.vacations_day(user_id, day):
+            return []
         events = self.events_for_day(executor_id, day) + self.recurrent_events_for_day(executor_id, day)
         events = sorted(events, key=lambda x: x[0])
         if user_id is not None:
@@ -201,49 +203,55 @@ class EventRepo(Repo):
     def available_weekdays(self, executor_id: int):
         start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
         result = []
+        start_t, end_t = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
         for i in range(7):
             current_day = start_of_week + timedelta(days=i)
             events = self.recurrent_events_for_day(executor_id, current_day)
-            start = datetime.combine(current_day, time(0, 0))
-            end = datetime.combine(current_day, time(23, 59))
+            start = datetime.combine(current_day, start_t)
+            end = datetime.combine(current_day, end_t)
             available_time = self._get_available_slots(start, end, SLOT_SIZE, events)
             if available_time:
                 result.append(i)
         return result
 
     def available_time(self, executor_id: int, day: date):
-        events = self.events_for_day(executor_id, day)
-        # Default
-        start = datetime.combine(day, time(0, 0))
-        end = datetime.combine(day, time(23, 59))
+        events = self.events_for_day(executor_id, day) + self.recurrent_events_for_day(executor_id, day)
+
+        start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
+        start = datetime.combine(day, start)
+        end = datetime.combine(day, end)
         return [s[0] for s in self._get_available_slots(start, end, SLOT_SIZE, events)]
 
     def available_time_weekday(self, executor_id: int, weekday: int):
         start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
         current_day = start_of_week + timedelta(days=weekday)
         events = self.recurrent_events_for_day(executor_id, current_day)
-        start = datetime.combine(current_day, time(0, 0))
-        end = datetime.combine(current_day, time(23, 59))
+
+        start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
+        start = datetime.combine(current_day, start)
+        end = datetime.combine(current_day, end)
         return [s[0] for s in self._get_available_slots(start, end, SLOT_SIZE, events)]
 
     @staticmethod
     def _get_available_slots(start: datetime, end: datetime, slot_size: timedelta, events: list):
-        # Generate all slots
+        # Generate all slots (15-minute increments)
         all_slots = []
         current_slot = start
 
-        while current_slot + slot_size <= end:
-            all_slots.append((current_slot, current_slot + slot_size))
-            current_slot += slot_size  # Move to the next slot
+        while current_slot + LESSON_SIZE <= end:  # Check for full 1-hour availability
+            all_slots.append((current_slot, current_slot + LESSON_SIZE))  # 1-hour slot
+            current_slot += slot_size  # Move by 15 minutes
 
-        # TODO if lesson starts in 12 there should not be ability to add lesson at 11:15
-
-        # Function to check if a slot overlaps with any occupied period
+        # Function to check if a 1-hour slot overlaps with any occupied period
         def is_occupied(slot):
             slot_start, slot_end = slot
             for occupied in events:
-                occupied_start = datetime.strptime(occupied[0], DB_DATETIME) if isinstance(occupied[0], str) else occupied[0]
-                occupied_end = datetime.strptime(occupied[1], DB_DATETIME) if isinstance(occupied[1], str) else occupied[1]
+                occupied_start = (
+                    datetime.strptime(occupied[0], DB_DATETIME) if isinstance(occupied[0], str) else occupied[0]
+                )
+                occupied_end = (
+                    datetime.strptime(occupied[1], DB_DATETIME) if isinstance(occupied[1], str) else occupied[1]
+                )
                 if not (slot_end <= occupied_start or slot_start >= occupied_end):
                     return True  # The slot is occupied
             return False  # The slot is available
@@ -280,26 +288,32 @@ class EventRepo(Repo):
 
     def delete_work_hour_setting(self, executor_id: int, kind: str):
         if kind == "end":
-            event = (
-                self.db.query(RecurrentEvent)
-                .filter(
-                    RecurrentEvent.executor_id == executor_id,
-                    RecurrentEvent.event_type == RecurrentEvent.EventTypes.WORK_END,
-                )
-                .first()
-            )
-            event_time = event.start.time()
+            event_time, event = self.get_work_end(executor_id)
         elif kind == "start":
-            event = self.db.query(RecurrentEvent).filter(
-                RecurrentEvent.executor_id == executor_id,
-                RecurrentEvent.event_type == RecurrentEvent.EventTypes.WORK_START,
-            ).first()
-            event_time = event.end.time()
+            event_time, event = self.get_work_start(executor_id)
         else:
             raise Exception("message", "Неизвестный тип события", f"unknown kind: {kind}")
         self.db.delete(event)
         self.db.commit()
         return event_time
+
+    def get_work_end(self, executor_id: int):
+        event = self.db.query(RecurrentEvent).filter(
+            RecurrentEvent.executor_id == executor_id,
+            RecurrentEvent.event_type == RecurrentEvent.EventTypes.WORK_END,
+        ).first()
+        if event:
+            return event.start.time(), event
+        return time(hour=20, minute=0), None
+
+    def get_work_start(self, executor_id: int):
+        event = self.db.query(RecurrentEvent).filter(
+            RecurrentEvent.executor_id == executor_id,
+            RecurrentEvent.event_type == RecurrentEvent.EventTypes.WORK_START,
+        ).first()
+        if event:
+            return event.end.time(), event
+        return time(hour=9, minute=0), None
 
     def weekends(self, executor_id: int):
         events = self._recurrent_events_executor(executor_id)
@@ -328,3 +342,14 @@ class EventRepo(Repo):
             {"user_id": user_id, "vacation": Event.EventTypes.VACATION}
         )
         return list(events)
+
+    def vacations_day(self, user_id: int, day: date):
+        events = self.vacations(user_id)
+        if not events:
+            return False
+        for event in events:
+            start = datetime.strptime(event.start, DB_DATETIME)
+            end = datetime.strptime(event.end, DB_DATETIME)
+            if start.date() <= day <= end.date():
+                return True
+        return False

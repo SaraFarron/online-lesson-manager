@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import declarative_base, relationship
 
-from src.core.config import DATETIME_FMT, WEEKDAY_MAP, TIME_FMT
+from src.core.config import DATETIME_FMT, WEEKDAY_MAP, TIME_FMT, DATE_FMT
 
 Base = declarative_base()
 
@@ -82,12 +82,22 @@ class Event(EventModel, Base):
         return self.end.strftime(DATETIME_FMT)
 
     class EventTypes:
-        LESSON = "Разовый урок"
+        LESSON = "Урок"
         MOVED_LESSON = "Перенос"
         VACATION = "Каникулы"
 
     def __str__(self):
-        return f"{self.event_type} {self.st_str}-{self.et_str}"
+        match self.event_type:
+            case self.EventTypes.LESSON:
+                date = datetime.strftime(self.start, DATE_FMT)
+                time = datetime.strftime(self.start, TIME_FMT)
+                return f"Урок {date} в {time}"
+            case self.EventTypes.MOVED_LESSON:
+                date = datetime.strftime(self.start, DATE_FMT)
+                time = datetime.strftime(self.start, TIME_FMT)
+                return f"Перенос {date} в {time}"
+            case _:
+                return f"{self.event_type} {self.st_str}-{self.et_str}"
 
 
 class RecurrentEvent(EventModel, Base):
@@ -110,23 +120,25 @@ class RecurrentEvent(EventModel, Base):
         return occur
 
     class EventTypes:
-        LESSON = "Еженедельный урок"
+        LESSON = "Урок"
         WORK_START = "Начало рабочего дня"
         WORK_END = "Конец рабочего дня"
         WEEKEND = "Выходной"
 
     def __str__(self):
-        if self.event_type == self.EventTypes.LESSON:
-            weekday = WEEKDAY_MAP[self.start.weekday()]["long"]
-            time = datetime.strftime(self.start, TIME_FMT)
-            return f"{self.event_type} {weekday} {time}"
-        if self.event_type == self.EventTypes.WORK_START:
-            time = datetime.strftime(self.end, TIME_FMT)
-            return f"{self.event_type} в {time}"
-        if self.event_type == self.EventTypes.WORK_END:
-            time = datetime.strftime(self.start, TIME_FMT)
-            return f"{self.event_type} в {time}"
-        return f"{self.event_type} {self.start} {self.interval}"
+        match self.event_type:
+            case self.EventTypes.LESSON:
+                weekday = WEEKDAY_MAP[self.start.weekday()]["long"]
+                time = datetime.strftime(self.start, TIME_FMT)
+                return f"Урок в {weekday} {time}"
+            case self.EventTypes.WORK_START:
+                time = datetime.strftime(self.end, TIME_FMT)
+                return f"{self.event_type} в {time}"
+            case self.EventTypes.WORK_START:
+                time = datetime.strftime(self.start, TIME_FMT)
+                return f"{self.event_type} в {time}"
+            case _:
+                return f"{self.event_type} {self.start} {self.interval}"
 
 
 class CancelledRecurrentEvent(Model, Base):

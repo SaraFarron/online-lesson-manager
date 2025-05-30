@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from enum import Enum
+from math import ceil
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
@@ -37,7 +38,7 @@ class Keyboards:
         else:
             for text, callback_data in buttons:
                 builder.button(text=text, callback_data=callback_data)
-        adjust = len(buttons) // MAX_BUTTON_ROWS
+        adjust = ceil(len(buttons) / MAX_BUTTON_ROWS)
         builder.adjust(1 if not adjust else adjust, repeat=True)
         if as_markup:
             return builder.as_markup()
@@ -90,7 +91,7 @@ class Keyboards:
             lesson_weekday = WEEKDAY_MAP[lesson_datetime.weekday()]["short"]
             lesson_time = datetime.strftime(lesson_datetime, TIME_FMT)
             if lesson[3] == RecurrentEvent.EventTypes.LESSON:
-                buttons[callback + "re" + str(lesson[-1])] = f"{lesson[3]} {lesson_weekday} в {lesson_time}"
+                buttons[callback + "re" + str(lesson[-1])] = f"{lesson[3]} в {lesson_weekday} {lesson_time}"
             elif lesson[3] in (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON):
                 buttons[callback + "e" + str(lesson[-1])] = f"{lesson[3]} {lesson_date} в {lesson_time}"
             else:
@@ -166,7 +167,9 @@ class Keyboards:
     def vacations(cls, events: list, callback: str):
         buttons = {}
         for e in events:
-            event = f"{datetime.strftime(e.start, DATE_FMT)} - {datetime.strftime(e.end, DATE_FMT)}"
+            start = datetime.strptime(e.start, DB_DATETIME) if isinstance(e.start, str) else e.start
+            end = datetime.strptime(e.end, DB_DATETIME) if isinstance(e.end, str) else e.end
+            event = f"{datetime.strftime(start, DATE_FMT)} - {datetime.strftime(end, DATE_FMT)}"
             buttons[callback + f"delete_vacation/{e.id}"] = f"Удалить каникулы {event}"
         buttons[callback + "add_vacation"] = "Добавить каникулы"
         return cls.inline_keyboard(buttons)

@@ -29,7 +29,7 @@ class WeekSchedule(StatesGroup):
 @router.message(Command(WeekSchedule.command))
 @router.message(F.text == Commands.WEEK_SCHEDULE.value)
 @router.callback_query(F.data.startswith(WeekSchedule.week_start))
-async def add_lesson_handler(event: Message | CallbackQuery, state: FSMContext, db: Session) -> None:
+async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(event)
     state_data = await state.get_data()
     if isinstance(event, CallbackQuery):
@@ -49,7 +49,7 @@ async def add_lesson_handler(event: Message | CallbackQuery, state: FSMContext, 
         current_date = start_of_week + timedelta(days=i)
         lessons = EventRepo(db).day_schedule(
             user.executor_id,
-            datetime.now().date(),
+            current_date.date(),
             None if user.role == User.Roles.TEACHER else user.id,
         )
         result = day_schedule_text(lessons, users_map, user)

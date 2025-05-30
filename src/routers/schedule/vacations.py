@@ -34,7 +34,7 @@ async def vacations_handler(message: Message, state: FSMContext, db: Session) ->
     await state.update_data(user_id=user.telegram_id)
 
     vacations = EventRepo(db).vacations(user.id)
-    await message.answer(replies.CHOOSE_ACTION, Keyboards.vacations(vacations, Vacations.edit_vacations))
+    await message.answer(replies.CHOOSE_ACTION, reply_markup=Keyboards.vacations(vacations, Vacations.edit_vacations))
 
 
 @router.callback_query(F.data.startswith(Vacations.edit_vacations))
