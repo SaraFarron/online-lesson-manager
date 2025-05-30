@@ -4,29 +4,38 @@ from datetime import datetime, time
 import aiojobs
 from sqlalchemy.orm import Session
 
-from config import logs
-from config.config import TIMEZONE
+from core import logs
+from core.config import TIMEZONE
 from database import engine
 from logger import logger
-from messages import replies
-from repositories import UserRepo
-from service import Schedule
-from utils import send_message
+from src.models import User
+from src.repositories import EventRepo
+from utils import send_message, day_schedule_text
+
+
+def notification(events: list, user: User, users_map):
+    rows = day_schedule_text(events, users_map, user)
+    if not rows:
+        return None
+    return "Скоро занятия:\n" + "\n".join(rows)
 
 
 async def send_notifications(now: datetime):
     logger.info(logs.NOTIFICATIONS_START)
     with Session(engine) as db:
         notifies = set()
-        users = UserRepo(db).all()
-        schedule = Schedule(db)
+        users = db.query(User).all()
+        repo = EventRepo(db)
         for user in users:
-            text = schedule.lessons_day_message(user, now.date())
-            if not text or "занятий нет" in text:
+            student_id = user.id if user.role == User.Roles.STUDENT else None
+            events = repo.day_schedule(user.executor_id, now.date(), student_id)
+            user_ids = [e[2] for e in events]
+            users_map = {u.id: u.username for u in db.query(User).filter(User.id.in_(user_ids))}
+            text = notification(events, user, users_map)
+            if not text:
                 continue
-            notifies.add(user.username_dog)
-            message = replies.LESSONS_ARE_COMING + text
-            await send_message(user.telegram_id, message)
+            notifies.add(user.username)
+            await send_message(user.telegram_id, text)
         logger.info(logs.NOTIFICATIONS_SENT, ", ".join(notifies))
 
 

@@ -2,6 +2,7 @@
 name = "online-lesson-manager"
 version = "1.0.3"
 description = ""
+package-mode = false
 authors = ["SaraFarron <https://github.com/users/SaraFarron>"]
 readme = "README.md"
 
