@@ -1,29 +1,36 @@
-from routers.add_lesson import router as add_lesson_router
-from routers.check_notify import router as check_notify_router
-from routers.common.cancel import router as cancel_router
-from routers.common.help import router as help_router
-from routers.common.start import router as start_router
-from routers.reschedule import router as reschedule_router
-from routers.send_to_everyone import router as send_to_every1_router
-from routers.set_working_hours import router as set_working_hours_router
-from routers.today_schedule import router as today_schedule_router
-from routers.week_schedule import router as week_schedule_router
-from routers.vacations import  router as vacations_router
-from routers.add_one_lesson import router as add_one_lesson_router
+# Common, always first
+from src.routers.common.cancel import router as cancel_router
+from src.routers.common.start import router as start_router
+from src.routers.common.help import router as help_router
+
+# Lessons
+from src.routers.lessons.add_lesson import router as add_lesson_router
+from src.routers.lessons.add_recurrent_lesson import router as add_rec_lesson_router
+from src.routers.lessons.move_lesson import router as move_lesson_router
+from src.routers.lessons.day_schedule import router as day_schedule_router
+from src.routers.lessons.week_schedule import router as week_schedule_router
+
+# Schedule
+from src.routers.schedule.work_schedule import router as work_schedule_router
+from src.routers.schedule.vacations import router as vacations_router
+
+# Users
+from src.routers.users.profile import router as profile_router
+from src.routers.users.notifications import router as notifications_router
 
 all_routers = [
-    start_router,
     cancel_router,
+    start_router,
     help_router,
-    send_to_every1_router,
-    check_notify_router,
-    today_schedule_router,
-    week_schedule_router,
     add_lesson_router,
-    set_working_hours_router,
-    reschedule_router,
+    add_rec_lesson_router,
+    move_lesson_router,
+    day_schedule_router,
+    week_schedule_router,
+    work_schedule_router,
     vacations_router,
-    add_one_lesson_router,
+    profile_router,
+    notifications_router,
 ]
 
 __all__ = ["all_routers"]

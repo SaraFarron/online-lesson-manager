@@ -3,32 +3,25 @@ from __future__ import annotations
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from sqlalchemy.orm import Session
 
-from config.config import ADMINS
-from errors import AiogramTelegramError
-from help import AdminCommands, Commands
-from messages import replies
+from src.keyboards import Keyboards
+from src.messages import replies
+from src.middlewares import DatabaseMiddleware
+from src.repositories import EventHistoryRepo, UserRepo
+from src.utils import telegram_checks
 
 COMMAND = "help"
 router: Router = Router()
-
-
-def all_commands_keyboard(user_id: int):
-    """Create a keyboard with available commands."""
-    builder = ReplyKeyboardBuilder()
-    for command in Commands:
-        builder.button(text=command.value)
-    if user_id in ADMINS.values():
-        for command in AdminCommands:
-            builder.button(text=command.value)
-    builder.adjust(2, repeat=True)
-    return builder.as_markup()
+router.message.middleware(DatabaseMiddleware())
 
 
 @router.message(Command(COMMAND))
-async def help_handler(message: Message) -> None:
+async def help_handler(message: Message, db: Session) -> None:
     """Handler receives messages with `/help` command."""
-    if message.from_user is None:
-        raise AiogramTelegramError
-    await message.answer(replies.HELP_MESSAGE, reply_markup=all_commands_keyboard(message.from_user.id))
+    message = telegram_checks(message)
+    user = UserRepo(db).get_by_telegram_id(message.from_user.id)
+    if user is None:
+        raise Exception("message", "У вас нет прав на эту команду", "permission denied user is None")
+    await message.answer(replies.HELP_MESSAGE, reply_markup=Keyboards.all_commands(user.role))
+    EventHistoryRepo(db).create(user.username, "help", "help", "")

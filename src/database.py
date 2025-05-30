@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 
-from config import logs
+from core import logs
 from logger import logger
 from models import Base
 

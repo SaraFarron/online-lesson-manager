@@ -1,225 +1,162 @@
-from __future__ import annotations
+from datetime import datetime, timedelta
+from sqlalchemy.ext.declarative import declared_attr
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import declarative_base, relationship
 
-from datetime import date, datetime, time, timedelta
-from typing import Optional
+from src.core.config import DATETIME_FMT, WEEKDAY_MAP, TIME_FMT, DATE_FMT
 
-from sqlalchemy import Date, ForeignKey, Integer, String, Time
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
-from config import config
-
-
-class Base(DeclarativeBase):
-    pass
+Base = declarative_base()
 
 
-class Teacher(Base):
-    __tablename__ = "teacher"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    telegram_id: Mapped[int] = mapped_column(unique=True, nullable=False)
-    work_start: Mapped[time] = mapped_column(Time, default=config.WORK_START)
-    work_end: Mapped[time] = mapped_column(Time, default=config.WORK_END)
-    weekends: Mapped[list[Weekend]] = relationship(back_populates="teacher")
-    breaks: Mapped[list[WorkBreak]] = relationship(back_populates="teacher")
-    holidays: Mapped[list[Vacations]] = relationship(back_populates="teacher")
-    students: Mapped[list[User]] = relationship(back_populates="teacher")
+class Model:
+    @declared_attr
+    def id(cls):
+        return Column(Integer, primary_key=True, autoincrement=True)
 
 
-class Vacations(Base):
-    __tablename__ = "holidays"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id", name="teacher"), nullable=True)
-    teacher: Mapped[Teacher] = relationship(back_populates="holidays")
-    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id", name="user"), nullable=True)
-    user: Mapped[User] = relationship(back_populates="holidays")
-    start_date: Mapped[date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+class Executor(Model, Base):
+    __tablename__ = 'executors'
+    code = Column(String, unique=True)
+    user = relationship('User', backref='executor')
+    telegram_id = Column(Integer, unique=True)
 
 
-class WeekdayMixin:
-    weekday: Mapped[int] = mapped_column(Integer)
+class User(Model, Base):
+    __tablename__ = 'users'
+    telegram_id = Column(Integer, unique=True)
+    username = Column(String)
+    full_name = Column(String)
+    role = Column(String)
+    executor_id = Column(Integer, ForeignKey('executors.id'), nullable=True, default=None)
 
-    @property
-    def weekday_full_str(self) -> str:
-        """Weekday as a string."""
-        return config.WEEKDAY_MAP_FULL[self.weekday]
-
-    @property
-    def weekday_short_str(self) -> str:
-        """Weekday as a string."""
-        return config.WEEKDAY_MAP[self.weekday]
-
-
-class Weekend(WeekdayMixin, Base):
-    __tablename__ = "weekend"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
-    teacher: Mapped[Teacher] = relationship(back_populates="weekends")
+    class Roles:
+        TEACHER = "TEACHER"
+        STUDENT = "STUDENT"
 
 
-class BordersMixin:
-    start_time: Mapped[time] = mapped_column(Time)
-    end_time: Mapped[time] = mapped_column(Time)
+class EventModel(Model):
+    @declared_attr
+    def user_id(cls):
+        return Column(Integer, ForeignKey("users.id"))
+
+    @declared_attr
+    def user(cls):
+        return relationship(User)
+
+    @declared_attr
+    def executor_id(cls):
+        return Column(Integer, ForeignKey("executors.id"), nullable=False)
+
+    @declared_attr
+    def executor(cls):
+        return relationship(Executor)
+
+    @declared_attr
+    def event_type(cls):
+        return Column(String)
+
+    @declared_attr
+    def start(cls):
+        return Column(DateTime)
+
+    @declared_attr
+    def end(cls):
+        return Column(DateTime)
+
+
+class Event(EventModel, Base):
+    __tablename__ = 'events'
+    cancelled = Column(Boolean, default=False)
+    reschedule_id = Column(Integer, ForeignKey('events.id'), nullable=True, default=None)
+    reschedule = relationship('Event')
+    is_reschedule = Column(Boolean, default=False)
 
     @property
     def st_str(self):
         """Start time as a string."""
-        return self.start_time.strftime("%H:%M")
+        return self.start.strftime(DATETIME_FMT)
 
     @property
     def et_str(self):
         """End time as a string."""
-        return self.end_time.strftime("%H:%M")
+        return self.end.strftime(DATETIME_FMT)
 
-    @property
-    def edges(self):
-        """Start and end time as a tuple."""
-        return self.start_time, self.end_time
+    class EventTypes:
+        LESSON = "Урок"
+        MOVED_LESSON = "Перенос"
+        VACATION = "Каникулы"
 
-
-class WorkBreak(WeekdayMixin, BordersMixin, Base):
-    __tablename__ = "work_break"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
-    teacher: Mapped[Teacher] = relationship(back_populates="breaks")
-
-
-class User(Base):
-    __tablename__ = "user_account"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(unique=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(64), nullable=False)
-    telegram_username: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)  # noqa: UP007
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("teacher.id"))
-    teacher: Mapped[Teacher] = relationship(back_populates="students")
-    lessons: Mapped[list[Lesson]] = relationship(back_populates="user", cascade="all, delete")
-    scheduled_lessons: Mapped[list[ScheduledLesson]] = relationship(back_populates="user", cascade="all, delete")
-    reschedules: Mapped[list[Reschedule]] = relationship(back_populates="user", cascade="all, delete")
-    restricted_times: Mapped[list[RestrictedTime]] = relationship(back_populates="user")
-    holidays: Mapped[list[Vacations]] = relationship(back_populates="user")
-
-    @property
-    def username_dog(self) -> str:
-        """Telegram username dog."""
-        return f"@{self.telegram_username}" if self.telegram_username else f"{self.name} ({self.username_link})"
-
-    @property
-    def username_link(self) -> str:
-        """Telegram username link."""
-        return f"https://t.me/{self.telegram_username}" if self.telegram_username else f"https://t.me/{self.telegram_id}"
-
-    def __repr__(self) -> str:
-        """String model represetation."""
-        return f"User(id={self.id!r}, name={self.name!r})"
+    def __str__(self):
+        match self.event_type:
+            case self.EventTypes.LESSON:
+                date = datetime.strftime(self.start, DATE_FMT)
+                time = datetime.strftime(self.start, TIME_FMT)
+                return f"Урок {date} в {time}"
+            case self.EventTypes.MOVED_LESSON:
+                date = datetime.strftime(self.start, DATE_FMT)
+                time = datetime.strftime(self.start, TIME_FMT)
+                return f"Перенос {date} в {time}"
+            case _:
+                return f"{self.event_type} {self.st_str}-{self.et_str}"
 
 
-class Lesson(BordersMixin, Base):
-    __tablename__ = "lesson"
+class RecurrentEvent(EventModel, Base):
+    __tablename__ = 'recurrent_events'
+    interval = Column(Integer)  # days
+    interval_end = Column(DateTime, nullable=True, default=None)
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
-    user: Mapped[User] = relationship(back_populates="lessons")
-    date: Mapped[Date] = mapped_column(Date)
-    # statuses: upcoming, canceled, completed
-    status: Mapped[str] = mapped_column(String(10), default="upcoming")
+    def get_next_occurrence(self, after: datetime, before: datetime | None = None):
+        """
+        Given an Event and a datetime, return the next occurrence of the event after the given datetime.
+        """
+        if after < self.start:
+            return None
 
-    @property
-    def short_repr(self) -> str:
-        """String model represetation."""
-        return f"Разовый урок в {self.st_str}-{self.et_str}"
+        elapsed_time = (after - self.start).total_seconds()
+        intervals_passed = (elapsed_time // self.interval) + 1
+        occur = self.start + timedelta(seconds=intervals_passed * self.interval)
+        if before and occur > before:
+            return None
+        return occur
 
-    @property
-    def long_repr(self):
-        """String model represetation."""
-        return f"Разовый урок в {self.st_str}-{self.et_str} у {self.user.username_dog}"
+    class EventTypes:
+        LESSON = "Урок"
+        WORK_START = "Начало рабочего дня"
+        WORK_END = "Конец рабочего дня"
+        WEEKEND = "Выходной"
 
-    def __repr__(self) -> str:
-        """String model represetation."""
-        return f"Разовый урок на {self.date} в {self.st_str}"
-
-
-class ScheduledLesson(WeekdayMixin, BordersMixin, Base):
-    __tablename__ = "scheduled_lesson"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
-    user: Mapped[User] = relationship(back_populates="scheduled_lessons")
-
-    @property
-    def short_repr(self) -> str:
-        """String model represetation."""
-        return f"Урок в {self.st_str}-{self.et_str}"
-
-    @property
-    def long_repr(self):
-        """String model represetation."""
-        return f"Урок в {self.st_str}-{self.et_str} у {self.user.username_dog}"
-
-    def may_cancel(self, date_time: datetime) -> bool:
-        """Check if reschedule may be canceled."""
-        if self.weekday != date_time.weekday():
-            return True
-        delta = datetime.combine(date_time.date(), self.start_time, tzinfo=config.TIMEZONE) - date_time
-        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HRS_TO_CANCEL))
-
-    def __repr__(self) -> str:
-        """String model represetation."""
-        return f"Урок на {self.weekday_short_str} в {self.st_str}"
+    def __str__(self):
+        match self.event_type:
+            case self.EventTypes.LESSON:
+                weekday = WEEKDAY_MAP[self.start.weekday()]["long"]
+                time = datetime.strftime(self.start, TIME_FMT)
+                return f"Урок в {weekday} {time}"
+            case self.EventTypes.WORK_START:
+                time = datetime.strftime(self.end, TIME_FMT)
+                return f"{self.event_type} в {time}"
+            case self.EventTypes.WORK_START:
+                time = datetime.strftime(self.start, TIME_FMT)
+                return f"{self.event_type} в {time}"
+            case _:
+                return f"{self.event_type} {self.start} {self.interval}"
 
 
-class Reschedule(BordersMixin, Base):
-    __tablename__ = "reschedule"
+class CancelledRecurrentEvent(Model, Base):
+    __tablename__ = 'event_breaks'
+    event_id = Column(Integer, ForeignKey('recurrent_events.id'))
+    event = relationship(RecurrentEvent)
+    break_type = Column(String)
+    start = Column(DateTime)
+    end = Column(DateTime)
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
-    user: Mapped[User] = relationship(back_populates="reschedules")
-    source_id: Mapped[int] = mapped_column(ForeignKey("scheduled_lesson.id"))
-    source: Mapped[ScheduledLesson] = relationship()
-    source_date: Mapped[date] = mapped_column(Date)
-    date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, default=None)  # noqa: UP007
-
-    start_time: Mapped[time] = mapped_column(Time, nullable=True)
-    end_time: Mapped[time] = mapped_column(Time, nullable=True)
-
-    @property
-    def short_repr(self) -> str:
-        """String model represetation."""
-        return f"Перенос в {self.st_str}-{self.et_str}"
-
-    @property
-    def long_repr(self):
-        """String model represetation."""
-        return f"Перенос в {self.st_str}-{self.et_str} у {self.user.username_dog}"
-
-    @property
-    def weekday(self):
-        """Weekday."""
-        return self.date.weekday() if self.date else None
-
-    def may_cancel(self, date_time: datetime) -> bool:
-        """Check if reschedule may be canceled."""
-        if not self.date:
-            return False
-        if self.date > date_time.date():
-            return True
-        delta = datetime.combine(self.date, self.start_time, tzinfo=config.TIMEZONE) - date_time
-        return bool(delta > timedelta(0) and delta > timedelta(hours=config.HRS_TO_CANCEL))
-
-    def __repr__(self) -> str:
-        """String model represetation."""
-        return f"Перенос на {self.date} в {self.st_str}"
+    class CancelTypes:
+        LESSON_CANCELED = "Отмена занятия"
 
 
-class RestrictedTime(WeekdayMixin, BordersMixin, Base):
-    __tablename__ = "restricted_time"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user_account.id"))
-    user: Mapped[User] = relationship(back_populates="restricted_times")
-    whole_day_restricted: Mapped[bool] = mapped_column(default=False)
+class EventHistory(Model, Base):
+    __tablename__ = 'event_history'
+    author = Column(String)
+    scene = Column(String)
+    event_type = Column(String)
+    event_value = Column(String)
+    created_at = Column(DateTime, default=datetime.now)
