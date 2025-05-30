@@ -105,8 +105,8 @@ class DatabaseMigrator:
                 user_id,
                 2,
                 "Урок",
-                datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M:%S.%f"),
-                datetime.strptime(f"{date} {end_time}", "%Y-%m-%d %H:%M:%S.%f"),
+                date + " " + start_time,
+                date + " " + end_time,
                 id,
             )
             self.dest_cur.execute(insert_sql, transformed_row)
@@ -133,8 +133,8 @@ class DatabaseMigrator:
                 user_id,
                 2,
                 "Урок",
-                datetime.strptime(f"{weekday_date} {start_time}", "%Y-%m-%d %H:%M:%S.%f"),
-                datetime.strptime(f"{weekday_date} {end_time}", "%Y-%m-%d %H:%M:%S.%f"),
+                str(weekday_date) + " " + start_time,
+                str(weekday_date) + " " + end_time,
                 id,
             )
             self.dest_cur.execute(insert_sql, transformed_row)
