@@ -34,7 +34,7 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
 
     await state.update_data(user_id=user.telegram_id)
-    weekdays = EventRepo(db).available_weekdays(user.id)
+    weekdays = EventRepo(db).available_weekdays(user.executor_id)
     await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, AddRecurrentLesson.choose_weekday))
 
 
