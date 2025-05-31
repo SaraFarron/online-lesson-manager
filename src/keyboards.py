@@ -22,6 +22,7 @@ class AdminCommands(Enum):
     DAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
     MANAGE_WORK_HOURS = "Рабочее время"
+    WORK_BREAKS = "Перерывы"
     CHECK_SCHEDULE = "Проверить расписание"
     SEND_TO_EVERYONE = "Рассылка всем ученикам"
     STUDENTS = "Ученики"
@@ -184,7 +185,7 @@ class Keyboards:
     @classmethod
     def profile(cls, user_id: int, callback: str):
         buttons = {
-            callback + str(user_id): "Удалить пользователя (запросит подтверждение)"
+            callback + str(user_id): "Удалить пользователя (запросит подтверждение)",
         }
         return cls.inline_keyboard(buttons)
 
@@ -194,4 +195,16 @@ class Keyboards:
             callback + "yes": "Да",
             callback + "no": "Нет",
         }
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def work_breaks(cls, events: list, add_callback: str, remove_callback: str):
+        buttons = {}
+        for event in events:
+            start = datetime.strptime(event.start, DB_DATETIME)
+            end = datetime.strptime(event.end, DB_DATETIME)
+            duration = datetime.strftime(start, TIME_FMT) + " - " + datetime.strftime(end, TIME_FMT)
+            weekday = WEEKDAY_MAP[start.weekday()]["short"]
+            buttons[remove_callback + str(event.id)] = f"Удалить Перерыв {weekday} {duration}"
+        buttons[add_callback] = "Добавить перерыв"
         return cls.inline_keyboard(buttons)

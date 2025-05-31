@@ -3,8 +3,8 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.core.config import DB_DATETIME, SLOT_SIZE, LESSON_SIZE
-from src.models import Event, EventHistory, Executor, RecurrentEvent, User, CancelledRecurrentEvent
+from src.core.config import DB_DATETIME, LESSON_SIZE, SLOT_SIZE
+from src.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
 
 
 class Repo:
@@ -84,7 +84,7 @@ class EventHistoryRepo(Repo):
                 order by created_at desc
                 limit 10
             """),
-            {"author": username}
+            {"author": username},
         )
         return list(events)
 
@@ -339,7 +339,7 @@ class EventRepo(Repo):
                 select start, end, id from events
                 where user_id = :user_id and event_type = :vacation and cancelled is false
             """),
-            {"user_id": user_id, "vacation": Event.EventTypes.VACATION}
+            {"user_id": user_id, "vacation": Event.EventTypes.VACATION},
         )
         return list(events)
 
@@ -353,3 +353,9 @@ class EventRepo(Repo):
             if start.date() <= day <= end.date():
                 return True
         return False
+
+    def work_breaks(self, executor_id: int):
+        events = self._recurrent_events_executor(executor_id)
+        if events:
+            events = list(filter(lambda x: x.event_type == RecurrentEvent.EventTypes.WORK_BREAK, events))
+        return events
