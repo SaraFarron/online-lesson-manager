@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core.config import DATE_FMT
-from src.keyboards import Keyboards, Commands
+from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import User
@@ -38,7 +38,9 @@ async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContex
         user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
         await state.update_data(user_id=message.from_user.id)
 
-    users_map = {u.id: u.username for u in db.query(User).filter(User.executor_id == user.executor_id)}
+    users_map = {
+        u.id: u.username if u.username else u.full_name for u in db.query(User).filter(User.executor_id == user.executor_id)
+    }
     if isinstance(event, Message):
         date = datetime.now()
     else:

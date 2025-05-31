@@ -10,7 +10,7 @@ from database import engine
 from logger import logger
 from src.models import User
 from src.repositories import EventRepo
-from utils import send_message, day_schedule_text
+from utils import day_schedule_text, send_message
 
 
 def notification(events: list, user: User, users_map):
@@ -30,7 +30,9 @@ async def send_notifications(now: datetime):
             student_id = user.id if user.role == User.Roles.STUDENT else None
             events = repo.day_schedule(user.executor_id, now.date(), student_id)
             user_ids = [e[2] for e in events]
-            users_map = {u.id: u.username for u in db.query(User).filter(User.id.in_(user_ids))}
+            users_map = {
+                u.id: u.username if u.username else u.full_name for u in db.query(User).filter(User.id.in_(user_ids))
+            }
             text = notification(events, user, users_map)
             if not text:
                 continue
