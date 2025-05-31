@@ -179,7 +179,7 @@ class Keyboards:
     def users(cls, users: list[User], callback: str):
         buttons = {}
         for user in users:
-            buttons[callback + str(user.id)] = f"Профиль {user.username}"
+            buttons[callback + str(user.id)] = user.username if user.username else user.full_name
         return cls.inline_keyboard(buttons)
 
     @classmethod
