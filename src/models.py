@@ -97,6 +97,9 @@ class Event(EventModel, Base):
                 date = datetime.strftime(self.start, DATE_FMT)
                 time = datetime.strftime(self.start, TIME_FMT)
                 return f"Перенос {date} в {time}"
+            case self.EventTypes.VACATION:
+                start, end = datetime.strftime(self.start, DATE_FMT), datetime.strftime(self.end, DATE_FMT)
+                return f"Каникулы с {start} по {end}"
             case _:
                 return f"{self.event_type} {self.st_str}-{self.et_str}"
 
