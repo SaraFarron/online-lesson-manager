@@ -12,7 +12,7 @@ from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import Event
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import get_callback_arg, parse_date, telegram_checks
+from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -53,6 +53,8 @@ async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session
         await message.answer(replies.VACATION_DELETED)
         await state.clear()
         EventHistoryRepo(db).create(user.username, Vacations.scene, "delete_vacation", event_str)
+        executor_tg = UserRepo(db).executor_telegram_id(user)
+        await send_message(executor_tg, f"{user.username} удалил(а) Каникулы {event_str}")
     elif action.startswith("add_vacation"):
         await message.answer(replies.CHOOSE_DATES)
         await state.set_state(Vacations.choose_dates)
@@ -94,3 +96,5 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
     await state.clear()
     event_str = f"{event.start.date()} - {event.end.date()}"
     EventHistoryRepo(db).create(user.username, Vacations.scene, "added_vacation", event_str)
+    executor_tg = UserRepo(db).executor_telegram_id(user)
+    await send_message(executor_tg, f"{user.username} добавил(а) {event}")

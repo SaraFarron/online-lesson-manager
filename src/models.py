@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
-from sqlalchemy.ext.declarative import declared_attr
+
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import declarative_base, relationship
 
-from src.core.config import DATETIME_FMT, WEEKDAY_MAP, TIME_FMT, DATE_FMT
+from src.core.config import DATE_FMT, DATETIME_FMT, TIME_FMT, WEEKDAY_MAP
 
 Base = declarative_base()
 
@@ -15,19 +16,19 @@ class Model:
 
 
 class Executor(Model, Base):
-    __tablename__ = 'executors'
+    __tablename__ = "executors"
     code = Column(String, unique=True)
-    user = relationship('User', backref='executor')
+    user = relationship("User", backref="executor")
     telegram_id = Column(Integer, unique=True)
 
 
 class User(Model, Base):
-    __tablename__ = 'users'
+    __tablename__ = "users"
     telegram_id = Column(Integer, unique=True)
     username = Column(String)
     full_name = Column(String)
     role = Column(String)
-    executor_id = Column(Integer, ForeignKey('executors.id'), nullable=True, default=None)
+    executor_id = Column(Integer, ForeignKey("executors.id"), nullable=True, default=None)
 
     class Roles:
         TEACHER = "TEACHER"
@@ -65,10 +66,10 @@ class EventModel(Model):
 
 
 class Event(EventModel, Base):
-    __tablename__ = 'events'
+    __tablename__ = "events"
     cancelled = Column(Boolean, default=False)
-    reschedule_id = Column(Integer, ForeignKey('events.id'), nullable=True, default=None)
-    reschedule = relationship('Event')
+    reschedule_id = Column(Integer, ForeignKey("events.id"), nullable=True, default=None)
+    reschedule = relationship("Event")
     is_reschedule = Column(Boolean, default=False)
 
     @property
@@ -96,12 +97,15 @@ class Event(EventModel, Base):
                 date = datetime.strftime(self.start, DATE_FMT)
                 time = datetime.strftime(self.start, TIME_FMT)
                 return f"Перенос {date} в {time}"
+            case self.EventTypes.VACATION:
+                start, end = datetime.strftime(self.start, DATE_FMT), datetime.strftime(self.end, DATE_FMT)
+                return f"Каникулы с {start} по {end}"
             case _:
                 return f"{self.event_type} {self.st_str}-{self.et_str}"
 
 
 class RecurrentEvent(EventModel, Base):
-    __tablename__ = 'recurrent_events'
+    __tablename__ = "recurrent_events"
     interval = Column(Integer)  # days
     interval_end = Column(DateTime, nullable=True, default=None)
 
@@ -124,6 +128,7 @@ class RecurrentEvent(EventModel, Base):
         WORK_START = "Начало рабочего дня"
         WORK_END = "Конец рабочего дня"
         WEEKEND = "Выходной"
+        WORK_BREAK = "Перерыв"
 
     def __str__(self):
         match self.event_type:
@@ -142,8 +147,8 @@ class RecurrentEvent(EventModel, Base):
 
 
 class CancelledRecurrentEvent(Model, Base):
-    __tablename__ = 'event_breaks'
-    event_id = Column(Integer, ForeignKey('recurrent_events.id'))
+    __tablename__ = "event_breaks"
+    event_id = Column(Integer, ForeignKey("recurrent_events.id"))
     event = relationship(RecurrentEvent)
     break_type = Column(String)
     start = Column(DateTime)
@@ -154,7 +159,7 @@ class CancelledRecurrentEvent(Model, Base):
 
 
 class EventHistory(Model, Base):
-    __tablename__ = 'event_history'
+    __tablename__ = "event_history"
     author = Column(String)
     scene = Column(String)
     event_type = Column(String)
