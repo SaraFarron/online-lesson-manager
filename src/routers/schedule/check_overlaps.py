@@ -32,6 +32,7 @@ async def check_overlaps_handler(message: Message, state: FSMContext, db: Sessio
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
+    await state.update_data(user_id=message.from_user.id)
     overlaps = EventRepo(db).overlaps(user.executor_id)
     if overlaps:
         text = EventRepo(db).overlaps_text(overlaps)
@@ -51,7 +52,7 @@ async def send_messages(callback: CallbackQuery, state: FSMContext, db: Session)
     overlaps = EventRepo(db).overlaps(user.executor_id)
     messages = EventRepo(db).overlaps_messages(overlaps)
     counter = 0
-    for user_tg, texts in messages:
+    for user_tg, texts in messages.items():
         if not texts:
             continue
         msg = "В вашем расписании занятий есть несостыковки:\n" + "\n".join(texts)

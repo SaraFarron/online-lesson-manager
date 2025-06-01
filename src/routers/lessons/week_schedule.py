@@ -55,7 +55,7 @@ async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContex
             None if user.role == User.Roles.TEACHER else user.id,
         )
         result = day_schedule_text(lessons, users_map, user)
-        lessons_str = "\n\n".join(result) if result else replies.NO_LESSONS
+        lessons_str = "\n".join(result) if result else replies.NO_LESSONS
         date_lesson_map[datetime.strftime(current_date, DATE_FMT)] = lessons_str
 
     text = []

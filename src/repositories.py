@@ -429,7 +429,7 @@ class EventRepo(Repo):
 
         users_affected = self.db.query(User).filter(User.id.in_(list(user_overlap_map)))
         users_map = {u.id: u.username if u.username else u.full_name for u in users_affected if u.role == User.Roles.STUDENT}
-        re_ids = [e[3] for e in overlaps if len(e) != 6]
+        re_ids = [e[0][3] for e in overlaps if len(e) != 6] + [e[1][3] for e in overlaps if len(e) != 6]
         rec_map = {re.id: re for re in self.db.query(RecurrentEvent).filter(RecurrentEvent.id.in_(re_ids))}
 
         for overlap in overlaps:
@@ -437,7 +437,11 @@ class EventRepo(Repo):
             if ov2[2] not in users_map and ov1[2] not in users_map:
                 continue
             ov1t = str(ov1[0])
+            if len(ov1t.split(":")) == 3:
+                ov1t = ov1t[:-3]
             ov2t = str(ov2[0])
+            if len(ov2t.split(":")) == 3:
+                ov2t = ov2t[:-3]
             if ov1[4] == RecurrentEvent.EventTypes.WORK_BREAK:
                 weekday = rec_map[ov1[3]].start.weekday()
                 weekday = WEEKDAY_MAP[weekday]["long"]
@@ -489,7 +493,7 @@ class EventRepo(Repo):
         users_map = {
             u.id: (u.username if u.username else u.full_name, u.telegram_id) for u in users_affected if u.role == User.Roles.STUDENT
         }
-        re_ids = [e[3] for e in overlaps if len(e) != 6]
+        re_ids = [e[0][3] for e in overlaps if len(e) != 6] + [e[1][3] for e in overlaps if len(e) != 6]
         rec_map = {re.id: re for re in self.db.query(RecurrentEvent).filter(RecurrentEvent.id.in_(re_ids))}
         messages = {}
         for overlap in overlaps:
@@ -497,47 +501,51 @@ class EventRepo(Repo):
             if ov2[2] not in users_map and ov1[2] not in users_map:
                 continue
             ov1t = str(ov1[0])
+            if len(ov1t.split(":")) == 3:
+                ov1t = ov1t[:-3]
             ov2t = str(ov2[0])
+            if len(ov2t.split(":")) == 3:
+                ov2t = ov2t[:-3]
             if ov1[4] == RecurrentEvent.EventTypes.WORK_BREAK:
                 weekday = rec_map[ov1[3]].start.weekday()
                 weekday = WEEKDAY_MAP[weekday]["long"]
                 row_text = f"{ov2[4]} в {ov2t} стоит в перерыв ({weekday})"
-                user_tg = users_map[ov2[2][1]]
+                user_tg = users_map[ov2[2]][1]
             elif ov2[4] == RecurrentEvent.EventTypes.WORK_BREAK:
                 weekday = rec_map[ov2[3]].start.weekday()
                 weekday = WEEKDAY_MAP[weekday]["long"]
                 row_text = f"{ov1[4]} в {ov1t} стоит в перерыв ({weekday})"
-                user_tg = users_map[ov1[2][1]]
+                user_tg = users_map[ov1[2]][1]
             elif ov1[4] == RecurrentEvent.EventTypes.WEEKEND:
                 weekday = rec_map[ov1[3]].start.weekday()
                 weekday = WEEKDAY_MAP[weekday]["long"]
                 row_text = f"{ov2[4]} в {ov2t} стоит в выходной ({weekday})"
-                user_tg = users_map[ov2[2][1]]
+                user_tg = users_map[ov2[2]][1]
             elif ov2[4] == RecurrentEvent.EventTypes.WEEKEND:
                 weekday = rec_map[ov2[3]].start.weekday()
                 weekday = WEEKDAY_MAP[weekday]["long"]
                 row_text = f"{ov1[4]} в {ov1t} стоит в выходной ({weekday})"
-                user_tg = users_map[ov1[2][1]]
+                user_tg = users_map[ov1[2]][1]
             elif ov1[4] == RecurrentEvent.EventTypes.WORK_START:
                 work_start = rec_map[ov1[3]].end
                 work_start = datetime.strftime(work_start, TIME_FMT)
                 row_text = f"{ov2[4]} в {ov2t} стоит до начала работы учителя ({work_start})"
-                user_tg = users_map[ov2[2][1]]
+                user_tg = users_map[ov2[2]][1]
             elif ov2[4] == RecurrentEvent.EventTypes.WORK_START:
                 work_start = rec_map[ov2[3]].end
                 work_start = datetime.strftime(work_start, TIME_FMT)
                 row_text = f"{ov1[4]} в {ov1t} стоит до начала работы учителя ({work_start})"
-                user_tg = users_map[ov1[2][1]]
+                user_tg = users_map[ov1[2]][1]
             elif ov1[4] == RecurrentEvent.EventTypes.WORK_END:
                 work_end = rec_map[ov2[3]].start
                 work_end = datetime.strftime(work_end, TIME_FMT)
                 row_text = f"{ov2[4]} в {ov2t} стоит после конца работы учителя ({work_end})"
-                user_tg = users_map[ov2[2][1]]
+                user_tg = users_map[ov2[2]][1]
             elif ov2[4] == RecurrentEvent.EventTypes.WORK_END:
                 work_end = rec_map[ov2[3]].start
                 work_end = datetime.strftime(work_end, TIME_FMT)
                 row_text = f"{ov1[4]} в {ov1t} стоит после конца работы учителя ({work_end})"
-                user_tg = users_map[ov1[2][1]]
+                user_tg = users_map[ov1[2]][1]
             else:
                 continue
 
