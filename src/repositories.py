@@ -3,7 +3,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.core.config import DB_DATETIME, LESSON_SIZE, SLOT_SIZE
+from src.core.config import DB_DATETIME, LESSON_SIZE, SLOT_SIZE, TIME_FMT, WEEKDAY_MAP
 from src.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
 
 
@@ -428,32 +428,121 @@ class EventRepo(Repo):
             user_overlap_map[ov2[2]] = ov2
 
         users_affected = self.db.query(User).filter(User.id.in_(list(user_overlap_map)))
-        users_map = {u.id: u.username if u.username else u.full_name for u in users_affected}
+        users_map = {u.id: u.username if u.username else u.full_name for u in users_affected if u.role == User.Roles.STUDENT}
+        re_ids = [e[3] for e in overlaps if len(e) != 6]
+        rec_map = {re.id: re for re in self.db.query(RecurrentEvent).filter(RecurrentEvent.id.in_(re_ids))}
 
         for overlap in overlaps:
             ov1, ov2 = overlap[0], overlap[1]
+            if ov2[2] not in users_map and ov1[2] not in users_map:
+                continue
             ov1t = str(ov1[0])
             ov2t = str(ov2[0])
             if ov1[4] == RecurrentEvent.EventTypes.WORK_BREAK:
-                text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит в перерыв"
+                weekday = rec_map[ov1[3]].start.weekday()
+                weekday = WEEKDAY_MAP[weekday]["long"]
+                row_text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит в перерыв ({weekday})"
             elif ov2[4] == RecurrentEvent.EventTypes.WORK_BREAK:
-                text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит в перерыв"
+                weekday = rec_map[ov2[3]].start.weekday()
+                weekday = WEEKDAY_MAP[weekday]["long"]
+                row_text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит в перерыв ({weekday})"
             elif ov1[4] == RecurrentEvent.EventTypes.WEEKEND:
-                text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит в выходной"
+                weekday = rec_map[ov1[3]].start.weekday()
+                weekday = WEEKDAY_MAP[weekday]["long"]
+                row_text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит в выходной ({weekday})"
             elif ov2[4] == RecurrentEvent.EventTypes.WEEKEND:
-                text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит в выходной"
+                weekday = rec_map[ov2[3]].start.weekday()
+                weekday = WEEKDAY_MAP[weekday]["long"]
+                row_text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит в выходной ({weekday})"
             elif ov1[4] == RecurrentEvent.EventTypes.WORK_START:
-                text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит до начала работы"
+                work_start = rec_map[ov1[3]].end
+                work_start = datetime.strftime(work_start, TIME_FMT)
+                row_text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит до начала работы учителя ({work_start})"
             elif ov2[4] == RecurrentEvent.EventTypes.WORK_START:
-                text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит до начала работы"
+                work_start = rec_map[ov2[3]].end
+                work_start = datetime.strftime(work_start, TIME_FMT)
+                row_text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит до начала работы учителя ({work_start})"
             elif ov1[4] == RecurrentEvent.EventTypes.WORK_END:
-                text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит после конца работы"
+                work_end = rec_map[ov2[3]].start
+                work_end = datetime.strftime(work_end, TIME_FMT)
+                row_text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит после конца работы учителя ({work_end})"
             elif ov2[4] == RecurrentEvent.EventTypes.WORK_END:
-                text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит после конца работы"
+                work_end = rec_map[ov2[3]].start
+                work_end = datetime.strftime(work_end, TIME_FMT)
+                row_text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит после конца работы учителя ({work_end})"
             elif ov1[4] == Event.EventTypes.VACATION or ov2[4] == Event.EventTypes.VACATION:
                 continue
             else:
-                text = f"Пересекаются уроки: {ov1[4]} в {ov1t} у {users_map[ov1[2]]} и {ov2[4]} в {ov2t} у {users_map[ov2[2]]}"
-            texts.append(text)
+                row_text = f"Пересекаются уроки: {ov1[4]} в {ov1t} у {users_map[ov1[2]]} и {ov2[4]} в {ov2t} у {users_map[ov2[2]]}"
+            texts.append(row_text)
 
         return "Замечены несостыковки\n" + "\n".join(texts)
+
+    def overlaps_messages(self, overlaps: list[tuple]):
+        user_overlap_map = {}
+        for overlap in overlaps:
+            ov1, ov2 = overlap[0], overlap[1]
+            user_overlap_map[ov1[2]] = ov1
+            user_overlap_map[ov2[2]] = ov2
+
+        users_affected = self.db.query(User).filter(User.id.in_(list(user_overlap_map)))
+        users_map = {
+            u.id: (u.username if u.username else u.full_name, u.telegram_id) for u in users_affected if u.role == User.Roles.STUDENT
+        }
+        re_ids = [e[3] for e in overlaps if len(e) != 6]
+        rec_map = {re.id: re for re in self.db.query(RecurrentEvent).filter(RecurrentEvent.id.in_(re_ids))}
+        messages = {}
+        for overlap in overlaps:
+            ov1, ov2 = overlap[0], overlap[1]
+            if ov2[2] not in users_map and ov1[2] not in users_map:
+                continue
+            ov1t = str(ov1[0])
+            ov2t = str(ov2[0])
+            if ov1[4] == RecurrentEvent.EventTypes.WORK_BREAK:
+                weekday = rec_map[ov1[3]].start.weekday()
+                weekday = WEEKDAY_MAP[weekday]["long"]
+                row_text = f"{ov2[4]} в {ov2t} стоит в перерыв ({weekday})"
+                user_tg = users_map[ov2[2][1]]
+            elif ov2[4] == RecurrentEvent.EventTypes.WORK_BREAK:
+                weekday = rec_map[ov2[3]].start.weekday()
+                weekday = WEEKDAY_MAP[weekday]["long"]
+                row_text = f"{ov1[4]} в {ov1t} стоит в перерыв ({weekday})"
+                user_tg = users_map[ov1[2][1]]
+            elif ov1[4] == RecurrentEvent.EventTypes.WEEKEND:
+                weekday = rec_map[ov1[3]].start.weekday()
+                weekday = WEEKDAY_MAP[weekday]["long"]
+                row_text = f"{ov2[4]} в {ov2t} стоит в выходной ({weekday})"
+                user_tg = users_map[ov2[2][1]]
+            elif ov2[4] == RecurrentEvent.EventTypes.WEEKEND:
+                weekday = rec_map[ov2[3]].start.weekday()
+                weekday = WEEKDAY_MAP[weekday]["long"]
+                row_text = f"{ov1[4]} в {ov1t} стоит в выходной ({weekday})"
+                user_tg = users_map[ov1[2][1]]
+            elif ov1[4] == RecurrentEvent.EventTypes.WORK_START:
+                work_start = rec_map[ov1[3]].end
+                work_start = datetime.strftime(work_start, TIME_FMT)
+                row_text = f"{ov2[4]} в {ov2t} стоит до начала работы учителя ({work_start})"
+                user_tg = users_map[ov2[2][1]]
+            elif ov2[4] == RecurrentEvent.EventTypes.WORK_START:
+                work_start = rec_map[ov2[3]].end
+                work_start = datetime.strftime(work_start, TIME_FMT)
+                row_text = f"{ov1[4]} в {ov1t} стоит до начала работы учителя ({work_start})"
+                user_tg = users_map[ov1[2][1]]
+            elif ov1[4] == RecurrentEvent.EventTypes.WORK_END:
+                work_end = rec_map[ov2[3]].start
+                work_end = datetime.strftime(work_end, TIME_FMT)
+                row_text = f"{ov2[4]} в {ov2t} стоит после конца работы учителя ({work_end})"
+                user_tg = users_map[ov2[2][1]]
+            elif ov2[4] == RecurrentEvent.EventTypes.WORK_END:
+                work_end = rec_map[ov2[3]].start
+                work_end = datetime.strftime(work_end, TIME_FMT)
+                row_text = f"{ov1[4]} в {ov1t} стоит после конца работы учителя ({work_end})"
+                user_tg = users_map[ov1[2][1]]
+            else:
+                continue
+
+            if user_tg not in messages:
+                messages[user_tg] = []
+            messages[user_tg].append(row_text)
+
+        return messages
