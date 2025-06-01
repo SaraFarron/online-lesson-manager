@@ -7,8 +7,8 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
-from src.messages import replies
 from src.keyboards import Commands
+from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import User
 from src.repositories import EventRepo, UserRepo
@@ -35,7 +35,9 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
         datetime.now().date(),
         None if user.role == User.Roles.TEACHER else user.id,
     )
-    users_map = {u.id: u.username for u in db.query(User).filter(User.executor_id == user.executor_id)}
+    users_map = {
+        u.id: u.username if u.username else u.full_name for u in db.query(User).filter(User.executor_id == user.executor_id)
+    }
     result = day_schedule_text(lessons, users_map, user)
     await message.answer("\n\n".join(result) if result else replies.NO_LESSONS)
     await state.clear()

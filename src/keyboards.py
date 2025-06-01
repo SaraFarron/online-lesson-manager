@@ -23,7 +23,7 @@ class AdminCommands(Enum):
     WEEK_SCHEDULE = "Расписание на неделю"
     MANAGE_WORK_HOURS = "Рабочее время"
     WORK_BREAKS = "Перерывы"
-    CHECK_SCHEDULE = "Проверить расписание"
+    CHECK_OVERLAPS = "Проверить расписание"
     SEND_TO_EVERYONE = "Рассылка всем ученикам"
     STUDENTS = "Ученики"
 
@@ -179,7 +179,7 @@ class Keyboards:
     def users(cls, users: list[User], callback: str):
         buttons = {}
         for user in users:
-            buttons[callback + str(user.id)] = f"Профиль {user.username}"
+            buttons[callback + str(user.id)] = user.username if user.username else user.full_name
         return cls.inline_keyboard(buttons)
 
     @classmethod
@@ -208,3 +208,7 @@ class Keyboards:
             buttons[remove_callback + str(event.id)] = f"Удалить Перерыв {weekday} {duration}"
         buttons[add_callback] = "Добавить перерыв"
         return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def send_messages(cls, callback: str):
+        return cls.inline_keyboard({callback: "Отправить сообщения ученикам (кнопка еще не работает)"})
