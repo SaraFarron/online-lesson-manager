@@ -211,4 +211,4 @@ class Keyboards:
 
     @classmethod
     def send_messages(cls, callback: str):
-        return cls.inline_keyboard({callback: "Отправить сообщения ученикам (кнопка еще не работает)"})
+        return cls.inline_keyboard({callback: "Отправить сообщения ученикам"})

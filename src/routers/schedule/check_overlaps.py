@@ -32,6 +32,7 @@ async def check_overlaps_handler(message: Message, state: FSMContext, db: Sessio
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
+    await state.update_data(user_id=message.from_user.id)
     overlaps = EventRepo(db).overlaps(user.executor_id)
     if overlaps:
         text = EventRepo(db).overlaps_text(overlaps)
@@ -40,19 +41,22 @@ async def check_overlaps_handler(message: Message, state: FSMContext, db: Sessio
         await message.answer(replies.NO_OVERLAPS)
 
 
-# @router.callback_query(F.data.startswith(CheckOverlaps.send_messages))
-# async def send_messages(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-#     message = telegram_checks(callback)
-#     state_data = await state.get_data()
-#     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
-#     if user.role != User.Roles.TEACHER:
-#         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
-#
-#     overlaps = EventRepo(db).overlaps(user.executor_id)
-#     counter = 0
-#     for overlap in overlaps:
-#         await send_message(overlap[0][2], str(overlap[0]))
-#         await send_message(overlap[1][2], str(overlap[1]))
-#         counter += 1
-#
-#     await message.answer(f"send messages to {counter} users")
+@router.callback_query(F.data.startswith(CheckOverlaps.send_messages))
+async def send_messages(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+    message = telegram_checks(callback)
+    state_data = await state.get_data()
+    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    if user.role != User.Roles.TEACHER:
+        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+
+    overlaps = EventRepo(db).overlaps(user.executor_id)
+    messages = EventRepo(db).overlaps_messages(overlaps)
+    counter = 0
+    for user_tg, texts in messages.items():
+        if not texts:
+            continue
+        msg = "В вашем расписании занятий есть несостыковки:\n" + "\n".join(texts)
+        await send_message(user_tg, msg)
+        counter += 1
+
+    await message.answer(f"sent messages to {counter} users")
