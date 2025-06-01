@@ -9,6 +9,7 @@ from src.routers.lessons.add_recurrent_lesson import router as add_rec_lesson_ro
 from src.routers.lessons.day_schedule import router as day_schedule_router
 from src.routers.lessons.move_lesson import router as move_lesson_router
 from src.routers.lessons.week_schedule import router as week_schedule_router
+from src.routers.schedule.check_overlaps import router as check_overlaps_router
 from src.routers.schedule.vacations import router as vacations_router
 from src.routers.schedule.work_breaks import router as breaks_router
 
@@ -33,6 +34,7 @@ all_routers = [
     profile_router,
     notifications_router,
     breaks_router,
+    check_overlaps_router,
 ]
 
 __all__ = ["all_routers"]

@@ -359,3 +359,101 @@ class EventRepo(Repo):
         if events:
             events = list(filter(lambda x: x.event_type == RecurrentEvent.EventTypes.WORK_BREAK, events))
         return events
+
+    def overlaps(self, executor_id: int):
+        # Get all events
+        events = self._events_executor(executor_id)
+        rec_events = self._recurrent_events_executor(executor_id)
+        cancels = self.recurrent_events_cancels(rec_events)
+        cancel_map = {}
+        for c in cancels:
+            if c.event_id not in cancel_map:
+                cancel_map[c.event_id] = []
+            cancel_map[c.event_id].append((c.start, c.end))
+
+        weekdays = {}
+        for re in rec_events:
+            dt = datetime.strptime(re.start, DB_DATETIME)
+            weekday = dt.weekday()
+            if weekday not in weekdays:
+                weekdays[weekday] = []
+            start, end = datetime.strptime(re.start, DB_DATETIME), datetime.strptime(re.end, DB_DATETIME)
+            if re.id in cancel_map:
+                cancel = cancel_map[re.id]  # len 7
+                weekdays[weekday].append(
+                    (start.time(), end.time(), re.user_id, re.id, re.event_type, cancel[0], cancel[1]),
+                )
+            else:
+                weekdays[weekday].append((start.time(), end.time(), re.user_id, re.id, re.event_type))  # len 5
+
+        for event in events:
+            dt = datetime.strptime(event.start, DB_DATETIME)
+            weekday = dt.weekday()
+            if weekday not in weekdays:
+                weekdays[weekday] = []
+            start, end = datetime.strptime(event.start, DB_DATETIME), datetime.strptime(event.end, DB_DATETIME)
+            # len 6
+            weekdays[weekday].append(
+                (start.time(), end.time(), event.user_id, event.id, event.event_type, start.date()),
+            )
+
+        overlaps = set()
+        for weekday, events in weekdays.items():
+            sorted_events = sorted(events, key=lambda x: x[0])
+
+            for i in range(len(sorted_events)):
+                event1 = sorted_events[i]
+                for j in range(i + 1, len(sorted_events)):
+                    event2 = sorted_events[j]
+                    if event1[1] <= event2[0]:
+                        break
+                    if len(event1) == 7:
+                        if len(event2) == 6:
+                            e2_start, e2_end = datetime.combine(event2[4], event2[0]), datetime.combine(event2[4], event2[1])
+                            c_start, c_end = datetime.combine(event2[4], event1[0]), datetime.combine(event2[4], event1[1])
+                            if c_start <= e2_start <= c_end and c_start <= e2_end <= c_end:
+                                break
+
+                    overlap_pair = event1, event2
+                    overlaps.add(overlap_pair)
+
+        return overlaps
+
+    def overlaps_text(self, overlaps: list[tuple]):
+        texts = []
+        user_overlap_map = {}
+        for overlap in overlaps:
+            ov1, ov2 = overlap[0], overlap[1]
+            user_overlap_map[ov1[2]] = ov1
+            user_overlap_map[ov2[2]] = ov2
+
+        users_affected = self.db.query(User).filter(User.id.in_(list(user_overlap_map)))
+        users_map = {u.id: u.username if u.username else u.full_name for u in users_affected}
+
+        for overlap in overlaps:
+            ov1, ov2 = overlap[0], overlap[1]
+            ov1t = str(ov1[0])
+            ov2t = str(ov2[0])
+            if ov1[4] == RecurrentEvent.EventTypes.WORK_BREAK:
+                text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит в перерыв"
+            elif ov2[4] == RecurrentEvent.EventTypes.WORK_BREAK:
+                text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит в перерыв"
+            elif ov1[4] == RecurrentEvent.EventTypes.WEEKEND:
+                text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит в выходной"
+            elif ov2[4] == RecurrentEvent.EventTypes.WEEKEND:
+                text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит в выходной"
+            elif ov1[4] == RecurrentEvent.EventTypes.WORK_START:
+                text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит до начала работы"
+            elif ov2[4] == RecurrentEvent.EventTypes.WORK_START:
+                text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит до начала работы"
+            elif ov1[4] == RecurrentEvent.EventTypes.WORK_END:
+                text = f"{ov2[4]} в {ov2t} у {users_map[ov2[2]]} стоит после конца работы"
+            elif ov2[4] == RecurrentEvent.EventTypes.WORK_END:
+                text = f"{ov1[4]} в {ov1t} у {users_map[ov1[2]]} стоит после конца работы"
+            elif ov1[4] == Event.EventTypes.VACATION or ov2[4] == Event.EventTypes.VACATION:
+                continue
+            else:
+                text = f"Пересекаются уроки: {ov1[4]} в {ov1t} у {users_map[ov1[2]]} и {ov2[4]} в {ov2t} у {users_map[ov2[2]]}"
+            texts.append(text)
+
+        return "Замечены несостыковки\n" + "\n".join(texts)
