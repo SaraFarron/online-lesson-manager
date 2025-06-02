@@ -8,12 +8,12 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core import config
-from src.keyboards import Keyboards, Commands
+from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import Event
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import get_callback_arg, parse_date, telegram_checks, send_message
+from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -60,7 +60,7 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
 
     available_time = EventRepo(db).available_time(user.executor_id, day)
     await message.answer(
-        replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time)
+        replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time),
     )
 
 
@@ -73,7 +73,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     date = state_data["day"]
     time = datetime.strptime(
         get_callback_arg(callback.data, AddLesson.choose_time),
-        config.TIME_FMT
+        config.TIME_FMT,
     ).time()
 
     lesson = Event(
@@ -86,7 +86,8 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     db.add(lesson)
     db.commit()
     await message.answer(replies.LESSON_ADDED)
-    EventHistoryRepo(db).create(user.username, AddLesson.scene, "added_lesson", str(lesson))
+    username = user.username if user.username else user.full_name
+    EventHistoryRepo(db).create(username, AddLesson.scene, "added_lesson", str(lesson))
     executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{user.username} добавил(а) {lesson}")
+    await send_message(executor_tg, f"{username} добавил(а) {lesson}")
     await state.clear()

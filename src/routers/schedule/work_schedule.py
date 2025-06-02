@@ -56,13 +56,14 @@ async def action(callback: CallbackQuery, state: FSMContext, db: Session) -> Non
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
     action_type = callback.data.split("/")[-1]
+    username = user.username if user.username else user.full_name
     if action_type.startswith("delete"):
         if action_type.endswith("start"):
             time = EventRepo(db).delete_work_hour_setting(user.executor_id, "start")
-            EventHistoryRepo(db).create(user.username, WorkSchedule.scene, "deleted_start", str(time))
+            EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_start", str(time))
         elif action_type.endswith("end"):
             time = EventRepo(db).delete_work_hour_setting(user.executor_id, "end")
-            EventHistoryRepo(db).create(user.username, WorkSchedule.scene, "deleted_end", str(time))
+            EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_end", str(time))
         await message.answer(replies.WORK_HOURS_DELETED)
     elif action_type.startswith("add"):
         if action_type.endswith("start"):
@@ -105,7 +106,8 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
     db.add(event)
     db.commit()
     await message.answer(replies.WH_CHANGED)
-    EventHistoryRepo(db).create(user.username, WorkSchedule.scene, f"added_{state_data['mode']}", str(event))
+    username = user.username if user.username else user.full_name
+    EventHistoryRepo(db).create(username, WorkSchedule.scene, f"added_{state_data['mode']}", str(event))
     await state.clear()
 
 # ---- WEEKENDS ---- #
@@ -126,7 +128,8 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
         db.commit()
         await message.answer(replies.WEEKEND_DELETED)
         await state.clear()
-        EventHistoryRepo(db).create(user.username, WorkSchedule.scene, "deleted_weekend", weekday)
+        username = user.username if user.username else user.full_name
+        EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_weekend", weekday)
     elif "add_weekend" in callback.data:
         weekdays = EventRepo(db).available_work_weekdays(user.executor_id)
         await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, WorkSchedule.create_weekend))
@@ -157,5 +160,6 @@ async def create_weekend(callback: CallbackQuery, state: FSMContext, db: Session
     db.commit()
     await message.answer(replies.WEEKEND_ADDED)
     weekday = WEEKDAY_MAP[weekday]["short"]
-    EventHistoryRepo(db).create(user.username, WorkSchedule.scene, "added_weekend", weekday)
+    username = user.username if user.username else user.full_name
+    EventHistoryRepo(db).create(username, WorkSchedule.scene, "added_weekend", weekday)
     await state.clear()

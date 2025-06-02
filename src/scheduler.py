@@ -36,7 +36,8 @@ async def send_notifications(now: datetime):
             text = notification(events, user, users_map)
             if not text:
                 continue
-            notifies.add(user.username)
+            username = user.username if user.username else user.full_name
+            notifies.add(username)
             await send_message(user.telegram_id, text)
         logger.info(logs.NOTIFICATIONS_SENT, ", ".join(notifies))
 

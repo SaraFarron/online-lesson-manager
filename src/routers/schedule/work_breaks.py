@@ -103,7 +103,8 @@ async def result(message: Message, state: FSMContext, db: Session) -> None:
     db.add(event)
     db.commit()
     await message.answer(replies.BREAK_ADDED)
-    EventHistoryRepo(db).create(user.username, WorkBreaks.scene, "added_break", f"{weekday} {start.time()}")
+    username = user.username if user.username else user.full_name
+    EventHistoryRepo(db).create(username, WorkBreaks.scene, "added_break", f"{weekday} {start.time()}")
     await state.clear()
 
 
@@ -122,5 +123,6 @@ async def remove_break(callback: CallbackQuery, state: FSMContext, db: Session) 
     db.commit()
 
     await message.answer(replies.BREAK_REMOVED)
-    EventHistoryRepo(db).create(user.username, WorkBreaks.scene, "removed_break", event_str)
+    username = user.username if user.username else user.full_name
+    EventHistoryRepo(db).create(username, WorkBreaks.scene, "removed_break", event_str)
     await state.clear()

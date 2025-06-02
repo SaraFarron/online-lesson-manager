@@ -54,7 +54,8 @@ class UserRepo(Repo):
 
         recur_events = self.db.query(RecurrentEvent).filter(RecurrentEvent.user_id == user_id)
         events = self.db.query(Event).filter(Event.user_id == user_id)
-        history = self.db.query(EventHistory).filter(EventHistory.author == user.username)
+        username = user.username if user.username else user.full_name
+        history = self.db.query(EventHistory).filter(EventHistory.author == username)
         event_breaks = self.db.query(CancelledRecurrentEvent).filter(CancelledRecurrentEvent.event_id.in_([re.id for re in recur_events]))
         for e in list(event_breaks) + list(history) + list(recur_events) + list(events) + [user]:
             self.db.delete(e)

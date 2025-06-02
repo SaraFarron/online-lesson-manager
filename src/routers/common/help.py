@@ -24,4 +24,5 @@ async def help_handler(message: Message, db: Session) -> None:
     if user is None:
         raise Exception("message", "У вас нет прав на эту команду", "permission denied user is None")
     await message.answer(replies.HELP_MESSAGE, reply_markup=Keyboards.all_commands(user.role))
-    EventHistoryRepo(db).create(user.username, "help", "help", "")
+    username = user.username if user.username else user.full_name
+    EventHistoryRepo(db).create(username, "help", "help", "")
