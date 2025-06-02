@@ -42,7 +42,7 @@ async def manage_work_schedule_handler(message: Message, state: FSMContext, db: 
     weekends = EventRepo(db).weekends(user.executor_id)
     await message.answer(
         replies.CHOOSE_WH_ACTION,
-        reply_markup=Keyboards.work_hours(work_hours, weekends, WorkSchedule.action, WorkSchedule.choose_weekday)
+        reply_markup=Keyboards.work_hours(work_hours, weekends, WorkSchedule.action, WorkSchedule.choose_weekday),
     )
 
 # ---- WORK HOURS ---- #
@@ -156,6 +156,6 @@ async def create_weekend(callback: CallbackQuery, state: FSMContext, db: Session
     db.add(event)
     db.commit()
     await message.answer(replies.WEEKEND_ADDED)
-    await state.clear()
     weekday = WEEKDAY_MAP[weekday]["short"]
     EventHistoryRepo(db).create(user.username, WorkSchedule.scene, "added_weekend", weekday)
+    await state.clear()

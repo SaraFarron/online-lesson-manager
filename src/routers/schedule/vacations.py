@@ -51,10 +51,10 @@ async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session
         db.delete(event)
         db.commit()
         await message.answer(replies.VACATION_DELETED)
-        await state.clear()
         EventHistoryRepo(db).create(user.username, Vacations.scene, "delete_vacation", event_str)
         executor_tg = UserRepo(db).executor_telegram_id(user)
         await send_message(executor_tg, f"{user.username} удалил(а) Каникулы {event_str}")
+        await state.clear()
     elif action.startswith("add_vacation"):
         await message.answer(replies.CHOOSE_DATES)
         await state.set_state(Vacations.choose_dates)
@@ -93,8 +93,8 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
     db.add(event)
     db.commit()
     await message.answer(replies.VACATION_ADDED)
-    await state.clear()
     event_str = f"{event.start.date()} - {event.end.date()}"
     EventHistoryRepo(db).create(user.username, Vacations.scene, "added_vacation", event_str)
     executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{user.username} добавил(а) {event}")
+    await state.clear()

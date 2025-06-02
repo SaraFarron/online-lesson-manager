@@ -60,3 +60,4 @@ async def send_messages(callback: CallbackQuery, state: FSMContext, db: Session)
         counter += 1
 
     await message.answer(f"sent messages to {counter} users")
+    await state.clear()
