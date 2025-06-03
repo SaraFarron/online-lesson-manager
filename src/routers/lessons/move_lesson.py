@@ -40,14 +40,15 @@ class MoveLesson(StatesGroup):
 
 @router.message(Command(MoveLesson.command))
 @router.message(F.text == Commands.MOVE_LESSON.value)
-async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
+async def move_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
 
     await state.update_data(user_id=user.telegram_id)
     lessons = EventRepo(db).all_user_lessons(user)
-    if lessons:
-        await message.answer(replies.CHOOSE_LESSON, reply_markup=Keyboards.choose_lesson(lessons, MoveLesson.choose_lesson))
+    keyboard = Keyboards.choose_lesson(lessons, MoveLesson.choose_lesson)
+    if keyboard:
+        await message.answer(replies.CHOOSE_LESSON, reply_markup=keyboard)
     else:
         await message.answer(replies.NO_LESSONS)
 
@@ -113,7 +114,6 @@ async def type_date(message: Message, state: FSMContext, db: Session) -> None:
 
     await state.update_data(day=day)
     available_time = EventRepo(db).available_time(user.executor_id, day)
-    available_time = [s for s, e in available_time]
     await message.answer(replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_time))
 
 

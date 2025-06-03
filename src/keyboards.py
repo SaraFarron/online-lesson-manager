@@ -5,7 +5,7 @@ from math import ceil
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from core.config import DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
+from core.config import CHANGE_DELTA, DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
 from src.models import Event, RecurrentEvent, User
 
 
@@ -32,6 +32,8 @@ class Keyboards:
     @classmethod
     def inline_keyboard(cls, buttons: dict[str, str] | Iterable[tuple[str, str]], as_markup=True):
         """Create an inline keyboard."""
+        if not buttons:
+            return None
         builder = InlineKeyboardBuilder()
         if isinstance(buttons, dict):
             for callback_data, text in buttons.items():
@@ -86,15 +88,21 @@ class Keyboards:
     @classmethod
     def choose_lesson(cls, lessons: list[tuple], callback: str):
         buttons = {}
+        now = datetime.now()
+        threshold = now + CHANGE_DELTA
         for lesson in lessons:
             lesson_datetime = datetime.strptime(lesson[0], DB_DATETIME)
+            if len(lesson) == 6 and threshold > lesson_datetime:
+                continue
             lesson_date = datetime.strftime(lesson_datetime, DATE_FMT)
             lesson_weekday = WEEKDAY_MAP[lesson_datetime.weekday()]["short"]
             lesson_time = datetime.strftime(lesson_datetime, TIME_FMT)
-            if lesson[3] == RecurrentEvent.EventTypes.LESSON:
+            if lesson[3] == RecurrentEvent.EventTypes.LESSON and len(lesson) == 7:
                 buttons[callback + "re" + str(lesson[-1])] = f"{lesson[3]} в {lesson_weekday} {lesson_time}"
-            elif lesson[3] in (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON):
+            elif lesson[3] == Event.EventTypes.MOVED_LESSON:
                 buttons[callback + "e" + str(lesson[-1])] = f"{lesson[3]} {lesson_date} в {lesson_time}"
+            elif lesson[3] == Event.EventTypes.LESSON and len(lesson) == 6:
+                buttons[callback + "e" + str(lesson[-1])] = f"Разовый {lesson[3]} {lesson_date} в {lesson_time}"
             else:
                 continue
         return cls.inline_keyboard(buttons)

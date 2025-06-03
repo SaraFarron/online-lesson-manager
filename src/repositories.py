@@ -3,7 +3,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.core.config import DB_DATETIME, LESSON_SIZE, SLOT_SIZE, TIME_FMT, WEEKDAY_MAP
+from src.core.config import CHANGE_DELTA, DB_DATETIME, LESSON_SIZE, SLOT_SIZE, TIME_FMT, WEEKDAY_MAP
 from src.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
 
 
@@ -221,7 +221,13 @@ class EventRepo(Repo):
         start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
         start = datetime.combine(day, start)
         end = datetime.combine(day, end)
-        return [s[0] for s in self._get_available_slots(start, end, SLOT_SIZE, events)]
+        now = datetime.now()
+        result = []
+        for slot in self._get_available_slots(start, end, SLOT_SIZE, events):
+            if day == now.date() and now + CHANGE_DELTA > slot[0]:
+                continue
+            result.append(slot[0])
+        return result
 
     def available_time_weekday(self, executor_id: int, weekday: int):
         start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
