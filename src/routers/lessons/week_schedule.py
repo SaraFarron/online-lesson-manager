@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta
 
-from aiogram import F, Router
+from aiogram import F, Router, html
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.core.config import DATE_FMT
+from src.core.config import DATE_FMT, SHORT_DATE_FMT, WEEKDAY_MAP
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -49,6 +49,7 @@ async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContex
     date_lesson_map = {}
     for i in range(7):
         current_date = start_of_week + timedelta(days=i)
+        weekday = current_date.weekday()
         lessons = EventRepo(db).day_schedule(
             user.executor_id,
             current_date.date(),
@@ -56,10 +57,10 @@ async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContex
         )
         result = day_schedule_text(lessons, users_map, user)
         lessons_str = "\n".join(result) if result else replies.NO_LESSONS
-        date_lesson_map[datetime.strftime(current_date, DATE_FMT)] = lessons_str
+        key = html.bold(f"{datetime.strftime(current_date, SHORT_DATE_FMT)} {WEEKDAY_MAP[weekday]['short']}")
+        date_lesson_map[key] = lessons_str
 
     text = []
     for d, day_text in date_lesson_map.items():
-        # TODO: add style
         text.append(d + "\n" + day_text)
     await message.answer("\n\n".join(text), reply_markup=Keyboards.choose_week(date, WeekSchedule.week_start))
