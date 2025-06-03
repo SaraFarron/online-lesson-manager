@@ -8,12 +8,12 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core.config import LESSON_SIZE
-from src.keyboards import Keyboards, Commands
+from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import RecurrentEvent
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import get_callback_arg, telegram_checks, send_message
+from src.utils import get_callback_arg, send_message, telegram_checks
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -70,8 +70,9 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     )
     db.add(lesson)
     db.commit()
+    username = user.username if user.username else user.full_name
     await message.answer(replies.LESSON_ADDED)
-    EventHistoryRepo(db).create(user.username, AddRecurrentLesson.scene, "added_lesson", str(lesson))
+    EventHistoryRepo(db).create(username, AddRecurrentLesson.scene, "added_lesson", str(lesson))
     executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{user.username} добавил(а) {lesson}")
+    await send_message(executor_tg, f"{username} добавил(а) {lesson}")
     await state.clear()

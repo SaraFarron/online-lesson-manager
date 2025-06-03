@@ -8,13 +8,13 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core import config
-from src.core.config import TIME_FMT, LESSON_SIZE
-from src.keyboards import Keyboards, Commands
+from src.core.config import LESSON_SIZE, TIME_FMT
+from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import get_callback_arg, parse_date, telegram_checks, send_message
+from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -71,10 +71,11 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
     action = get_callback_arg(callback.data, MoveLesson.move_or_delete)
     if action == "delete" and state_data["lesson"].startswith("e"):
         lesson = EventRepo(db).cancel_event(int(state_data["lesson"].replace("e", "")))
-        EventHistoryRepo(db).create(user.username, MoveLesson.scene, "deleted_one_lesson", str(lesson))
+        username = user.username if user.username else user.full_name
+        EventHistoryRepo(db).create(username, MoveLesson.scene, "deleted_one_lesson", str(lesson))
         await message.answer(replies.LESSON_DELETED)
         executor_tg = UserRepo(db).executor_telegram_id(user)
-        await send_message(executor_tg, f"{user.username} отменил(а) {lesson}")
+        await send_message(executor_tg, f"{username} отменил(а) {lesson}")
         await state.clear()
         return
     if action == "delete" and state_data["lesson"].startswith("re"):
@@ -139,11 +140,12 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     db.add(new_lesson)
     db.commit()
     await message.answer(replies.LESSON_MOVED)
+    username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(
-        user.username, MoveLesson.scene, "moved_one_lesson", f"{old_lesson} -> {new_lesson}",
+        username, MoveLesson.scene, "moved_one_lesson", f"{old_lesson} -> {new_lesson}",
     )
     executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{user.username} перенес(ла) {old_lesson} -> {new_lesson}")
+    await send_message(executor_tg, f"{username} перенес(ла) {old_lesson} -> {new_lesson}")
     await state.clear()
 
 # ---- RECURRENT LESSON ---- #
@@ -168,9 +170,10 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
         db.delete(lesson)
         db.commit()
         await message.answer(replies.LESSON_DELETED)
-        EventHistoryRepo(db).create(user.username, MoveLesson.scene, "deleted_recur_lesson", lesson_str)
+        username = user.username if user.username else user.full_name
+        EventHistoryRepo(db).create(username, MoveLesson.scene, "deleted_recur_lesson", lesson_str)
         executor_tg = UserRepo(db).executor_telegram_id(user)
-        await send_message(executor_tg, f"{user.username} отменил(ла) {lesson_str}")
+        await send_message(executor_tg, f"{username} отменил(ла) {lesson_str}")
         await state.clear()
     elif mode == "once" and state_data["action"] == "move":
         await state.set_state(MoveLesson.type_recur_date)
@@ -220,11 +223,12 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     db.delete(old_lesson)
     db.commit()
     await message.answer(replies.LESSON_MOVED)
+    username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(
-        user.username, MoveLesson.scene, "moved_recur_lesson", f"{old_lesson_str} -> {lesson}",
+        username, MoveLesson.scene, "moved_recur_lesson", f"{old_lesson_str} -> {lesson}",
     )
     executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{user.username} перенес(ла) {old_lesson_str} -> {lesson}")
+    await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
     await state.clear()
 
 # ---- RECURRENT LESSON ONCE ---- #
@@ -261,9 +265,10 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
         db.add(cancel)
         db.commit()
         await message.answer(replies.LESSON_DELETED)
-        EventHistoryRepo(db).create(user.username, MoveLesson.scene, "recur_lesson_deleted", str(cancel))
+        username = user.username if user.username else user.full_name
+        EventHistoryRepo(db).create(username, MoveLesson.scene, "recur_lesson_deleted", str(cancel))
         executor_tg = UserRepo(db).executor_telegram_id(user)
-        await send_message(executor_tg, f"{user.username} отменил(ла) {cancel}")
+        await send_message(executor_tg, f"{username} отменил(ла) {cancel}")
         await state.clear()
         return
 
@@ -294,7 +299,7 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
     await state.update_data(new_day=day)
     available_time = EventRepo(db).available_time(user.executor_id, day)
     await message.answer(
-        replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_new_time)
+        replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_new_time),
     )
 
 
@@ -324,9 +329,10 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
     db.add_all([lesson, cancel])
     db.commit()
     await message.answer(replies.LESSON_MOVED)
+    username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(
-        user.username, MoveLesson.scene, "recur_lesson_moved", f"{old_lesson_str} -> {lesson}"
+        username, MoveLesson.scene, "recur_lesson_moved", f"{old_lesson_str} -> {lesson}",
     )
     executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{user.username} перенес(ла) {old_lesson_str} -> {lesson}")
+    await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
     await state.clear()
