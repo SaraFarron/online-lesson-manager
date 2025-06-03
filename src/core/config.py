@@ -39,6 +39,7 @@ MAX_BUTTON_ROWS = 6
 WORK_START = time(hour=9, minute=0, tzinfo=TIMEZONE)
 WORK_END = time(hour=21, minute=0, tzinfo=TIMEZONE)
 HRS_TO_CANCEL = 3
+CHANGE_DELTA = timedelta(hours=HRS_TO_CANCEL)
 
 WORK_SCHEDULE_TIMETABLE_PATH = Path(__file__).parent.parent.parent / "db/work_schedule.json"
 
