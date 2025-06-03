@@ -122,6 +122,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
 
     event_id = get_callback_arg(callback.data, WorkSchedule.choose_weekday)
     if "delete_weekend" in callback.data:
+        event_id = int(event_id.replace("delete_weekend/", ""))
         event = db.get(RecurrentEvent, event_id)
         weekday = WEEKDAY_MAP[event.start.weekday()]["short"]
         db.delete(event)
