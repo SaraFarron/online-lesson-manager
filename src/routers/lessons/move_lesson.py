@@ -114,7 +114,13 @@ async def type_date(message: Message, state: FSMContext, db: Session) -> None:
 
     await state.update_data(day=day)
     available_time = EventRepo(db).available_time(user.executor_id, day)
-    await message.answer(replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_time))
+    if available_time:
+        await message.answer(
+            replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_time),
+        )
+    else:
+        await message.answer(replies.NO_TIME)
+        await state.clear()
 
 
 @router.callback_query(F.data.startswith(MoveLesson.choose_time))
@@ -298,9 +304,13 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
 
     await state.update_data(new_day=day)
     available_time = EventRepo(db).available_time(user.executor_id, day)
-    await message.answer(
-        replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_new_time),
-    )
+    if available_time:
+        await message.answer(
+            replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_new_time),
+        )
+    else:
+        await message.answer(replies.NO_TIME)
+        await state.clear()
 
 
 @router.callback_query(F.data.startswith(MoveLesson.choose_recur_new_time))
