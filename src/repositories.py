@@ -101,6 +101,21 @@ class EventHistoryRepo(Repo):
 class EventRepo(Repo):
     LESSON_TYPES = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
 
+    @staticmethod
+    def _will_overlap(recurrent_start, recurrent_end, interval_days, simple_start, simple_end):
+        now = datetime.now()
+        if simple_start < now:
+            return False
+        occurrence_start = recurrent_start
+        occurrence_end = recurrent_end
+        interval = timedelta(days=interval_days)
+        while occurrence_start < simple_end and occurrence_start < now + timedelta(days=31):
+            if occurrence_start < simple_end and occurrence_end > simple_start:
+                return True
+            occurrence_start += interval
+            occurrence_end += interval
+        return False
+
     def _events_executor(self, executor_id: int):
         today = datetime.now().date()
         return list(
@@ -203,7 +218,11 @@ class EventRepo(Repo):
     def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
         if self.vacations_day(user_id, day):
             return []
-        events = self.events_for_day(executor_id, day) + self.recurrent_events_for_day(executor_id, day)
+        ev = self.events_for_day(executor_id, day)
+        rv = self.recurrent_events_for_day(executor_id, day)
+        print(ev)
+        print(rv)
+        events = ev + rv
         events = sorted(events, key=lambda x: x[0])
         if user_id is not None:
             events = list(filter(lambda x: x[2] == user_id, events))
@@ -253,7 +272,30 @@ class EventRepo(Repo):
         start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
         start = datetime.combine(current_day, start)
         end = datetime.combine(current_day, end)
-        return [s[0] for s in self._get_available_slots(start, end, SLOT_SIZE, events)]
+        now = datetime.now()
+        simple_lessons = {}
+        for s in self._events_executor(executor_id):
+            start = datetime.strptime(s[0], DB_DATETIME)
+            weekday = start.weekday()
+            if s[3] in self.LESSON_TYPES and start > now:
+                if weekday not in simple_lessons:
+                    simple_lessons[weekday] = []
+                times = (
+                    start.time(),
+                    start.time() + timedelta(minutes=15),
+                    start.time() + timedelta(minutes=30),
+                    start.time() + timedelta(minutes=45),
+                    start.time() + timedelta(hours=1),
+                )
+                for t in times:
+                    simple_lessons[weekday].append(t)
+
+        result = []
+        for s in self._get_available_slots(start, end, SLOT_SIZE, events):
+            if s[0].time() in simple_lessons[s[0].weekday()]:
+                continue
+            result.append(s[0])
+        return result
 
     @staticmethod
     def _get_available_slots(start: datetime, end: datetime, slot_size: timedelta, events: list):
