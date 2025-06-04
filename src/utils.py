@@ -70,7 +70,10 @@ def day_schedule_text(lessons: list, users_map: dict, user: User):
     for lesson in lessons:
         if lesson[3] in (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON) or lesson[3] == RecurrentEvent.EventTypes.LESSON:
             dt = lesson[0]
-            lesson_str = f"{lesson[3]} в {datetime.strftime(dt, TIME_FMT)}"
+            if not isinstance(lesson[-1], bool) and lesson[3] == Event.EventTypes.LESSON:
+                lesson_str = f"Разовый урок в {datetime.strftime(dt, TIME_FMT)}"
+            else:
+                lesson_str = f"{lesson[3]} в {datetime.strftime(dt, TIME_FMT)}"
         else:
             continue
         if user.role == User.Roles.TEACHER:
