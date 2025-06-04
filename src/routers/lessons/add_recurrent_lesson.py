@@ -46,6 +46,10 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
 
     weekday = int(get_callback_arg(callback.data, AddRecurrentLesson.choose_weekday))
     available_time = EventRepo(db).available_time_weekday(user.executor_id, weekday)
+    if not available_time:
+        await message.answer(replies.NO_TIME)
+        await state.clear()
+        return
     await state.update_data(weekday=weekday)
     await message.answer(replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddRecurrentLesson.choose_time))
 

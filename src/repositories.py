@@ -220,8 +220,6 @@ class EventRepo(Repo):
             return []
         ev = self.events_for_day(executor_id, day)
         rv = self.recurrent_events_for_day(executor_id, day)
-        print(ev)
-        print(rv)
         events = ev + rv
         events = sorted(events, key=lambda x: x[0])
         if user_id is not None:
@@ -281,14 +279,14 @@ class EventRepo(Repo):
                 if weekday not in simple_lessons:
                     simple_lessons[weekday] = []
                 times = (
-                    start.time(),
-                    start.time() + timedelta(minutes=15),
-                    start.time() + timedelta(minutes=30),
-                    start.time() + timedelta(minutes=45),
-                    start.time() + timedelta(hours=1),
+                    start,
+                    start + timedelta(minutes=15),
+                    start + timedelta(minutes=30),
+                    start + timedelta(minutes=45),
+                    start + timedelta(hours=1),
                 )
                 for t in times:
-                    simple_lessons[weekday].append(t)
+                    simple_lessons[weekday].append(t.time())
 
         result = []
         for s in self._get_available_slots(start, end, SLOT_SIZE, events):
