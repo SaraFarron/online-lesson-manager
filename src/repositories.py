@@ -3,7 +3,15 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.core.config import CHANGE_DELTA, DB_DATETIME, LESSON_SIZE, SLOT_SIZE, TIME_FMT, WEEKDAY_MAP
+from src.core.config import (
+    CHANGE_DELTA,
+    DB_DATETIME,
+    LESSON_SIZE,
+    MAX_LESSONS_PER_DAY,
+    SLOT_SIZE,
+    TIME_FMT,
+    WEEKDAY_MAP,
+)
 from src.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
 
 
@@ -205,9 +213,13 @@ class EventRepo(Repo):
         start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
         result = []
         start_t, end_t = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
+        lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
         for i in range(7):
             current_day = start_of_week + timedelta(days=i)
             events = self.recurrent_events_for_day(executor_id, current_day)
+            lessons = [e for e in events if e[3] in lesson_types]
+            if len(lessons) >= MAX_LESSONS_PER_DAY:
+                continue
             start = datetime.combine(current_day, start_t)
             end = datetime.combine(current_day, end_t)
             available_time = self._get_available_slots(start, end, SLOT_SIZE, events)
@@ -217,6 +229,10 @@ class EventRepo(Repo):
 
     def available_time(self, executor_id: int, day: date):
         events = self.events_for_day(executor_id, day) + self.recurrent_events_for_day(executor_id, day)
+        lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
+        lessons = [e for e in events if e[3] in lesson_types]
+        if len(lessons) >= MAX_LESSONS_PER_DAY:
+            return []
 
         start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
         start = datetime.combine(day, start)

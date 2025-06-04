@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import time, timedelta
-from pathlib import Path
 
 import pytz
 from dotenv import load_dotenv
-from pydantic import BaseModel
 
 from src.core.base import getenv
 
@@ -41,25 +39,6 @@ WORK_END = time(hour=21, minute=0, tzinfo=TIMEZONE)
 HRS_TO_CANCEL = 3
 CHANGE_DELTA = timedelta(hours=HRS_TO_CANCEL)
 
-WORK_SCHEDULE_TIMETABLE_PATH = Path(__file__).parent.parent.parent / "db/work_schedule.json"
-
-
-class Weekday(BaseModel):
-    number: int
-    short: str
-    long: str
-
-
-WEEKDAYS_MODEL = [
-    Weekday(number=0, short="ПН", long="Понедельник"),
-    Weekday(number=1, short="ВТ", long="Вторник"),
-    Weekday(number=2, short="СР", long="Среда"),
-    Weekday(number=3, short="ЧТ", long="Четверг"),
-    Weekday(number=4, short="ПТ", long="Пятница"),
-    Weekday(number=5, short="СБ", long="Суббота"),
-    Weekday(number=6, short="ВС", long="Воскресенье"),
-]
-
 WEEKDAY_MAP = {
     0: {"long": "Понедельник", "short": "ПН"},
     1: {"long": "Вторник", "short": "ВТ"},
@@ -82,3 +61,4 @@ DB_DATETIME = "%Y-%m-%d %H:%M:%S.%f"
 
 SLOT_SIZE = timedelta(minutes=15)
 LESSON_SIZE = timedelta(hours=1)
+MAX_LESSONS_PER_DAY = 6
