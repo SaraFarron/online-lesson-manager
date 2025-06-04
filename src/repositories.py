@@ -273,24 +273,23 @@ class EventRepo(Repo):
         now = datetime.now()
         simple_lessons = {}
         for s in self._events_executor(executor_id):
-            start = datetime.strptime(s[0], DB_DATETIME)
-            weekday = start.weekday()
-            if s[3] in self.LESSON_TYPES and start > now:
-                if weekday not in simple_lessons:
-                    simple_lessons[weekday] = []
+            start_t = datetime.strptime(s[0], DB_DATETIME)
+            weekday_t = start_t.weekday()
+            if s[3] in self.LESSON_TYPES and start_t > now:
+                if weekday_t not in simple_lessons:
+                    simple_lessons[weekday_t] = []
                 times = (
-                    start,
-                    start + timedelta(minutes=15),
-                    start + timedelta(minutes=30),
-                    start + timedelta(minutes=45),
-                    start + timedelta(hours=1),
+                    start_t,
+                    start_t + timedelta(minutes=15),
+                    start_t + timedelta(minutes=30),
+                    start_t + timedelta(minutes=45),
                 )
                 for t in times:
-                    simple_lessons[weekday].append(t.time())
+                    simple_lessons[weekday_t].append(t.time())
 
         result = []
         for s in self._get_available_slots(start, end, SLOT_SIZE, events):
-            if s[0].time() in simple_lessons[s[0].weekday()]:
+            if s[0].weekday() in simple_lessons and s[0].time() in simple_lessons[s[0].weekday()]:
                 continue
             result.append(s[0])
         return result
