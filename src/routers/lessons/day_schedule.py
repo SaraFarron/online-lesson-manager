@@ -39,5 +39,5 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
         u.id: u.username if u.username else u.full_name for u in db.query(User).filter(User.executor_id == user.executor_id)
     }
     result = day_schedule_text(lessons, users_map, user)
-    await message.answer("\n\n".join(result) if result else replies.NO_LESSONS)
+    await message.answer("\n".join(result) if result else replies.NO_LESSONS)
     await state.clear()
