@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core import config
-from src.core.config import LESSON_SIZE, TIME_FMT
+from src.core.config import LESSON_SIZE, TIME_FMT, WEEKDAY_MAP
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -257,10 +257,15 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
         await state.set_state(MoveLesson.type_date)
         return
 
+    lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("re", "")))
+    if day.weekday() != lesson.start.weekday():
+        msg = f"В {WEEKDAY_MAP[day.weekday()]['long']} нет этого занятия"
+        await message.answer(msg)
+        await state.set_state(MoveLesson.type_date)
+        return
     # TODO check if there is a lesson on input's date
 
     if state_data["action"] == "delete":
-        lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("re", "")))
         start = datetime.combine(day, lesson.start.time())
         cancel = CancelledRecurrentEvent(
             event_id=lesson.id,
@@ -272,9 +277,9 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
         db.commit()
         await message.answer(replies.LESSON_DELETED)
         username = user.username if user.username else user.full_name
-        EventHistoryRepo(db).create(username, MoveLesson.scene, "recur_lesson_deleted", str(cancel))
+        EventHistoryRepo(db).create(username, MoveLesson.scene, "recur_lesson_deleted", str(lesson))
         executor_tg = UserRepo(db).executor_telegram_id(user)
-        await send_message(executor_tg, f"{username} отменил(ла) {cancel}")
+        await send_message(executor_tg, f"{username} отменил(ла) {lesson}")
         await state.clear()
         return
 
