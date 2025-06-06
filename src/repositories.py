@@ -1,6 +1,6 @@
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from src.core.config import (
@@ -143,15 +143,13 @@ class EventRepo(Repo):
 
     def recurrent_events_cancels(self, events: list[tuple]):
         if events:
-            return list(
-                self.db.execute(
-                    text("""
-                select event_id, break_type, start, end from event_breaks
-                where event_id in (:event_ids)
-            """),
-                    {"event_ids": ",".join(str(e[-1]) for e in events)},
-                ),
-            )
+            event_ids = [e[-1] for e in events]
+            stmt = text("""
+                SELECT event_id, break_type, start, end 
+                FROM event_breaks
+                WHERE event_id IN :event_ids
+            """).bindparams(bindparam("event_ids", expanding=True))
+            return list(self.db.execute(stmt, {"event_ids": event_ids}))
         return []
 
     def recurrent_events(self, executor_id: int):
@@ -185,6 +183,8 @@ class EventRepo(Repo):
                 is_cancelled = False
                 for cancel in cancels:
                     c_event_id, break_type, c_start, c_end = cancel
+                    c_start = datetime.strptime(c_start, DB_DATETIME)
+                    c_end = datetime.strptime(c_end, DB_DATETIME)
 
                     # Skip if cancellation is for a different event
                     if c_event_id != event_id:
