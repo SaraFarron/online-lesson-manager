@@ -14,6 +14,16 @@ from src.core.config import (
 )
 from src.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
 
+HISTORY_MAP = {
+    "help": "запросил помощь",
+    "added_lesson": "добавил урок",
+    "deleted_one_lesson": "удалил разовый урок",
+    "deleted_recur_lesson": "удалил урок",
+    "delete_vacation": "удалил каникулы",
+    "added_vacation": "добавил каникулы",
+    "recur_lesson_deleted": "разово отменил урок",
+}
+
 
 class Repo:
     def __init__(self, db: Session):
