@@ -12,7 +12,7 @@ from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import User
-from src.repositories import EventHistoryRepo, UserRepo
+from src.repositories import HISTORY_MAP, EventHistoryRepo, UserRepo
 from src.utils import get_callback_arg, telegram_checks
 
 router = Router()
@@ -68,7 +68,8 @@ async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> No
     events = []
     for e in event_history:
         dt = datetime.strptime(e.created_at, DB_DATETIME)
-        events.append(f"{datetime.strftime(dt, DATETIME_FMT)} {e.event_type} {e.event_value}")
+        event = HISTORY_MAP[e.event_type] if e.event_type in HISTORY_MAP else e.event_type
+        events.append(f"{datetime.strftime(dt, DATETIME_FMT)} {event} {e.event_value}")
     text = profile_text(
         student.telegram_id,
         student.username,
