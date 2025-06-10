@@ -278,7 +278,7 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
         username = user.username if user.username else user.full_name
         EventHistoryRepo(db).create(username, MoveLesson.scene, "recur_lesson_deleted", str(lesson))
         executor_tg = UserRepo(db).executor_telegram_id(user)
-        await send_message(executor_tg, f"{username} отменил(ла) {lesson}")
+        await send_message(executor_tg, f"{username} отменил(ла) {lesson} на {datetime.strftime(day, DATE_FMT)}")
         await state.clear()
         return
 
