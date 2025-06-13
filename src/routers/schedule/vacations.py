@@ -74,7 +74,7 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
         start, end = parse_date(dates[0]), parse_date(dates[1])
         assert start is not None
         assert end is not None
-    except ValueError | IndexError | AssertionError:
+    except (ValueError, IndexError, AssertionError):
         await message.answer(replies.WRONG_DATES_FMT)
         await state.set_state(Vacations.choose_dates)
         return

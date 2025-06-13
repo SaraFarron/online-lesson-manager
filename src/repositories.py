@@ -226,7 +226,9 @@ class EventRepo(Repo):
         return result
 
     def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
-        if self.vacations_day(user_id, day):
+        executor = self.db.get(Executor, executor_id)
+        exec_user = self.db.query(User).filter(User.telegram_id == executor.telegram_id).first()
+        if self.vacations_day(user_id, day) or self.vacations_day(exec_user.id, day):
             return []
         ev = self.events_for_day(executor_id, day)
         rv = self.recurrent_events_for_day(executor_id, day)
