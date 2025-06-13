@@ -26,6 +26,7 @@ class AdminCommands(Enum):
     CHECK_OVERLAPS = "Проверить расписание"
     SEND_TO_EVERYONE = "Рассылка всем ученикам"
     STUDENTS = "Ученики"
+    VACATIONS = "Расписание каникул"
 
 
 class Keyboards:
