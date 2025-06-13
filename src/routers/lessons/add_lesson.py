@@ -44,7 +44,7 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
 
-    date = parse_date(message.text)
+    date = parse_date(message.text, True)
     if date is None:
         await state.set_state(AddLesson.choose_date)
         await message.answer(replies.WRONG_DATE_FMT)
