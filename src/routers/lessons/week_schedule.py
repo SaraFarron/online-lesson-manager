@@ -38,8 +38,9 @@ async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContex
         user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
         await state.update_data(user_id=message.from_user.id)
 
-    users_map = {
-        u.id: u.username if u.username else u.full_name for u in db.query(User).filter(User.executor_id == user.executor_id)
+    users_map = {  # TODO f"tg://user?id={u.telegram_id}" does not work
+        u.id: f"@{u.username}" if u.username else html.link(u.full_name, f"tg://user?id={u.telegram_id}")
+        for u in db.query(User).filter(User.executor_id == user.executor_id)
     }
     if isinstance(event, Message):
         date = datetime.now()

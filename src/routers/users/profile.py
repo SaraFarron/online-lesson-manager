@@ -31,9 +31,11 @@ def profile_text(tg_id: int, username: str, fullname: str, events: list, vacatio
         vac_text = "\n".join(["Каникулы:"] + vacations_list)
     else:
         vac_text = "Каникул нет"
+    link = f"@{username}" if username else f'<a href="tg://user?id={tg_id}">{fullname}</a>'
     return f"""
 Telegram id: {tg_id}
 Telegram username: {username}
+Ссылка: {link}
 Имя: {fullname}
 {vac_text}
 
