@@ -233,6 +233,23 @@ class EventRepo(Repo):
         ev = self.events_for_day(executor_id, day)
         rv = self.recurrent_events_for_day(executor_id, day)
         events = ev + rv
+        user_ids = [e[2] for e in events]
+        query = text("""
+            select start, end, user_id from events
+            where user_id in :user_ids and event_type = :event_type and start <= :today and end >= :today
+        """).bindparams(bindparam("user_ids", expanding=True))
+        vacations = list(
+            self.db.execute(
+                query,
+                {
+                    "user_ids": user_ids,
+                    "event_type": Event.EventTypes.VACATION,
+                    "today": datetime.combine(day, datetime.now().time()),
+                },
+            ),
+        )
+        users_with_vacations = [v[2] for v in vacations]
+        events = list(filter(lambda x: x[2] not in users_with_vacations, events))
         events = sorted(events, key=lambda x: x[0])
         if user_id is not None:
             events = list(filter(lambda x: x[2] == user_id, events))

@@ -57,6 +57,7 @@ TIME_FMT = "%H:%M"
 DATE_FMT = "%Y.%m.%d"
 SHORT_DATE_FMT = "%d.%m"
 DATETIME_FMT = "%Y.%m.%d %H:%M"
+SHORT_DATETIME_FMT = "%d.%m %H:%M"
 DB_DATETIME = "%Y-%m-%d %H:%M:%S.%f"
 
 SLOT_SIZE = timedelta(minutes=15)

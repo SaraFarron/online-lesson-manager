@@ -4,7 +4,7 @@ from os import getenv
 import aiohttp
 from aiogram.types import CallbackQuery, Message
 
-from src.core.config import TIME_FMT
+from src.core.config import SHORT_DATE_FMT, TIME_FMT
 from src.models import Event, RecurrentEvent, User
 
 MAX_HOUR = 23
@@ -25,12 +25,24 @@ def telegram_checks(event: Message | CallbackQuery):
     return event.message
 
 
-def parse_date(text: str):
-    for fmt in ("%Y-%m-%d", "%Y %m %d", "%Y.%m.%d"):
+def parse_date(text: str, in_future=False):
+    for fmt in (
+            SHORT_DATE_FMT,
+            SHORT_DATE_FMT.replace(".", " "),
+            SHORT_DATE_FMT.replace(".", "-"),
+            "%Y-%m-%d",
+            "%Y %m %d",
+            "%Y.%m.%d",
+    ):
         try:
             date = datetime.strptime(text, fmt)
         except ValueError:
             continue
+        now = datetime.now()
+        if date.year < now.year:
+            if in_future and date.replace(year=now.year) <= now:
+                return date.replace(year=now.year + 1)
+            return date.replace(year=now.year)
         return date
     return None
 

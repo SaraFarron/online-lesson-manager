@@ -5,13 +5,14 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup
 from aiogram.types import CallbackQuery, Message
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.core.config import DATETIME_FMT, DB_DATETIME
+from src.core.config import DATE_FMT, DATETIME_FMT, DB_DATETIME
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.models import User
+from src.models import Event, User
 from src.repositories import HISTORY_MAP, EventHistoryRepo, UserRepo
 from src.utils import get_callback_arg, telegram_checks
 
@@ -20,11 +21,24 @@ router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
 
-def profile_text(tg_id: int, username: str, fullname: str, events: list):
+def profile_text(tg_id: int, username: str, fullname: str, events: list, vacations: list):
+    vacations_list = []
+    for vacation in vacations:
+        start, end = datetime.strptime(vacation[0], DB_DATETIME), datetime.strptime(vacation[1], DB_DATETIME)
+        start, end = datetime.strftime(start, DATE_FMT), datetime.strftime(end, DATE_FMT)
+        vacations_list.append(f"{start} - {end}")
+    if vacations_list:
+        vac_text = "\n".join(["Каникулы:"] + vacations_list)
+    else:
+        vac_text = "Каникул нет"
+    link = f"@{username}" if username else f'<a href="tg://user?id={tg_id}">{fullname}</a>'
     return f"""
 Telegram id: {tg_id}
 Telegram username: {username}
+Ссылка: {link}
 Имя: {fullname}
+{vac_text}
+
 История последних 10 действий:
 
 """ + "\n".join(events)
@@ -70,13 +84,12 @@ async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> No
         dt = datetime.strptime(e.created_at, DB_DATETIME)
         event = HISTORY_MAP[e.event_type] if e.event_type in HISTORY_MAP else e.event_type
         events.append(f"{datetime.strftime(dt, DATETIME_FMT)} {event} {e.event_value}")
-    text = profile_text(
-        student.telegram_id,
-        student.username,
-        student.full_name,
-        events,
-    )
-    await message.answer(text, reply_markup=Keyboards.profile(student_id, Profile.delete_student))
+    vacations = list(db.execute(text("""
+        select start, end from events
+        where user_id = :user_id and event_type == :event_type and start >= :today
+    """), {"user_id": student.id, "event_type": Event.EventTypes.VACATION, "today": datetime.now()}).fetchall())
+    msg = profile_text(student.telegram_id, student.username, student.full_name, events, vacations)
+    await message.answer(msg, reply_markup=Keyboards.profile(student_id, Profile.delete_student))
 
 
 @router.callback_query(F.data.startswith(Profile.delete_student))
