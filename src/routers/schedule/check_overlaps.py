@@ -35,8 +35,14 @@ async def check_overlaps_handler(message: Message, state: FSMContext, db: Sessio
     await state.update_data(user_id=message.from_user.id)
     overlaps = EventRepo(db).overlaps(user.executor_id)
     if overlaps:
-        text = EventRepo(db).overlaps_text(overlaps)
-        await message.answer(text, reply_markup=Keyboards.send_messages(CheckOverlaps.send_messages))
+        texts = EventRepo(db).overlaps_text(overlaps)
+        if texts:
+            await message.answer(
+                "Замечены несостыковки\n" + "\n".join(texts),
+                reply_markup=Keyboards.send_messages(CheckOverlaps.send_messages),
+            )
+        else:
+            await message.answer(replies.NO_OVERLAPS)
     else:
         await message.answer(replies.NO_OVERLAPS)
 
