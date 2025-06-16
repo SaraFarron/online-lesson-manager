@@ -9,10 +9,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.core.config import DATE_FMT, DATETIME_FMT, DB_DATETIME
+from src.db.models import Event, User
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.models import Event, User
 from src.repositories import HISTORY_MAP, EventHistoryRepo, UserRepo
 from src.utils import get_callback_arg, telegram_checks
 

@@ -8,10 +8,10 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core.config import DATE_FMT, SHORT_DATE_FMT, WEEKDAY_MAP
+from src.db.models import User
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.models import User
 from src.repositories import EventRepo, UserRepo
 from src.utils import day_schedule_text, get_callback_arg, telegram_checks
 

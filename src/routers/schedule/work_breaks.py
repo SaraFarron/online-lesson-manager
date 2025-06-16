@@ -7,10 +7,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
+from src.db.models import RecurrentEvent, User
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.models import RecurrentEvent, User
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
 from src.utils import get_callback_arg, parse_time, telegram_checks
 

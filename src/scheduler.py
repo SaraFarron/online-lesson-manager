@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 
 from core import logs
 from core.config import TIMEZONE
-from database import engine
+from db.database import engine
 from logger import logger
-from src.models import User
+from src.db.models import User
 from src.repositories import EventRepo
 from utils import day_schedule_text, send_message
 

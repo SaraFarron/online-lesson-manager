@@ -6,14 +6,15 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ContentType, Message, InputMediaPhoto, InputMediaVideo
+from aiogram.types import ContentType, Message
 from sqlalchemy.orm import Session
+
+from src.core.config import BOT_TOKEN
+from src.db.models import User
 from src.keyboards import AdminCommands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.models import User
 from src.repositories import UserRepo
-from src.core.config import BOT_TOKEN
 from src.utils import telegram_checks
 
 router = Router()
@@ -89,7 +90,6 @@ class TelegramMessages:
 
     async def send_media_group(self, telegram_id: int, media_messages: List[Message]) -> None:
         """Send a media group (album) to a user"""
-
         # Prepare media group
         media_group = []
         combined_caption = None

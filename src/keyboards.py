@@ -6,7 +6,7 @@ from math import ceil
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from core.config import CHANGE_DELTA, DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
-from src.models import Event, RecurrentEvent, User
+from src.db.models import Event, RecurrentEvent, User
 
 
 class Commands(Enum):

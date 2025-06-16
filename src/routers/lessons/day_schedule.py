@@ -7,10 +7,10 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
+from src.db.models import User
 from src.keyboards import Commands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.models import User
 from src.repositories import EventRepo, UserRepo
 from src.utils import day_schedule_text, telegram_checks
 
