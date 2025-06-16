@@ -185,7 +185,7 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
         await state.set_state(MoveLesson.type_recur_date)
         await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
     elif mode == "forever" and state_data["action"] == "move":
-        weekdays = EventRepo(db).available_weekdays(user.id)
+        weekdays = EventRepo(db).available_weekdays(user.executor_id)
         await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, MoveLesson.choose_weekday))
     else:
         await message.answer(replies.UNKNOWN_ACTION_ERR)
