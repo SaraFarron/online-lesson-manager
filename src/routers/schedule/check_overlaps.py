@@ -10,7 +10,7 @@ from src.db.models import User
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.repositories import EventRepo, UserRepo
+from src.services import EventRepo, UserRepo
 from src.utils import send_message, telegram_checks
 
 router = Router()

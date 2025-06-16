@@ -12,7 +12,7 @@ from src.core.config import (
     TIME_FMT,
     WEEKDAY_MAP,
 )
-from src.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
+from src.db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
 
 HISTORY_MAP = {
     "help": "запросил помощь",

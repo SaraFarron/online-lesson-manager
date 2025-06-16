@@ -14,7 +14,7 @@ from src.db.models import User
 from src.keyboards import AdminCommands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.repositories import UserRepo
+from src.services import UserRepo
 from src.utils import telegram_checks
 
 router = Router()

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from src.keyboards import Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.repositories import EventHistoryRepo, UserRepo
+from src.services import EventHistoryRepo, UserRepo
 from src.utils import telegram_checks
 
 COMMAND = "help"

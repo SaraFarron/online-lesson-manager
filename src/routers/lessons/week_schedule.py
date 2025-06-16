@@ -12,7 +12,7 @@ from src.db.models import User
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.repositories import EventRepo, UserRepo
+from src.services import EventRepo, UserRepo
 from src.utils import day_schedule_text, get_callback_arg, telegram_checks
 
 router = Router()

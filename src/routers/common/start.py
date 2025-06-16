@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.repositories import UserRepo
+from src.services import UserRepo
 from src.utils import telegram_checks
 
 router: Router = Router()

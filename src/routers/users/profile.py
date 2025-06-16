@@ -13,7 +13,7 @@ from src.db.models import Event, User
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.repositories import HISTORY_MAP, EventHistoryRepo, UserRepo
+from src.services import HISTORY_MAP, EventHistoryRepo, UserRepo
 from src.utils import get_callback_arg, telegram_checks
 
 router = Router()

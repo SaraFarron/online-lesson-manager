@@ -9,7 +9,7 @@ from core.config import TIMEZONE
 from db.database import engine
 from logger import logger
 from src.db.models import User
-from src.repositories import EventRepo
+from src.services import EventRepo
 from utils import day_schedule_text, send_message
 
 

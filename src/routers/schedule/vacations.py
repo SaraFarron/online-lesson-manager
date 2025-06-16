@@ -11,7 +11,7 @@ from src.db.models import Event
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.repositories import EventHistoryRepo, EventRepo, UserRepo
+from src.services import EventHistoryRepo, EventRepo, UserRepo
 from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
