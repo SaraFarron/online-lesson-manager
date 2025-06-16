@@ -470,7 +470,7 @@ class EventRepo(Repo):
                 weekdays[weekday] = []
             start, end = datetime.strptime(re.start, DB_DATETIME), datetime.strptime(re.end, DB_DATETIME)
             if re.id in cancel_map:
-                cancel = cancel_map[re.id]  # len 7
+                cancel = cancel_map[re.id][0]  # len 7
                 weekdays[weekday].append(
                     (start.time(), end.time(), re.user_id, re.id, re.event_type, cancel[0], cancel[1]),
                 )
@@ -571,7 +571,7 @@ class EventRepo(Repo):
                 row_text = f"Пересекаются уроки: {ov1[4]} в {ov1t} у {users_map[ov1[2]]} и {ov2[4]} в {ov2t} у {users_map[ov2[2]]}"
             texts.append(row_text)
 
-        return "Замечены несостыковки\n" + "\n".join(texts)
+        return texts
 
     def overlaps_messages(self, overlaps: list[tuple]):
         user_overlap_map = {}
