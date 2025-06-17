@@ -1,7 +1,7 @@
 from datetime import date, datetime, time, timedelta
 
 from pydantic import BaseModel
-from sqlalchemy import bindparam, text
+from sqlalchemy import Row, bindparam, text
 from sqlalchemy.orm import Session
 
 from src.core.config import (
@@ -67,10 +67,37 @@ class EventSchema(BaseEventSchema):
     reschedule_id: int
     is_reschedule: bool
 
+    @staticmethod
+    def from_row(row: Row):
+        return EventSchema(
+            id=row.id,
+            start=datetime.strptime(row.start, DB_DATETIME),
+            end=datetime.strptime(row.end, DB_DATETIME),
+            user_id=row.user_id,
+            executor_id=row.executor_id,
+            event_type=row.event_type,
+            cancelled=row.cancelled,
+            reschedule_id=row.reschedule_id,
+            is_reschedule=row.is_reschedule,
+        )
+
 
 class RecurrentEventSchema(BaseEventSchema):
     interval: int
     interval_end: datetime
+
+    @staticmethod
+    def from_row(row: Row):
+        return RecurrentEventSchema(
+            id=row.id,
+            user_id=row.user_id,
+            executor_id=row.executor_id,
+            event_type=row.event_type,
+            start=datetime.strptime(row.start, DB_DATETIME),
+            end=datetime.strptime(row.end, DB_DATETIME),
+            interval=row.interval,
+            interval_end=row.interval_end,
+        )
 
 
 class CancelledRecurrentEventSchema(BaseSchema):
@@ -86,6 +113,17 @@ class EventHistorySchema(BaseSchema):
     event_type: str
     event_value: str
     created_at: datetime
+
+    @staticmethod
+    def from_row(row: Row):
+        return EventHistorySchema(
+            id=row.id,
+            created_at=datetime.strptime(row.created_at, DB_DATETIME),
+            scene=row.scene,
+            event_type=row.event_type,
+            event_value=row.event_value,
+            author=row.author,
+        )
 
 
 class Repo:
@@ -130,16 +168,7 @@ class EventHistoryRepo(Repo):
             """),
             {"author": username},
         )
-        return [
-            EventHistorySchema(
-                id=log.id,
-                created_at=datetime.strptime(log.created_at, DB_DATETIME),
-                scene=log.scene,
-                event_type=log.event_type,
-                event_value=log.event_value,
-                author=log.author,
-            ) for log in query
-        ]
+        return [EventHistorySchema.from_row(log) for log in query]
 
 
 class EventRepo(Repo):
@@ -170,19 +199,7 @@ class EventRepo(Repo):
             """),
             {"executor_id": executor_id, "today": today},
         )
-        return [
-            EventSchema(
-                id=event.id,
-                start=datetime.strptime(event.start, DB_DATETIME),
-                end=datetime.strptime(event.end, DB_DATETIME),
-                user_id=event.user_id,
-                event_type=event.event_type,
-                is_reschedule=event.is_reschedule,
-                executor_id=event.executor_id,
-                cancelled=event.cancelled,
-                reschedule_id=event.reschedule_id,
-            ) for event in query
-        ]
+        return [EventSchema.from_row(event) for event in query]
 
     def _recurrent_events_executor(self, executor_id: int):
         query = self.db.execute(
@@ -193,30 +210,25 @@ class EventRepo(Repo):
             """),
             {"executor_id": executor_id},
         )
-        return [
-            RecurrentEventSchema(
-                id=re.id,
-                user_id=re.user_id,
-                executor_id=re.executor_id,
-                event_type=re.event_type,
-                start=datetime.strptime(re.start, DB_DATETIME),
-                end=datetime.strptime(re.end, DB_DATETIME),
-                interval=re.interval,
-                interval_end=re.interval_end,
-            ) for re in query
-        ]
+        return [RecurrentEventSchema.from_row(re) for re in query]
 
-    # --- TODO ---
-
-    def recurrent_events_cancels(self, events: list[tuple]):
+    def recurrent_events_cancels(self, events: list[RecurrentEventSchema]):
         if events:
-            event_ids = [e[-1] for e in events]
-            stmt = text("""
-                SELECT event_id, break_type, start, end 
-                FROM event_breaks
-                WHERE event_id IN :event_ids
-            """).bindparams(bindparam("event_ids", expanding=True))
-            return list(self.db.execute(stmt, {"event_ids": event_ids}))
+            event_ids = [e.id for e in events]
+            query = self.db.execute(text("""
+                    SELECT * FROM event_breaks WHERE event_id IN :event_ids
+                """).bindparams(bindparam("event_ids", expanding=True)),
+                                    {"event_ids": event_ids},
+            )
+            return [
+                CancelledRecurrentEventSchema(
+                    id=cancel.id,
+                    event_id=cancel.event_id,
+                    break_type=cancel.break_type,
+                    start=datetime.strptime(cancel.start, DB_DATETIME),
+                    end=datetime.strptime(cancel.end, DB_DATETIME),
+                ) for cancel in query
+            ]
         return []
 
     def recurrent_events(self, executor_id: int):
@@ -228,59 +240,47 @@ class EventRepo(Repo):
         events, cancels = self.recurrent_events(executor_id)
         result = []
         for event in events:
-            start_dt, end_dt, user_id, event_type, interval, interval_end, event_id = event
-            start_dt = datetime.strptime(start_dt, DB_DATETIME)
-            end_dt = datetime.strptime(end_dt, DB_DATETIME)
-
             # Skip if event recurrence has ended before our target date
-            if interval_end and interval_end.date() < day:
+            if event.interval_end and event.interval_end.date() < day:
                 continue
 
             # Calculate the time difference between original start and target date
-            days_diff = (day - start_dt.date()).days
+            days_diff = (day - event.start.date()).days
 
             # Check if this event should occur on target_date based on interval
-            if interval > 0 and days_diff % interval == 0:
+            if event.interval > 0 and days_diff % event.interval == 0:
                 # Calculate the exact datetime on target_date
-                event_time = start_dt.time()
+                event_time = event.start.time()
                 event_start = datetime.combine(day, event_time)
-                event_end = event_start + (end_dt - start_dt)
+                event_end = event_start + (event.end - event.start)
 
                 # Check if this occurrence is cancelled
                 is_cancelled = False
                 for cancel in cancels:
-                    c_event_id, break_type, c_start, c_end = cancel
-                    c_start = datetime.strptime(c_start, DB_DATETIME)
-                    c_end = datetime.strptime(c_end, DB_DATETIME)
 
                     # Skip if cancellation is for a different event
-                    if c_event_id != event_id:
+                    if cancel.event_id != event.event_id:
                         continue
 
                     # Check if cancellation overlaps with this event occurrence
-                    if (event_start < c_end) and (event_end > c_start):
+                    if (event_start < cancel.end) and (event_end > cancel.start):
                         is_cancelled = True
                         break
 
                 if not is_cancelled:
-                    result.append((event_start, event_end, user_id, event_type, False))
+                    result.append(event)
         return result
 
     def events_for_day(self, executor_id: int, day: date):
         start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
         day_start = datetime.combine(day, start)
         day_end = datetime.combine(day, end)
-        events = self.db.execute(text("""
+        query = self.db.execute(text("""
             select start, end, user_id, event_type, is_reschedule from events
             where executor_id = :executor_id and start >= :day_start and end <= :day_end and cancelled is false
             order by start desc
         """), {"executor_id": executor_id, "day_start": day_start, "day_end": day_end})
-        result = []
-        for e in events:
-            start_dt = datetime.strptime(e[0], DB_DATETIME)
-            end_dt = datetime.strptime(e[1], DB_DATETIME)
-            result.append((start_dt, end_dt, *e[2:]))
-        return result
+        return [EventSchema.from_row(event) for event in query]
 
     @staticmethod
     def _get_available_slots(start: datetime, end: datetime, slot_size: timedelta, events: list):
@@ -293,18 +293,9 @@ class EventRepo(Repo):
             current_slot += slot_size  # Move by 15 minutes
 
         # Function to check if a 1-hour slot overlaps with any occupied period
-        def is_occupied(slot):
-            slot_start, slot_end = slot
-            for occupied in events:
-                occupied_start = (
-                    datetime.strptime(occupied[0], DB_DATETIME) if isinstance(occupied[0], str) else occupied[0]
-                )
-                occupied_end = (
-                    datetime.strptime(occupied[1], DB_DATETIME) if isinstance(occupied[1], str) else occupied[1]
-                )
-                if not (slot_end <= occupied_start or slot_start >= occupied_end):
-                    return True  # The slot is occupied
-            return False  # The slot is available
+        def is_occupied(slot: tuple[datetime, datetime]):
+            # The slot is available
+            return any(not (slot[1] <= occupied.start or slot[0] >= occupied.end) for occupied in events)
 
         # Filter out occupied slots
         return [slot for slot in all_slots if not is_occupied(slot)]
@@ -366,33 +357,24 @@ class EventRepo(Repo):
     def available_work_weekdays(self, executor_id: int):
         weekends = []
         for weekend in self.weekends(executor_id):
-            if not isinstance(weekend.start, datetime):
-                start = datetime.strptime(weekend.start, DB_DATETIME)
-            else:
-                start = weekend.start
-            weekends.append(start.weekday())
+            weekends.append(weekend.start.weekday())
         return [i for i in range(7) if i not in weekends]
 
     def vacations(self, user_id: int):
-        events = self.db.execute(
+        query = self.db.execute(
             text("""
                 select start, end, id from events
                 where user_id = :user_id and event_type = :vacation and cancelled is false
             """),
             {"user_id": user_id, "vacation": Event.EventTypes.VACATION},
         )
-        return list(events)
+        return [EventSchema.from_row(event) for event in query]
 
     def vacations_day(self, user_id: int, day: date):
         events = self.vacations(user_id)
         if not events:
             return False
-        for event in events:
-            start = datetime.strptime(event.start, DB_DATETIME)
-            end = datetime.strptime(event.end, DB_DATETIME)
-            if start.date() <= day <= end.date():
-                return True
-        return False
+        return any(event.start.date() <= day <= event.end.date() for event in events)
 
     def work_breaks(self, executor_id: int):
         events = self._recurrent_events_executor(executor_id)
