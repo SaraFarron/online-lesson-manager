@@ -1,14 +1,18 @@
 from datetime import date, datetime, time, timedelta
 
-from pydantic import BaseModel
-from sqlalchemy import Row, bindparam, text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
-from src.core.config import (
-    DB_DATETIME,
-    LESSON_SIZE,
-)
+from src.core.config import DB_DATETIME, LESSON_SIZE
 from src.db.models import Event, EventHistory, Executor, RecurrentEvent, User
+from src.db.schemas import (
+    CancelledRecurrentEventSchema,
+    EventHistorySchema,
+    EventSchema,
+    ExecutorSchema,
+    RecurrentEventSchema,
+    UserSchema,
+)
 
 HISTORY_MAP = {
     "help": "запросил помощь",
@@ -19,111 +23,6 @@ HISTORY_MAP = {
     "added_vacation": "добавил каникулы",
     "recur_lesson_deleted": "разово отменил урок",
 }
-
-class BaseSchema(BaseModel):
-    id: int
-
-
-class UserSchema(BaseSchema):
-    telegram_id: int
-    username: str | None
-    full_name: str
-    role: str
-    executor_id: int
-
-    roles: User.Roles = User.Roles
-
-    @staticmethod
-    def from_user(user: User):
-        return UserSchema(
-            id=user.id,
-            telegram_id=user.telegram_id,
-            username=user.username,
-            full_name=user.full_name,
-            role=user.role,
-            executor_id=user.executor_id,
-        )
-
-
-class ExecutorSchema(BaseSchema):
-    code: str
-    telegram_id: int
-
-    @staticmethod
-    def from_executor(executor: Executor):
-        return ExecutorSchema(id=executor.id, code=executor.code, telegram_id=executor.telegram_id)
-
-
-class BaseEventSchema(BaseSchema):
-    user_id: int
-    executor_id: int
-    event_type: str
-    start: datetime
-    end: datetime
-
-
-class EventSchema(BaseEventSchema):
-    cancelled: bool
-    reschedule_id: int
-    is_reschedule: bool
-
-    @staticmethod
-    def from_row(row: Row):
-        return EventSchema(
-            id=row.id,
-            start=datetime.strptime(row.start, DB_DATETIME),
-            end=datetime.strptime(row.end, DB_DATETIME),
-            user_id=row.user_id,
-            executor_id=row.executor_id,
-            event_type=row.event_type,
-            cancelled=row.cancelled,
-            reschedule_id=row.reschedule_id,
-            is_reschedule=row.is_reschedule,
-        )
-
-
-class RecurrentEventSchema(BaseEventSchema):
-    interval: int
-    interval_end: datetime
-
-    @staticmethod
-    def from_row(row: Row):
-        return RecurrentEventSchema(
-            id=row.id,
-            user_id=row.user_id,
-            executor_id=row.executor_id,
-            event_type=row.event_type,
-            start=datetime.strptime(row.start, DB_DATETIME),
-            end=datetime.strptime(row.end, DB_DATETIME),
-            interval=row.interval,
-            interval_end=row.interval_end,
-        )
-
-
-class CancelledRecurrentEventSchema(BaseSchema):
-    event_id: int
-    break_type: str
-    start: datetime
-    end: datetime
-
-
-class EventHistorySchema(BaseSchema):
-    author: str
-    scene: str
-    event_type: str
-    event_value: str
-    created_at: datetime
-
-    @staticmethod
-    def from_row(row: Row):
-        return EventHistorySchema(
-            id=row.id,
-            created_at=datetime.strptime(row.created_at, DB_DATETIME),
-            scene=row.scene,
-            event_type=row.event_type,
-            event_value=row.event_value,
-            author=row.author,
-        )
 
 
 class Repo:
@@ -175,7 +74,7 @@ class EventRepo(Repo):
     LESSON_TYPES = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
 
     @staticmethod
-    def _will_overlap(recurrent_start, recurrent_end, interval_days, simple_start, simple_end):
+    def will_overlap(recurrent_start, recurrent_end, interval_days, simple_start, simple_end):
         now = datetime.now()
         if simple_start < now:
             return False
@@ -189,7 +88,7 @@ class EventRepo(Repo):
             occurrence_end += interval
         return False
 
-    def _events_executor(self, executor_id: int):
+    def events_executor(self, executor_id: int):
         today = datetime.now().date()
         query = self.db.execute(
             text("""
@@ -201,7 +100,7 @@ class EventRepo(Repo):
         )
         return [EventSchema.from_row(event) for event in query]
 
-    def _recurrent_events_executor(self, executor_id: int):
+    def recurrent_events_executor(self, executor_id: int):
         query = self.db.execute(
             text("""
                     select * from recurrent_events
@@ -232,7 +131,7 @@ class EventRepo(Repo):
         return []
 
     def recurrent_events(self, executor_id: int):
-        events = self._recurrent_events_executor(executor_id)
+        events = self.recurrent_events_executor(executor_id)
         cancellations = self.recurrent_events_cancels(events)
         return events, cancellations
 
@@ -283,7 +182,7 @@ class EventRepo(Repo):
         return [EventSchema.from_row(event) for event in query]
 
     @staticmethod
-    def _get_available_slots(start: datetime, end: datetime, slot_size: timedelta, events: list):
+    def get_available_slots(start: datetime, end: datetime, slot_size: timedelta, events: list):
         # Generate all slots (15-minute increments)
         all_slots = []
         current_slot = start
@@ -310,7 +209,7 @@ class EventRepo(Repo):
         raise Exception("message", "Урок не найден", f"event with id {event_id} does not exist")
 
     def work_hours(self, executor_id: int):
-        events = self._recurrent_events_executor(executor_id)
+        events = self.recurrent_events_executor(executor_id)
         work_hours = filter(
             lambda x: x.event_type in (RecurrentEvent.EventTypes.WORK_START, RecurrentEvent.EventTypes.WORK_END),
             events,
@@ -347,7 +246,7 @@ class EventRepo(Repo):
         return time(hour=9, minute=0), None
 
     def weekends(self, executor_id: int):
-        events = self._recurrent_events_executor(executor_id)
+        events = self.recurrent_events_executor(executor_id)
         weekends = filter(
             lambda x: x.event_type == RecurrentEvent.EventTypes.WEEKEND,
             events,
@@ -377,7 +276,7 @@ class EventRepo(Repo):
         return any(event.start.date() <= day <= event.end.date() for event in events)
 
     def work_breaks(self, executor_id: int):
-        events = self._recurrent_events_executor(executor_id)
+        events = self.recurrent_events_executor(executor_id)
         if events:
             events = list(filter(lambda x: x.event_type == RecurrentEvent.EventTypes.WORK_BREAK, events))
         return events
