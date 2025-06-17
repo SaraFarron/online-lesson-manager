@@ -5,7 +5,7 @@ import aiohttp
 from aiogram.types import CallbackQuery, Message
 
 from src.core.config import SHORT_DATE_FMT, TIME_FMT
-from src.models import Event, RecurrentEvent, User
+from src.db.models import Event, RecurrentEvent, User
 
 MAX_HOUR = 23
 

@@ -1,8 +1,8 @@
 from sqlalchemy import create_engine
 
-from core import logs
-from logger import logger
-from models import Base
+from src.core import logs
+from src.db.models import Base
+from src.logger import logger
 
 logger.info(logs.DB_CONNECTING)
 engine = create_engine("sqlite:///db/db.sqlite")
