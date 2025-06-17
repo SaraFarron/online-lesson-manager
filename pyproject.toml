@@ -20,3 +20,47 @@ aiojobs = "^1.3.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+select = [
+    "ALL", # include all the rules, including new ones
+]
+ignore = [
+    #### specific rules
+    "D100",   # ignore missing docs
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    "D200",
+    "D205",
+    "D212",
+    "D400",
+    "D401",
+    "D415",
+    "TRY003", # external messages in exceptions are too verbose
+    "TD002",
+    "TD003",
+    "RUF012",
+    "RUF002",
+    "RUF003",
+    "RUF001",
+	"ANN101",
+    "ANN201",
+    "ANN205",
+	"PTH123",
+    "PTH207",
+	"S101",
+    "S321",
+    "S603",
+    "PT009",
+	"TCH001",
+    "TCH002",
+    "TCH003",
+	"E701",
+]
