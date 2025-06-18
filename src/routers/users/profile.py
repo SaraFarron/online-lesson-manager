@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 
 from src.core.config import DATE_FMT, DATETIME_FMT, DB_DATETIME
 from src.db.models import Event, User
+from src.db.repositories import EventHistoryRepo
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import HISTORY_MAP, EventHistoryRepo, UserRepo
+from src.services import HISTORY_MAP, UserService
 from src.utils import get_callback_arg, telegram_checks
 
 router = Router()
@@ -56,7 +57,7 @@ class Profile(StatesGroup):
 @router.message(F.text == AdminCommands.STUDENTS.value)
 async def profile_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
-    user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
@@ -70,7 +71,7 @@ async def profile_handler(message: Message, state: FSMContext, db: Session) -> N
 async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
@@ -96,7 +97,7 @@ async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> No
 async def delete_student(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
@@ -109,7 +110,7 @@ async def delete_student(callback: CallbackQuery, state: FSMContext, db: Session
 async def confirm(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
@@ -120,7 +121,7 @@ async def confirm(callback: CallbackQuery, state: FSMContext, db: Session) -> No
         return
 
     student_id = state_data["student_id"]
-    UserRepo(db).delete(student_id)
+    UserService(db).delete(student_id)
     await message.answer(replies.USER_DELETED)
     await state.clear()
     EventHistoryRepo(db).create(user.usernmae, Profile.scene, "deleted_user", str(student_id))

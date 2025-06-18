@@ -13,7 +13,7 @@ from src.db.repositories import EventHistoryRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserRepo
+from src.services import EventRepo, UserService
 from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
@@ -33,7 +33,7 @@ class AddLesson(StatesGroup):
 @router.message(F.text == Commands.ADD_LESSON.value)
 async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
-    user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
 
     await state.update_data(user_id=user.telegram_id)
     await message.answer(replies.CHOOSE_LESSON_DATE)
@@ -43,7 +43,7 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 @router.message(AddLesson.choose_date)
 async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
-    user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
 
     date = parse_date(message.text, True)
     if date is None:
@@ -73,7 +73,7 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
 async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     date = state_data["day"]
     time = datetime.strptime(
@@ -93,6 +93,6 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     await message.answer(replies.LESSON_ADDED)
     username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(username, AddLesson.scene, "added_lesson", str(lesson))
-    executor_tg = UserRepo(db).executor_telegram_id(user)
+    executor_tg = UserService(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} добавил(а) {lesson}")
     await state.clear()

@@ -1,5 +1,4 @@
 import asyncio
-from typing import List
 
 import aiohttp
 from aiogram import F, Router
@@ -14,7 +13,7 @@ from src.db.models import User
 from src.keyboards import AdminCommands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import UserRepo
+from src.services import UserService
 from src.utils import telegram_checks
 
 router = Router()
@@ -34,7 +33,7 @@ class Notifications(StatesGroup):
 @router.message(F.text == AdminCommands.SEND_TO_EVERYONE.value)
 async def notifications_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
-    user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
@@ -48,7 +47,7 @@ async def notifications_handler(message: Message, state: FSMContext, db: Session
 async def notification(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
@@ -88,7 +87,7 @@ class TelegramMessages:
                 await message.answer(replies.UNSUPPORTED_MEDIA_TYPE)
         return receivers
 
-    async def send_media_group(self, telegram_id: int, media_messages: List[Message]) -> None:
+    async def send_media_group(self, telegram_id: int, media_messages: list[Message]) -> None:
         """Send a media group (album) to a user"""
         # Prepare media group
         media_group = []
@@ -129,7 +128,7 @@ class TelegramMessages:
                     print(f"Failed to send media group: {response}")
                 return response
 
-    async def process_media_group(self, group_id: str, students: List):
+    async def process_media_group(self, group_id: str, students: list):
         """Process a complete media group for all students"""
         if group_id not in media_group_storage:
             return 0

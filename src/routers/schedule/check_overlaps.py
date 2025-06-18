@@ -10,7 +10,7 @@ from src.db.models import User
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserRepo
+from src.services import EventRepo, UserService
 from src.utils import send_message, telegram_checks
 
 router = Router()
@@ -28,7 +28,7 @@ class CheckOverlaps(StatesGroup):
 @router.message(F.text == AdminCommands.CHECK_OVERLAPS.value)
 async def check_overlaps_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
-    user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
@@ -51,7 +51,7 @@ async def check_overlaps_handler(message: Message, state: FSMContext, db: Sessio
 async def send_messages(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 

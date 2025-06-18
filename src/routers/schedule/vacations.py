@@ -12,7 +12,7 @@ from src.db.repositories import EventHistoryRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserRepo
+from src.services import EventRepo, UserService
 from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
@@ -31,7 +31,7 @@ class Vacations(StatesGroup):
 @router.message(F.text == Commands.VACATIONS.value)
 async def vacations_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
-    user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
     await state.update_data(user_id=user.telegram_id)
 
     vacations = EventRepo(db).vacations(user.id)
@@ -42,7 +42,7 @@ async def vacations_handler(message: Message, state: FSMContext, db: Session) ->
 async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     action = get_callback_arg(callback.data, Vacations.edit_vacations)
     if action.startswith("delete_vacation"):
@@ -54,7 +54,7 @@ async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session
         await message.answer(replies.VACATION_DELETED)
         username = user.username if user.username else user.full_name
         EventHistoryRepo(db).create(username, Vacations.scene, "delete_vacation", event_str)
-        executor_tg = UserRepo(db).executor_telegram_id(user)
+        executor_tg = UserService(db).executor_telegram_id(user)
         await send_message(executor_tg, f"{username} удалил(а) Каникулы {event_str}")
         await state.clear()
     elif action.startswith("add_vacation"):
@@ -68,7 +68,7 @@ async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session
 async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     try:
         dates = [d.strip() for d in message.text.split("-")]
@@ -98,6 +98,6 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
     event_str = f"{event.start.date()} - {event.end.date()}"
     username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(username, Vacations.scene, "added_vacation", event_str)
-    executor_tg = UserRepo(db).executor_telegram_id(user)
+    executor_tg = UserService(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} добавил(а) {event}")
     await state.clear()

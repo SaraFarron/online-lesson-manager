@@ -14,7 +14,7 @@ from src.db.repositories import EventHistoryRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserRepo
+from src.services import EventRepo, UserService
 from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
@@ -43,7 +43,7 @@ class MoveLesson(StatesGroup):
 @router.message(F.text == Commands.MOVE_LESSON.value)
 async def move_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
-    user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
 
     await state.update_data(user_id=user.telegram_id)
     lessons = EventRepo(db).all_user_lessons(user)
@@ -58,7 +58,7 @@ async def move_lesson_handler(message: Message, state: FSMContext, db: Session) 
 async def choose_lesson(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     await state.update_data(lesson=get_callback_arg(callback.data, MoveLesson.choose_lesson))
     await message.answer(replies.MOVE_OR_DELETE, reply_markup=Keyboards.move_or_delete(MoveLesson.move_or_delete))
@@ -68,7 +68,7 @@ async def choose_lesson(callback: CallbackQuery, state: FSMContext, db: Session)
 async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     action = get_callback_arg(callback.data, MoveLesson.move_or_delete)
     if action == "delete" and state_data["lesson"].startswith("e"):
@@ -76,7 +76,7 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
         username = user.username if user.username else user.full_name
         EventHistoryRepo(db).create(username, MoveLesson.scene, "deleted_one_lesson", str(lesson))
         await message.answer(replies.LESSON_DELETED)
-        executor_tg = UserRepo(db).executor_telegram_id(user)
+        executor_tg = UserService(db).executor_telegram_id(user)
         await send_message(executor_tg, f"{username} отменил(а) {lesson}")
         await state.clear()
         return
@@ -99,7 +99,7 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
 async def type_date(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     day = parse_date(message.text, True)
     if day is None:
@@ -128,7 +128,7 @@ async def type_date(message: Message, state: FSMContext, db: Session) -> None:
 async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     day = state_data["day"]
     time = datetime.strptime(
@@ -151,7 +151,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     EventHistoryRepo(db).create(
         username, MoveLesson.scene, "moved_one_lesson", f"{old_lesson} -> {new_lesson}",
     )
-    executor_tg = UserRepo(db).executor_telegram_id(user)
+    executor_tg = UserService(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} перенес(ла) {old_lesson} -> {new_lesson}")
     await state.clear()
 
@@ -161,7 +161,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
 async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     mode = get_callback_arg(callback.data, MoveLesson.once_or_forever)
     if mode == "once" and state_data["action"] == "delete":
@@ -179,7 +179,7 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
         await message.answer(replies.LESSON_DELETED)
         username = user.username if user.username else user.full_name
         EventHistoryRepo(db).create(username, MoveLesson.scene, "deleted_recur_lesson", lesson_str)
-        executor_tg = UserRepo(db).executor_telegram_id(user)
+        executor_tg = UserService(db).executor_telegram_id(user)
         await send_message(executor_tg, f"{username} отменил(ла) {lesson_str}")
         await state.clear()
     elif mode == "once" and state_data["action"] == "move":
@@ -198,7 +198,7 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
 async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     weekday = int(get_callback_arg(callback.data, MoveLesson.choose_weekday))
     await state.update_data(weekday=weekday)
@@ -210,7 +210,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
 async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     time = get_callback_arg(callback.data, MoveLesson.choose_recur_time)
     start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
@@ -234,7 +234,7 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     EventHistoryRepo(db).create(
         username, MoveLesson.scene, "moved_recur_lesson", f"{old_lesson_str} -> {lesson}",
     )
-    executor_tg = UserRepo(db).executor_telegram_id(user)
+    executor_tg = UserService(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
     await state.clear()
 
@@ -244,7 +244,7 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
 async def type_recur_date(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     day = parse_date(message.text, True)
     if day is None:
@@ -278,7 +278,7 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
         await message.answer(replies.LESSON_DELETED)
         username = user.username if user.username else user.full_name
         EventHistoryRepo(db).create(username, MoveLesson.scene, "recur_lesson_deleted", str(lesson))
-        executor_tg = UserRepo(db).executor_telegram_id(user)
+        executor_tg = UserService(db).executor_telegram_id(user)
         await send_message(executor_tg, f"{username} отменил(ла) {lesson} на {datetime.strftime(day, DATE_FMT)}")
         await state.clear()
         return
@@ -293,7 +293,7 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
 async def type_recur_new_date(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     day = parse_date(message.text, True)
     if day is None:
@@ -322,7 +322,7 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
 async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     time = get_callback_arg(callback.data, MoveLesson.choose_recur_new_time)
     start = datetime.combine(state_data["new_day"], datetime.strptime(time, TIME_FMT).time())
@@ -348,6 +348,6 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
     EventHistoryRepo(db).create(
         username, MoveLesson.scene, "recur_lesson_moved", f"{old_lesson_str} -> {lesson}",
     )
-    executor_tg = UserRepo(db).executor_telegram_id(user)
+    executor_tg = UserService(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
     await state.clear()

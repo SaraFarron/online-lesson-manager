@@ -13,7 +13,7 @@ from src.db.repositories import EventHistoryRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserRepo
+from src.services import EventRepo, UserService
 from src.utils import get_callback_arg, send_message, telegram_checks
 
 router = Router()
@@ -32,7 +32,7 @@ class AddRecurrentLesson(StatesGroup):
 @router.message(F.text == Commands.ADD_RECURRENT_LESSON.value)
 async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     message = telegram_checks(message)
-    user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
+    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
 
     await state.update_data(user_id=user.telegram_id)
     weekdays = EventRepo(db).available_weekdays(user.executor_id)
@@ -43,7 +43,7 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     weekday = int(get_callback_arg(callback.data, AddRecurrentLesson.choose_weekday))
     available_time = EventRepo(db).available_time_weekday(user.executor_id, weekday)
@@ -59,7 +59,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
 async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
+    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     time = datetime.strptime(get_callback_arg(callback.data, AddRecurrentLesson.choose_time), "%H:%M").time()
     start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
@@ -78,6 +78,6 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     username = user.username if user.username else user.full_name
     await message.answer(replies.LESSON_ADDED)
     EventHistoryRepo(db).create(username, AddRecurrentLesson.scene, "added_lesson", str(lesson))
-    executor_tg = UserRepo(db).executor_telegram_id(user)
+    executor_tg = UserService(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} добавил(а) {lesson}")
     await state.clear()

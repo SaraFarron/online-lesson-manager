@@ -11,14 +11,17 @@ class BaseSchema(BaseModel):
     id: int
 
 
+class RolesSchema(BaseModel):
+    TEACHER: str = "TEACHER"
+    STUDENT: str = "STUDENT"
+
+
 class UserSchema(BaseSchema):
     telegram_id: int
     username: str | None
     full_name: str
     role: str
     executor_id: int
-
-    roles: User.Roles = User.Roles
 
     @staticmethod
     def from_user(user: User):

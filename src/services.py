@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 
+from aiogram.types import CallbackQuery, Message
 from sqlalchemy import bindparam, text
 
 from src.core.config import (
@@ -12,7 +13,8 @@ from src.core.config import (
     WEEKDAY_MAP,
 )
 from src.db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
-from src.db.repositories import DBSession
+from src.db.repositories import DBSession, UserRepo
+from src.utils import telegram_checks
 
 HISTORY_MAP = {
     "help": "запросил помощь",
@@ -25,13 +27,13 @@ HISTORY_MAP = {
 }
 
 
-class UserRepo(DBSession):
-    def get_by_telegram_id(self, telegram_id: int, raise_error: bool = False):
-        """Retrieve a user by telegram id."""
-        user = self.db.query(User).filter(User.telegram_id == telegram_id).first()
-        if user is None and raise_error:
+class UserService(DBSession):
+    def check_user(self, event: Message | CallbackQuery):
+        message = telegram_checks(event)
+        user = UserRepo(self.db).get_by_telegram_id(message.from_user.id)
+        if user is None:
             raise Exception("message", "У вас нет прав на эту команду", "permission denied user is None")
-        return user
+        return message, user
 
     def register(self, tg_id: int, tg_full_name: str, tg_username: str, role: str, code: str):
         """Register a user."""
@@ -69,10 +71,6 @@ class UserRepo(DBSession):
         for e in list(event_breaks) + list(history) + list(recur_events) + list(events) + [user]:
             self.db.delete(e)
         self.db.commit()
-
-    def executor_telegram_id(self, user: User):
-        executor = self.db.get(Executor, user.executor_id)
-        return executor.telegram_id
 
 
 class EventRepo(DBSession):
