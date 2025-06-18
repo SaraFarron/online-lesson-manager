@@ -26,10 +26,6 @@ HISTORY_MAP = {
 
 
 class UserRepo(DBSession):
-    @property
-    def roles(self):
-        return User.Roles
-
     def get_by_telegram_id(self, telegram_id: int, raise_error: bool = False):
         """Retrieve a user by telegram id."""
         user = self.db.query(User).filter(User.telegram_id == telegram_id).first()

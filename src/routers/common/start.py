@@ -3,6 +3,7 @@ from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
+from src.db.models import User
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import UserRepo
@@ -22,7 +23,7 @@ async def start_handler(message: Message, command: CommandObject, db: Session) -
     user = user_repo.get_by_telegram_id(tg_id)
     if user is None:
         code = command.args
-        user_repo.register(tg_id, tg_full_name, tg_username, user_repo.roles.STUDENT, code)
+        user_repo.register(tg_id, tg_full_name, tg_username, User.Roles.STUDENT, code)
 
     await message.answer(replies.GREETINGS % html.bold(tg_full_name))
     await message.answer(replies.BOT_DESCRIPTION)
