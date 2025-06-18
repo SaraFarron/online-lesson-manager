@@ -12,7 +12,7 @@ from src.keyboards import Commands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import EventRepo, UserService
-from src.utils import day_schedule_text, telegram_checks
+from src.utils import day_schedule_text
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -27,8 +27,7 @@ class DaySchedule(StatesGroup):
 @router.message(Command(DaySchedule.command))
 @router.message(F.text == Commands.DAY_SCHEDULE.value)
 async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
+    message, user = UserService(db).check_user(message)
 
     lessons = EventRepo(db).day_schedule(
         user.executor_id,

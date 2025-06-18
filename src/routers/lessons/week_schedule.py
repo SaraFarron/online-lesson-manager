@@ -12,7 +12,7 @@ from src.db.models import User
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserService
+from src.services import EventRepo, UserRepo
 from src.utils import day_schedule_text, get_callback_arg, telegram_checks
 
 router = Router()
@@ -33,9 +33,9 @@ async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContex
     message = telegram_checks(event)
     state_data = await state.get_data()
     if isinstance(event, CallbackQuery):
-        user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+        user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
     else:
-        user = UserService(db).get_by_telegram_id(message.from_user.id, True)
+        user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
         await state.update_data(user_id=message.from_user.id)
 
     users_map = {  # TODO f"tg://user?id={u.telegram_id}" does not work

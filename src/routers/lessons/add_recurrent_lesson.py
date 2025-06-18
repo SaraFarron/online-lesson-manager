@@ -31,8 +31,7 @@ class AddRecurrentLesson(StatesGroup):
 @router.message(Command(AddRecurrentLesson.command))
 @router.message(F.text == Commands.ADD_RECURRENT_LESSON.value)
 async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
+    message, user = UserService(db).check_user(message)
 
     await state.update_data(user_id=user.telegram_id)
     weekdays = EventRepo(db).available_weekdays(user.executor_id)

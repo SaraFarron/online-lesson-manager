@@ -32,8 +32,7 @@ class AddLesson(StatesGroup):
 @router.message(Command(AddLesson.command))
 @router.message(F.text == Commands.ADD_LESSON.value)
 async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
+    message, user = UserService(db).check_user(message)
 
     await state.update_data(user_id=user.telegram_id)
     await message.answer(replies.CHOOSE_LESSON_DATE)

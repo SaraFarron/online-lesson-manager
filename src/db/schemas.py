@@ -11,7 +11,7 @@ class BaseSchema(BaseModel):
     id: int
 
 
-class RolesSchema(BaseModel):
+class RolesSchema:
     TEACHER: str = "TEACHER"
     STUDENT: str = "STUDENT"
 

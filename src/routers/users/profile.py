@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from src.core.config import DATE_FMT, DATETIME_FMT, DB_DATETIME
 from src.db.models import Event, User
 from src.db.repositories import EventHistoryRepo
+from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -56,11 +57,7 @@ class Profile(StatesGroup):
 @router.message(Command(Profile.command))
 @router.message(F.text == AdminCommands.STUDENTS.value)
 async def profile_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
-
+    message, user = UserService(db).check_user(message, RolesSchema.TEACHER)
     await state.update_data(user_id=user.telegram_id)
 
     students = list(db.query(User).filter(User.executor_id == user.executor_id, User.telegram_id != user.telegram_id))

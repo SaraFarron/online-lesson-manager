@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from src.core.config import WEEKDAY_MAP
 from src.db.models import RecurrentEvent, User
 from src.db.repositories import EventHistoryRepo
+from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -33,10 +34,7 @@ class WorkSchedule(StatesGroup):
 @router.message(Command(WorkSchedule.command))
 @router.message(F.text == AdminCommands.MANAGE_WORK_HOURS.value)
 async def manage_work_schedule_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user(message, RolesSchema.TEACHER)
 
     await state.update_data(user_id=user.telegram_id)
     work_hours = EventRepo(db).work_hours(user.executor_id)

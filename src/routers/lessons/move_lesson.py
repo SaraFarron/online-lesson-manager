@@ -42,8 +42,7 @@ class MoveLesson(StatesGroup):
 @router.message(Command(MoveLesson.command))
 @router.message(F.text == Commands.MOVE_LESSON.value)
 async def move_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
+    message, user = UserService(db).check_user(message)
 
     await state.update_data(user_id=user.telegram_id)
     lessons = EventRepo(db).all_user_lessons(user)

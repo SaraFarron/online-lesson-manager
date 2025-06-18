@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.core.config import BOT_TOKEN
 from src.db.models import User
+from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -32,10 +33,7 @@ class Notifications(StatesGroup):
 @router.message(Command(Notifications.command))
 @router.message(F.text == AdminCommands.SEND_TO_EVERYONE.value)
 async def notifications_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user(message, RolesSchema.TEACHER)
 
     await state.update_data(user_id=user.telegram_id)
 

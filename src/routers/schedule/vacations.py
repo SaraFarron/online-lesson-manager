@@ -30,8 +30,7 @@ class Vacations(StatesGroup):
 @router.message(Command(Vacations.command))
 @router.message(F.text == Commands.VACATIONS.value)
 async def vacations_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
+    message, user = UserService(db).check_user(message)
     await state.update_data(user_id=user.telegram_id)
 
     vacations = EventRepo(db).vacations(user.id)

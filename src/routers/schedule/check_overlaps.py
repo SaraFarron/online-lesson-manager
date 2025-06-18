@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.db.models import User
+from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -27,10 +28,7 @@ class CheckOverlaps(StatesGroup):
 @router.message(Command(CheckOverlaps.command))
 @router.message(F.text == AdminCommands.CHECK_OVERLAPS.value)
 async def check_overlaps_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user(message, RolesSchema.TEACHER)
 
     await state.update_data(user_id=message.from_user.id)
     overlaps = EventRepo(db).overlaps(user.executor_id)

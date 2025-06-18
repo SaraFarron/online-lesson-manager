@@ -14,6 +14,8 @@ from src.core.config import (
 )
 from src.db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
 from src.db.repositories import DBSession, UserRepo
+from src.db.schemas import RolesSchema
+from src.messages import replies
 from src.utils import telegram_checks
 
 HISTORY_MAP = {
@@ -28,11 +30,13 @@ HISTORY_MAP = {
 
 
 class UserService(DBSession):
-    def check_user(self, event: Message | CallbackQuery):
+    def check_user(self, event: Message | CallbackQuery, role: str = RolesSchema.STUDENT):
         message = telegram_checks(event)
         user = UserRepo(self.db).get_by_telegram_id(message.from_user.id)
         if user is None:
-            raise Exception("message", "У вас нет прав на эту команду", "permission denied user is None")
+            raise Exception("message", replies.PERMISSION_DENIED, "permission denied user is None")
+        if role != RolesSchema.STUDENT and user.role != RolesSchema.TEACHER:
+            raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
         return message, user
 
     def register(self, tg_id: int, tg_full_name: str, tg_username: str, role: str, code: str):
