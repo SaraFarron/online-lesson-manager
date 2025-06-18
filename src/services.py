@@ -1,7 +1,6 @@
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import bindparam, text
-from sqlalchemy.orm import Session
 
 from src.core.config import (
     CHANGE_DELTA,
@@ -13,6 +12,7 @@ from src.core.config import (
     WEEKDAY_MAP,
 )
 from src.db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
+from src.db.repositories import DBSession
 
 HISTORY_MAP = {
     "help": "запросил помощь",
@@ -25,12 +25,7 @@ HISTORY_MAP = {
 }
 
 
-class Repo:
-    def __init__(self, db: Session):
-        self.db = db
-
-
-class UserRepo(Repo):
+class UserRepo(DBSession):
     @property
     def roles(self):
         return User.Roles
@@ -84,7 +79,7 @@ class UserRepo(Repo):
         return executor.telegram_id
 
 
-class EventHistoryRepo(Repo):
+class EventHistoryRepo(DBSession):
     def create(self, author: str, scene: str, event_type: str, event_value: str):
         log = EventHistory(
             author=author,
@@ -108,7 +103,7 @@ class EventHistoryRepo(Repo):
         return list(events)
 
 
-class EventRepo(Repo):
+class EventRepo(DBSession):
     LESSON_TYPES = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
 
     @staticmethod

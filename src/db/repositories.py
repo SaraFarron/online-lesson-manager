@@ -14,23 +14,13 @@ from src.db.schemas import (
     UserSchema,
 )
 
-HISTORY_MAP = {
-    "help": "запросил помощь",
-    "added_lesson": "добавил урок",
-    "deleted_one_lesson": "удалил разовый урок",
-    "deleted_recur_lesson": "удалил урок",
-    "delete_vacation": "удалил каникулы",
-    "added_vacation": "добавил каникулы",
-    "recur_lesson_deleted": "разово отменил урок",
-}
 
-
-class Repo:
+class DBSession:
     def __init__(self, db: Session):
         self.db = db
 
 
-class UserRepo(Repo):
+class UserRepo(DBSession):
     def get_by_telegram_id(self, telegram_id: int, raise_error: bool = False):
         """Retrieve a user by telegram id."""
         user = self.db.query(User).filter(User.telegram_id == telegram_id).first()
@@ -46,7 +36,7 @@ class UserRepo(Repo):
         return self.executor(user).telegram_id
 
 
-class EventHistoryRepo(Repo):
+class EventHistoryRepo(DBSession):
     def create(self, author: str, scene: str, event_type: str, event_value: str):
         log = EventHistory(
             author=author,
@@ -70,7 +60,7 @@ class EventHistoryRepo(Repo):
         return [EventHistorySchema.from_row(log) for log in query]
 
 
-class EventRepo(Repo):
+class EventRepo(DBSession):
     LESSON_TYPES = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
 
     @staticmethod
