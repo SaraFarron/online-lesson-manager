@@ -79,30 +79,6 @@ class UserRepo(DBSession):
         return executor.telegram_id
 
 
-class EventHistoryRepo(DBSession):
-    def create(self, author: str, scene: str, event_type: str, event_value: str):
-        log = EventHistory(
-            author=author,
-            scene=scene,
-            event_type=event_type,
-            event_value=event_value,
-        )
-        self.db.add(log)
-        self.db.commit()
-
-    def user_history(self, username: str):
-        events = self.db.execute(
-            text("""
-                select created_at, scene, event_type, event_value from event_history
-                where author = :author
-                order by created_at desc
-                limit 10
-            """),
-            {"author": username},
-        )
-        return list(events)
-
-
 class EventRepo(DBSession):
     LESSON_TYPES = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
 

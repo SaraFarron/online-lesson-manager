@@ -5,10 +5,11 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
+from src.db.repositories import EventHistoryRepo
 from src.keyboards import Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventHistoryRepo, UserRepo
+from src.services import UserRepo
 from src.utils import telegram_checks
 
 COMMAND = "help"

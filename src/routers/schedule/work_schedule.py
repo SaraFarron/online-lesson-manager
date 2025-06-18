@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from src.core.config import WEEKDAY_MAP
 from src.db.models import RecurrentEvent, User
+from src.db.repositories import EventHistoryRepo
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventHistoryRepo, EventRepo, UserRepo
+from src.services import EventRepo, UserRepo
 from src.utils import get_callback_arg, parse_time, telegram_checks
 
 router = Router()

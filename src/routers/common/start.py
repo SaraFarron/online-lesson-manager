@@ -22,15 +22,6 @@ async def start_handler(message: Message, command: CommandObject, db: Session) -
     user = user_repo.get_by_telegram_id(tg_id)
     if user is None:
         code = command.args
-        # Temp, remove after bot launch
-        # if code in ("sara", "irina", "sudo"):
-        #     user_repo.register(
-        #         tg_id,
-        #         tg_full_name,
-        #         tg_username,
-        #         user_repo.roles.TEACHER,
-        #         code,
-        #     )
         user_repo.register(tg_id, tg_full_name, tg_username, user_repo.roles.STUDENT, code)
 
     await message.answer(replies.GREETINGS % html.bold(tg_full_name))
