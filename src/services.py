@@ -5,7 +5,6 @@ from sqlalchemy import bindparam, text
 
 from src.core.config import (
     CHANGE_DELTA,
-    DB_DATETIME,
     MAX_LESSONS_PER_DAY,
     SLOT_SIZE,
     TIME_FMT,
@@ -86,10 +85,11 @@ class EventService(DBSession):
     def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
         executor = self.db.get(Executor, executor_id)
         exec_user = self.db.query(User).filter(User.telegram_id == executor.telegram_id).first()
-        if self.vacations_day(user_id, day) or self.vacations_day(exec_user.id, day):
+        repo = EventRepo(self.db)
+        if repo.vacations_day(user_id, day) or repo.vacations_day(exec_user.id, day):
             return []
-        ev = self.events_for_day(executor_id, day)
-        rv = self.recurrent_events_for_day(executor_id, day)
+        ev = repo.events_for_day(executor_id, day)
+        rv = repo.recurrent_events_for_day(executor_id, day)
         events = ev + rv
         user_ids = [e[2] for e in events]
         query = text("""
@@ -114,53 +114,57 @@ class EventService(DBSession):
         return events
 
     def available_weekdays(self, executor_id: int):
-        start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
+        now = datetime.now()
+        start_of_week = now.date() - timedelta(days=now.weekday())
         result = []
-        start_t, end_t = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
+        repo = EventRepo(self.db)
+        start_t, end_t = repo.get_work_start(executor_id)[0], repo.get_work_end(executor_id)[0]
         lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
         for i in range(7):
             current_day = start_of_week + timedelta(days=i)
-            events = self.recurrent_events_for_day(executor_id, current_day)
+            events = repo.recurrent_events_for_day(executor_id, current_day)
             lessons = [e for e in events if e[3] in lesson_types]
             if len(lessons) >= MAX_LESSONS_PER_DAY:
                 continue
             start = datetime.combine(current_day, start_t)
             end = datetime.combine(current_day, end_t)
-            available_time = self._get_available_slots(start, end, SLOT_SIZE, events)
+            available_time = repo.get_available_slots(start, end, SLOT_SIZE, events)
             if available_time:
                 result.append(i)
         return result
 
     def available_time(self, executor_id: int, day: date):
-        events = self.events_for_day(executor_id, day) + self.recurrent_events_for_day(executor_id, day)
+        repo = EventRepo(self.db)
+        events = repo.events_for_day(executor_id, day) + repo.recurrent_events_for_day(executor_id, day)
         lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
         lessons = [e for e in events if e[3] in lesson_types]
         if len(lessons) >= MAX_LESSONS_PER_DAY:
             return []
 
-        start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
+        start, end = repo.get_work_start(executor_id)[0], repo.get_work_end(executor_id)[0]
         start = datetime.combine(day, start)
         end = datetime.combine(day, end)
         now = datetime.now()
         result = []
-        for slot in self._get_available_slots(start, end, SLOT_SIZE, events):
+        for slot in repo.get_available_slots(start, end, SLOT_SIZE, events):
             if day == now.date() and now + CHANGE_DELTA > slot[0]:
                 continue
             result.append(slot[0])
         return result
 
     def available_time_weekday(self, executor_id: int, weekday: int):
-        start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
+        now = datetime.now()
+        repo = EventRepo(self.db)
+        start_of_week = now.date() - timedelta(days=now.weekday())
         current_day = start_of_week + timedelta(days=weekday)
-        events = self.recurrent_events_for_day(executor_id, current_day)
+        events = repo.recurrent_events_for_day(executor_id, current_day)
 
-        start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
+        start, end = repo.get_work_start(executor_id)[0], repo.get_work_end(executor_id)[0]
         start = datetime.combine(current_day, start)
         end = datetime.combine(current_day, end)
-        now = datetime.now()
         simple_lessons = {}
-        for s in self._events_executor(executor_id):
-            start_t = datetime.strptime(s[0], DB_DATETIME)
+        for s in repo.events_executor(executor_id):
+            start_t = s[0]
             weekday_t = start_t.weekday()
             if s[3] in self.LESSON_TYPES and start_t > now:
                 if weekday_t not in simple_lessons:
@@ -175,15 +179,16 @@ class EventService(DBSession):
                     simple_lessons[weekday_t].append(t.time())
 
         result = []
-        for s in self._get_available_slots(start, end, SLOT_SIZE, events):
+        for s in repo.get_available_slots(start, end, SLOT_SIZE, events):
             if s[0].weekday() in simple_lessons and s[0].time() in simple_lessons[s[0].weekday()]:
                 continue
             result.append(s[0])
         return result
 
     def all_user_lessons(self, user: User):
-        recurs = self._recurrent_events_executor(user.executor_id)
-        events = self._events_executor(user.executor_id)
+        repo = EventRepo(self.db)
+        recurs = repo.recurrent_events_executor(user.executor_id)
+        events = repo.events_executor(user.executor_id)
         result = []
         for e in recurs + events:
             if e.event_type not in self.LESSON_TYPES or e.user_id != user.id:
@@ -193,9 +198,10 @@ class EventService(DBSession):
 
     def overlaps(self, executor_id: int):
         # Get all events
-        events = self._events_executor(executor_id)
-        rec_events = self._recurrent_events_executor(executor_id)
-        cancels = self.recurrent_events_cancels(rec_events)
+        repo = EventRepo(self.db)
+        events = repo.events_executor(executor_id)
+        rec_events = repo.recurrent_events_executor(executor_id)
+        cancels = repo.recurrent_events_cancels(rec_events)
         cancel_map = {}
         for c in cancels:
             if c.event_id not in cancel_map:
@@ -204,11 +210,10 @@ class EventService(DBSession):
 
         weekdays = {}
         for re in rec_events:
-            dt = datetime.strptime(re.start, DB_DATETIME)
-            weekday = dt.weekday()
+            weekday = re.start.weekday()
             if weekday not in weekdays:
                 weekdays[weekday] = []
-            start, end = datetime.strptime(re.start, DB_DATETIME), datetime.strptime(re.end, DB_DATETIME)
+            start, end = re.start, re.end
             if re.id in cancel_map:
                 cancel = cancel_map[re.id][0]  # len 7
                 weekdays[weekday].append(
@@ -218,11 +223,10 @@ class EventService(DBSession):
                 weekdays[weekday].append((start.time(), end.time(), re.user_id, re.id, re.event_type))  # len 5
 
         for event in events:
-            dt = datetime.strptime(event.start, DB_DATETIME)
-            weekday = dt.weekday()
+            weekday = event.start.weekday()
             if weekday not in weekdays:
                 weekdays[weekday] = []
-            start, end = datetime.strptime(event.start, DB_DATETIME), datetime.strptime(event.end, DB_DATETIME)
+            start, end = event.start, event.end
             # len 6
             weekdays[weekday].append(
                 (start.time(), end.time(), event.user_id, event.id, event.event_type, start.date()),
@@ -238,12 +242,11 @@ class EventService(DBSession):
                     event2 = sorted_events[j]
                     if event1[1] <= event2[0]:
                         break
-                    if len(event1) == 7:
-                        if len(event2) == 6:
-                            e2_start, e2_end = datetime.combine(event2[4], event2[0]), datetime.combine(event2[4], event2[1])
-                            c_start, c_end = datetime.combine(event2[4], event1[0]), datetime.combine(event2[4], event1[1])
-                            if c_start <= e2_start <= c_end and c_start <= e2_end <= c_end:
-                                break
+                    if len(event1) == 7 and len(event2) == 6:
+                        e2_start, e2_end = datetime.combine(event2[4], event2[0]), datetime.combine(event2[4], event2[1])
+                        c_start, c_end = datetime.combine(event2[4], event1[0]), datetime.combine(event2[4], event1[1])
+                        if c_start <= e2_start <= c_end and c_start <= e2_end <= c_end:
+                            break
 
                     overlap_pair = event1, event2
                     overlaps.add(overlap_pair)
