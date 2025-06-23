@@ -12,7 +12,7 @@ from src.db.models import User
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserRepo
+from src.services import EventService, UserRepo
 from src.utils import day_schedule_text, get_callback_arg, telegram_checks
 
 router = Router()
@@ -51,7 +51,7 @@ async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContex
     for i in range(7):
         current_date = start_of_week + timedelta(days=i)
         weekday = current_date.weekday()
-        lessons = EventRepo(db).day_schedule(
+        lessons = EventService(db).day_schedule(
             user.executor_id,
             current_date.date(),
             None if user.role == User.Roles.TEACHER else user.id,

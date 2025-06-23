@@ -13,7 +13,7 @@ from src.db.repositories import EventHistoryRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserService
+from src.services import EventService, UserService
 from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
@@ -58,7 +58,7 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
         await message.answer(replies.CHOOSE_FUTURE_DATE)
         return
 
-    available_time = EventRepo(db).available_time(user.executor_id, day)
+    available_time = EventService(db).available_time(user.executor_id, day)
     if available_time:
         await message.answer(
             replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time),

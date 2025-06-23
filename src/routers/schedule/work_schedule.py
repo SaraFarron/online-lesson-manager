@@ -14,7 +14,7 @@ from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserService
+from src.services import EventService, UserService
 from src.utils import get_callback_arg, parse_time, telegram_checks
 
 router = Router()
@@ -37,8 +37,8 @@ async def manage_work_schedule_handler(message: Message, state: FSMContext, db: 
     message, user = UserService(db).check_user(message, RolesSchema.TEACHER)
 
     await state.update_data(user_id=user.telegram_id)
-    work_hours = EventRepo(db).work_hours(user.executor_id)
-    weekends = EventRepo(db).weekends(user.executor_id)
+    work_hours = EventService(db).work_hours(user.executor_id)
+    weekends = EventService(db).weekends(user.executor_id)
     await message.answer(
         replies.CHOOSE_WH_ACTION,
         reply_markup=Keyboards.work_hours(work_hours, weekends, WorkSchedule.action, WorkSchedule.choose_weekday),
@@ -58,10 +58,10 @@ async def action(callback: CallbackQuery, state: FSMContext, db: Session) -> Non
     username = user.username if user.username else user.full_name
     if action_type.startswith("delete"):
         if action_type.endswith("start"):
-            time = EventRepo(db).delete_work_hour_setting(user.executor_id, "start")
+            time = EventService(db).delete_work_hour_setting(user.executor_id, "start")
             EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_start", str(time))
         elif action_type.endswith("end"):
-            time = EventRepo(db).delete_work_hour_setting(user.executor_id, "end")
+            time = EventService(db).delete_work_hour_setting(user.executor_id, "end")
             EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_end", str(time))
         await message.answer(replies.WORK_HOURS_DELETED)
     elif action_type.startswith("add"):
@@ -131,7 +131,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
         username = user.username if user.username else user.full_name
         EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_weekend", weekday)
     elif "add_weekend" in callback.data:
-        weekdays = EventRepo(db).available_work_weekdays(user.executor_id)
+        weekdays = EventService(db).available_work_weekdays(user.executor_id)
         await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, WorkSchedule.create_weekend))
     else:
         raise Exception("message", "Неизвестное событие", f"unknown weekend action {callback.data}")

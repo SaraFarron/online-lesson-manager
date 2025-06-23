@@ -9,7 +9,7 @@ from core.config import TIMEZONE
 from db.database import engine
 from logger import logger
 from src.db.models import User
-from src.services import EventRepo
+from src.services import EventService
 from utils import day_schedule_text, send_message
 
 
@@ -20,7 +20,7 @@ def notification(events: list, user: User, users_map):
     return "Скоро занятия:\n" + "\n".join(rows)
 
 
-def notification_text(user: User, service: EventRepo, now: datetime, db: Session):
+def notification_text(user: User, service: EventService, now: datetime, db: Session):
     student_id = user.id if user.role == User.Roles.STUDENT else None
     events = service.day_schedule(user.executor_id, now.date(), student_id)
     user_ids = [e[2] for e in events]
@@ -33,7 +33,7 @@ async def send_notifications(now: datetime):
     with Session(engine) as db:
         notifies = set()
         users = db.query(User).all()
-        service = EventRepo(db)
+        service = EventService(db)
         for user in users:
             text = notification_text(user, service, now, db)
             if not text:
@@ -59,7 +59,7 @@ async def teachers_lessons(now: datetime):
     admin_tg_id = 882315246  # Yes, hardcode, what u can do?
     with Session(engine) as db:
         users = db.query(User).filter(User.role == User.Roles.TEACHER)
-        service = EventRepo(db)
+        service = EventService(db)
         for user in users:
             text = notification_text(user, service, now, db)
             if not text:

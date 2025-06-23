@@ -14,7 +14,7 @@ from src.db.repositories import EventHistoryRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserService
+from src.services import EventService, UserService
 from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
@@ -45,7 +45,7 @@ async def move_lesson_handler(message: Message, state: FSMContext, db: Session) 
     message, user = UserService(db).check_user(message)
 
     await state.update_data(user_id=user.telegram_id)
-    lessons = EventRepo(db).all_user_lessons(user)
+    lessons = EventService(db).all_user_lessons(user)
     keyboard = Keyboards.choose_lesson(lessons, MoveLesson.choose_lesson)
     if keyboard:
         await message.answer(replies.CHOOSE_LESSON, reply_markup=keyboard)
@@ -71,7 +71,7 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
 
     action = get_callback_arg(callback.data, MoveLesson.move_or_delete)
     if action == "delete" and state_data["lesson"].startswith("e"):
-        lesson = EventRepo(db).cancel_event(int(state_data["lesson"].replace("e", "")))
+        lesson = EventService(db).cancel_event(int(state_data["lesson"].replace("e", "")))
         username = user.username if user.username else user.full_name
         EventHistoryRepo(db).create(username, MoveLesson.scene, "deleted_one_lesson", str(lesson))
         await message.answer(replies.LESSON_DELETED)
@@ -113,7 +113,7 @@ async def type_date(message: Message, state: FSMContext, db: Session) -> None:
         return
 
     await state.update_data(day=day)
-    available_time = EventRepo(db).available_time(user.executor_id, day)
+    available_time = EventService(db).available_time(user.executor_id, day)
     if available_time:
         await message.answer(
             replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_time),
@@ -135,7 +135,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         config.TIME_FMT,
     ).time()
 
-    old_lesson = EventRepo(db).cancel_event(int(state_data["lesson"].replace("e", "")))
+    old_lesson = EventService(db).cancel_event(int(state_data["lesson"].replace("e", "")))
     new_lesson = Event(
         user_id=user.id,
         executor_id=user.executor_id,
@@ -185,7 +185,7 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
         await state.set_state(MoveLesson.type_recur_date)
         await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
     elif mode == "forever" and state_data["action"] == "move":
-        weekdays = EventRepo(db).available_weekdays(user.executor_id)
+        weekdays = EventService(db).available_weekdays(user.executor_id)
         await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, MoveLesson.choose_weekday))
     else:
         await message.answer(replies.UNKNOWN_ACTION_ERR)
@@ -201,7 +201,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
 
     weekday = int(get_callback_arg(callback.data, MoveLesson.choose_weekday))
     await state.update_data(weekday=weekday)
-    available_time = EventRepo(db).available_time_weekday(user.executor_id, weekday)
+    available_time = EventService(db).available_time_weekday(user.executor_id, weekday)
     await message.answer(replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_time))
 
 
@@ -307,7 +307,7 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
         return
 
     await state.update_data(new_day=day)
-    available_time = EventRepo(db).available_time(user.executor_id, day)
+    available_time = EventService(db).available_time(user.executor_id, day)
     if available_time:
         await message.answer(
             replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_new_time),

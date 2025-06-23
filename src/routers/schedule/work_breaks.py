@@ -13,7 +13,7 @@ from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserService
+from src.services import EventService, UserService
 from src.utils import get_callback_arg, parse_time, telegram_checks
 
 router = Router()
@@ -36,7 +36,7 @@ async def manage_work_breaks_handler(message: Message, state: FSMContext, db: Se
     message, user = UserService(db).check_user(message, RolesSchema.TEACHER)
 
     await state.update_data(user_id=user.telegram_id)
-    work_breaks = EventRepo(db).work_breaks(user.executor_id)
+    work_breaks = EventService(db).work_breaks(user.executor_id)
     await message.answer(
         replies.CHOOSE_WH_ACTION,
         reply_markup=Keyboards.work_breaks(work_breaks, WorkBreaks.add_break, WorkBreaks.remove_break),

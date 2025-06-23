@@ -11,7 +11,7 @@ from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserService
+from src.services import EventService, UserService
 from src.utils import send_message, telegram_checks
 
 router = Router()
@@ -31,9 +31,9 @@ async def check_overlaps_handler(message: Message, state: FSMContext, db: Sessio
     message, user = UserService(db).check_user(message, RolesSchema.TEACHER)
 
     await state.update_data(user_id=message.from_user.id)
-    overlaps = EventRepo(db).overlaps(user.executor_id)
+    overlaps = EventService(db).overlaps(user.executor_id)
     if overlaps:
-        texts = EventRepo(db).overlaps_text(overlaps)
+        texts = EventService(db).overlaps_text(overlaps)
         if texts:
             await message.answer(
                 "Замечены несостыковки\n" + "\n".join(texts),
@@ -53,8 +53,8 @@ async def send_messages(callback: CallbackQuery, state: FSMContext, db: Session)
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
-    overlaps = EventRepo(db).overlaps(user.executor_id)
-    messages = EventRepo(db).overlaps_messages(overlaps)
+    overlaps = EventService(db).overlaps(user.executor_id)
+    messages = EventService(db).overlaps_messages(overlaps)
     counter = 0
     for user_tg, texts in messages.items():
         if not texts:

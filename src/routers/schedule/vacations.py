@@ -12,7 +12,7 @@ from src.db.repositories import EventHistoryRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserService
+from src.services import EventService, UserService
 from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
 
 router = Router()
@@ -33,7 +33,7 @@ async def vacations_handler(message: Message, state: FSMContext, db: Session) ->
     message, user = UserService(db).check_user(message)
     await state.update_data(user_id=user.telegram_id)
 
-    vacations = EventRepo(db).vacations(user.id)
+    vacations = EventService(db).vacations(user.id)
     await message.answer(replies.CHOOSE_ACTION, reply_markup=Keyboards.vacations(vacations, Vacations.edit_vacations))
 
 

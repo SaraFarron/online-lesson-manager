@@ -13,7 +13,7 @@ from src.db.repositories import EventHistoryRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
-from src.services import EventRepo, UserService
+from src.services import EventService, UserService
 from src.utils import get_callback_arg, send_message, telegram_checks
 
 router = Router()
@@ -34,7 +34,7 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
     message, user = UserService(db).check_user(message)
 
     await state.update_data(user_id=user.telegram_id)
-    weekdays = EventRepo(db).available_weekdays(user.executor_id)
+    weekdays = EventService(db).available_weekdays(user.executor_id)
     await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, AddRecurrentLesson.choose_weekday))
 
 
@@ -45,7 +45,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
     user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
 
     weekday = int(get_callback_arg(callback.data, AddRecurrentLesson.choose_weekday))
-    available_time = EventRepo(db).available_time_weekday(user.executor_id, weekday)
+    available_time = EventService(db).available_time_weekday(user.executor_id, weekday)
     if not available_time:
         await message.answer(replies.NO_TIME)
         await state.clear()
