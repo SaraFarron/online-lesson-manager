@@ -31,7 +31,11 @@ HISTORY_MAP = {
 class UserService(DBSession):
     def check_user(self, event: Message | CallbackQuery, role: str = RolesSchema.STUDENT):
         message = telegram_checks(event)
-        user = UserRepo(self.db).get_by_telegram_id(message.from_user.id)
+        return self.check_user_with_id(event, message.from_user.id, role)
+
+    def check_user_with_id(self, event: Message | CallbackQuery, user_id: int, role: str = RolesSchema.STUDENT):
+        message = telegram_checks(event)
+        user = UserRepo(self.db).get_by_telegram_id(user_id)
         if user is None:
             raise Exception("message", replies.PERMISSION_DENIED, "permission denied user is None")
         if role != RolesSchema.STUDENT and user.role != RolesSchema.TEACHER:

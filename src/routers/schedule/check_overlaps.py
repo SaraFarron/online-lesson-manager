@@ -1,4 +1,3 @@
-
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -6,13 +5,12 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.db.models import User
 from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import EventService, UserService
-from src.utils import send_message, telegram_checks
+from src.utils import send_message
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -47,11 +45,8 @@ async def check_overlaps_handler(message: Message, state: FSMContext, db: Sessio
 
 @router.callback_query(F.data.startswith(CheckOverlaps.send_messages))
 async def send_messages(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     overlaps = EventService(db).overlaps(user.executor_id)
     messages = EventService(db).overlaps_messages(overlaps)

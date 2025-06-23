@@ -14,7 +14,7 @@ from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import EventService, UserService
-from src.utils import get_callback_arg, send_message, telegram_checks
+from src.utils import get_callback_arg, send_message
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -40,9 +40,8 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 
 @router.callback_query(F.data.startswith(AddRecurrentLesson.choose_weekday))
 async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     weekday = int(get_callback_arg(callback.data, AddRecurrentLesson.choose_weekday))
     available_time = EventService(db).available_time_weekday(user.executor_id, weekday)
@@ -56,9 +55,8 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
 
 @router.callback_query(F.data.startswith(AddRecurrentLesson.choose_time))
 async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     time = datetime.strptime(get_callback_arg(callback.data, AddRecurrentLesson.choose_time), "%H:%M").time()
     start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())

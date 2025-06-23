@@ -7,14 +7,14 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.db.models import RecurrentEvent, User
+from src.db.models import RecurrentEvent
 from src.db.repositories import EventHistoryRepo
 from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import EventService, UserService
-from src.utils import get_callback_arg, parse_time, telegram_checks
+from src.utils import get_callback_arg, parse_time
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -45,22 +45,16 @@ async def manage_work_breaks_handler(message: Message, state: FSMContext, db: Se
 
 @router.callback_query(F.data.startswith(WorkBreaks.add_break))
 async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(list(range(7)), WorkBreaks.choose_duration))
 
 
 @router.callback_query(F.data.startswith(WorkBreaks.choose_duration))
 async def choose_duration(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     weekday = get_callback_arg(callback.data, WorkBreaks.choose_duration)
     await state.update_data(weekday=weekday)
@@ -71,11 +65,8 @@ async def choose_duration(callback: CallbackQuery, state: FSMContext, db: Sessio
 
 @router.message(WorkBreaks.result)
 async def result(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(message, state_data["user_id"], RolesSchema.TEACHER)
 
     user_input = message.text.split("-")
     if len(user_input) != 2:
@@ -109,11 +100,8 @@ async def result(message: Message, state: FSMContext, db: Session) -> None:
 
 @router.callback_query(F.data.startswith(WorkBreaks.remove_break))
 async def remove_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     event_id = get_callback_arg(callback.data, WorkBreaks.remove_break)
     event = db.get(RecurrentEvent, int(event_id))

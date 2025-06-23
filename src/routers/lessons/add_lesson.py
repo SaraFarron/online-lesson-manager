@@ -14,7 +14,7 @@ from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import EventService, UserService
-from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
+from src.utils import get_callback_arg, parse_date, send_message
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -41,8 +41,7 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 
 @router.message(AddLesson.choose_date)
 async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
-    user = UserService(db).get_by_telegram_id(message.from_user.id, True)
+    message, user = UserService(db).check_user_with_id(message, message.from_user.id)
 
     date = parse_date(message.text, True)
     if date is None:
@@ -70,9 +69,8 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
 
 @router.callback_query(F.data.startswith(AddLesson.choose_time))
 async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     date = state_data["day"]
     time = datetime.strptime(

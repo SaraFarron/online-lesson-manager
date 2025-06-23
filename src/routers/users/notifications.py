@@ -15,7 +15,6 @@ from src.keyboards import AdminCommands
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import UserService
-from src.utils import telegram_checks
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -43,11 +42,8 @@ async def notifications_handler(message: Message, state: FSMContext, db: Session
 
 @router.message(Notifications.notification)
 async def notification(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(message, state_data["user_id"], RolesSchema.TEACHER)
 
     students = list(db.query(User).filter(User.executor_id == user.executor_id))
     receivers = await TelegramMessages().send_complex_message(message, students)

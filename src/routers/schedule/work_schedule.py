@@ -48,11 +48,8 @@ async def manage_work_schedule_handler(message: Message, state: FSMContext, db: 
 
 @router.callback_query(F.data.startswith(WorkSchedule.action))
 async def action(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     action_type = callback.data.split("/")[-1]
     username = user.username if user.username else user.full_name

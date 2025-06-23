@@ -16,7 +16,7 @@ from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import HISTORY_MAP, UserService
-from src.utils import get_callback_arg, telegram_checks
+from src.utils import get_callback_arg
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -66,11 +66,8 @@ async def profile_handler(message: Message, state: FSMContext, db: Session) -> N
 
 @router.callback_query(F.data.startswith(Profile.profile))
 async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     student_id = int(get_callback_arg(callback.data, Profile.profile))
     student = db.get(User, student_id)
@@ -79,9 +76,8 @@ async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> No
     event_history = EventHistoryRepo(db).user_history(student.username)
     events = []
     for e in event_history:
-        dt = datetime.strptime(e.created_at, DB_DATETIME)
-        event = HISTORY_MAP[e.event_type] if e.event_type in HISTORY_MAP else e.event_type
-        events.append(f"{datetime.strftime(dt, DATETIME_FMT)} {event} {e.event_value}")
+        event = HISTORY_MAP.get(e.event_type, e.event_type)
+        events.append(f"{datetime.strftime(e.created_at, DATETIME_FMT)} {event} {e.event_value}")
     vacations = list(db.execute(text("""
         select start, end from events
         where user_id = :user_id and event_type == :event_type and start >= :today
@@ -92,11 +88,8 @@ async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> No
 
 @router.callback_query(F.data.startswith(Profile.delete_student))
 async def delete_student(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     student_id = int(get_callback_arg(callback.data, Profile.delete_student))
     await state.update_data(student_id=student_id)
@@ -105,11 +98,8 @@ async def delete_student(callback: CallbackQuery, state: FSMContext, db: Session
 
 @router.callback_query(F.data.startswith(Profile.confirm))
 async def confirm(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     answer = get_callback_arg(callback.data, Profile.confirm)
     if answer != "yes":

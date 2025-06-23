@@ -15,7 +15,7 @@ from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import EventService, UserService
-from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
+from src.utils import get_callback_arg, parse_date, send_message
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -55,9 +55,8 @@ async def move_lesson_handler(message: Message, state: FSMContext, db: Session) 
 
 @router.callback_query(F.data.startswith(MoveLesson.choose_lesson))
 async def choose_lesson(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     await state.update_data(lesson=get_callback_arg(callback.data, MoveLesson.choose_lesson))
     await message.answer(replies.MOVE_OR_DELETE, reply_markup=Keyboards.move_or_delete(MoveLesson.move_or_delete))
@@ -65,9 +64,8 @@ async def choose_lesson(callback: CallbackQuery, state: FSMContext, db: Session)
 
 @router.callback_query(F.data.startswith(MoveLesson.move_or_delete))
 async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     action = get_callback_arg(callback.data, MoveLesson.move_or_delete)
     if action == "delete" and state_data["lesson"].startswith("e"):
@@ -96,9 +94,8 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
 
 @router.message(MoveLesson.type_date)
 async def type_date(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(message, state_data["user_id"])
 
     day = parse_date(message.text, True)
     if day is None:
@@ -125,9 +122,8 @@ async def type_date(message: Message, state: FSMContext, db: Session) -> None:
 
 @router.callback_query(F.data.startswith(MoveLesson.choose_time))
 async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     day = state_data["day"]
     time = datetime.strptime(
@@ -158,9 +154,8 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
 
 @router.callback_query(F.data.startswith(MoveLesson.once_or_forever))
 async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     mode = get_callback_arg(callback.data, MoveLesson.once_or_forever)
     if mode == "once" and state_data["action"] == "delete":
@@ -195,9 +190,8 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
 
 @router.callback_query(F.data.startswith(MoveLesson.choose_weekday))
 async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     weekday = int(get_callback_arg(callback.data, MoveLesson.choose_weekday))
     await state.update_data(weekday=weekday)
@@ -207,9 +201,8 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
 
 @router.callback_query(F.data.startswith(MoveLesson.choose_recur_time))
 async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     time = get_callback_arg(callback.data, MoveLesson.choose_recur_time)
     start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
@@ -241,9 +234,8 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
 
 @router.message(MoveLesson.type_recur_date)
 async def type_recur_date(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(message, state_data["user_id"])
 
     day = parse_date(message.text, True)
     if day is None:
@@ -290,9 +282,8 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
 
 @router.message(MoveLesson.type_new_date)
 async def type_recur_new_date(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(message, state_data["user_id"])
 
     day = parse_date(message.text, True)
     if day is None:
@@ -319,9 +310,8 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
 
 @router.callback_query(F.data.startswith(MoveLesson.choose_recur_new_time))
 async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     time = get_callback_arg(callback.data, MoveLesson.choose_recur_new_time)
     start = datetime.combine(state_data["new_day"], datetime.strptime(time, TIME_FMT).time())

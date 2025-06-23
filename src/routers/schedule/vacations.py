@@ -13,7 +13,7 @@ from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import EventService, UserService
-from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
+from src.utils import get_callback_arg, parse_date, send_message
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -39,9 +39,8 @@ async def vacations_handler(message: Message, state: FSMContext, db: Session) ->
 
 @router.callback_query(F.data.startswith(Vacations.edit_vacations))
 async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     action = get_callback_arg(callback.data, Vacations.edit_vacations)
     if action.startswith("delete_vacation"):
@@ -65,9 +64,8 @@ async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session
 
 @router.message(Vacations.choose_dates)
 async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
+    message, user = UserService(db).check_user_with_id(message, state_data["user_id"])
 
     try:
         dates = [d.strip() for d in message.text.split("-")]
