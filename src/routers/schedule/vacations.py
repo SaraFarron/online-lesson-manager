@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.db.models import Event
-from src.db.repositories import EventHistoryRepo
+from src.db.repositories import EventHistoryRepo, UserRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -52,7 +52,7 @@ async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session
         await message.answer(replies.VACATION_DELETED)
         username = user.username if user.username else user.full_name
         EventHistoryRepo(db).create(username, Vacations.scene, "delete_vacation", event_str)
-        executor_tg = UserService(db).executor_telegram_id(user)
+        executor_tg = UserRepo(db).executor_telegram_id(user)
         await send_message(executor_tg, f"{username} удалил(а) Каникулы {event_str}")
         await state.clear()
     elif action.startswith("add_vacation"):
@@ -95,6 +95,6 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
     event_str = f"{event.start.date()} - {event.end.date()}"
     username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(username, Vacations.scene, "added_vacation", event_str)
-    executor_tg = UserService(db).executor_telegram_id(user)
+    executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} добавил(а) {event}")
     await state.clear()

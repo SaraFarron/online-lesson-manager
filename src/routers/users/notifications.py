@@ -115,12 +115,11 @@ class TelegramMessages:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMediaGroup"
         data = {"chat_id": telegram_id, "media": media_group}
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=data) as resp:
-                response = await resp.json()
-                if not response.get("ok"):
-                    print(f"Failed to send media group: {response}")
-                return response
+        async with aiohttp.ClientSession() as session, session.post(url, json=data) as resp:
+            response = await resp.json()
+            if not response.get("ok"):
+                print(f"Failed to send media group: {response}")
+            return response
 
     async def process_media_group(self, group_id: str, students: list):
         """Process a complete media group for all students"""

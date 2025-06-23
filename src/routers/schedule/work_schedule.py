@@ -8,14 +8,14 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core.config import WEEKDAY_MAP
-from src.db.models import RecurrentEvent, User
+from src.db.models import RecurrentEvent
 from src.db.repositories import EventHistoryRepo
 from src.db.schemas import RolesSchema
 from src.keyboards import AdminCommands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.services import EventService, UserService
-from src.utils import get_callback_arg, parse_time, telegram_checks
+from src.utils import get_callback_arg, parse_time
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -37,8 +37,7 @@ async def manage_work_schedule_handler(message: Message, state: FSMContext, db: 
     message, user = UserService(db).check_user(message, RolesSchema.TEACHER)
 
     await state.update_data(user_id=user.telegram_id)
-    work_hours = EventService(db).work_hours(user.executor_id)
-    weekends = EventService(db).weekends(user.executor_id)
+    work_hours, weekends = EventService(db).work_schedule(user.executor_id)
     await message.answer(
         replies.CHOOSE_WH_ACTION,
         reply_markup=Keyboards.work_hours(work_hours, weekends, WorkSchedule.action, WorkSchedule.choose_weekday),
@@ -55,10 +54,10 @@ async def action(callback: CallbackQuery, state: FSMContext, db: Session) -> Non
     username = user.username if user.username else user.full_name
     if action_type.startswith("delete"):
         if action_type.endswith("start"):
-            time = EventService(db).delete_work_hour_setting(user.executor_id, "start")
+            time = EventService(db).delete_work_hour(user.executor_id, "start")
             EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_start", str(time))
         elif action_type.endswith("end"):
-            time = EventService(db).delete_work_hour_setting(user.executor_id, "end")
+            time = EventService(db).delete_work_hour(user.executor_id, "end")
             EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_end", str(time))
         await message.answer(replies.WORK_HOURS_DELETED)
     elif action_type.startswith("add"):
@@ -74,22 +73,20 @@ async def action(callback: CallbackQuery, state: FSMContext, db: Session) -> Non
 
 @router.message(WorkSchedule.choose_time)
 async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(message)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(message, state_data["user_id"], RolesSchema.TEACHER)
 
+    now = datetime.now()
     time = parse_time(message.text).time()
-    current_day = datetime.now().date()
+    current_day = now.date()
     start = datetime.combine(current_day, time)
     if state_data["mode"] == "start":
         event_type = RecurrentEvent.EventTypes.WORK_START
-        start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start.replace(hour=time.hour, minute=time.minute)
     elif state_data["mode"] == "end":
         event_type = RecurrentEvent.EventTypes.WORK_END
-        end = datetime.now().replace(hour=23, minute=59, second=0, microsecond=0)
+        end = now.replace(hour=23, minute=59, second=0, microsecond=0)
         start = end.replace(hour=time.hour, minute=time.minute)
     event = RecurrentEvent(
         user_id=user.id,
@@ -110,11 +107,8 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
 
 @router.callback_query(F.data.startswith(WorkSchedule.choose_weekday))
 async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     event_id = get_callback_arg(callback.data, WorkSchedule.choose_weekday)
     if "delete_weekend" in callback.data:
@@ -129,21 +123,21 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
         EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_weekend", weekday)
     elif "add_weekend" in callback.data:
         weekdays = EventService(db).available_work_weekdays(user.executor_id)
-        await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, WorkSchedule.create_weekend))
+        await message.answer(
+            replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, WorkSchedule.create_weekend),
+        )
     else:
         raise Exception("message", "Неизвестное событие", f"unknown weekend action {callback.data}")
 
 
 @router.callback_query(F.data.startswith(WorkSchedule.create_weekend))
 async def create_weekend(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    message = telegram_checks(callback)
     state_data = await state.get_data()
-    user = UserService(db).get_by_telegram_id(state_data["user_id"], True)
-    if user.role != User.Roles.TEACHER:
-        raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
+    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
+    now = datetime.now()
     weekday = int(get_callback_arg(callback.data, WorkSchedule.create_weekend))
-    start_of_week = datetime.now() - timedelta(days=datetime.now().weekday())
+    start_of_week = now - timedelta(days=now.weekday())
     day = start_of_week + timedelta(days=weekday)
     event = RecurrentEvent(
         user_id=user.id,

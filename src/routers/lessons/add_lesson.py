@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.core import config
 from src.db.models import Event
-from src.db.repositories import EventHistoryRepo
+from src.db.repositories import EventHistoryRepo, UserRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -90,6 +90,6 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     await message.answer(replies.LESSON_ADDED)
     username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(username, AddLesson.scene, "added_lesson", str(lesson))
-    executor_tg = UserService(db).executor_telegram_id(user)
+    executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} добавил(а) {lesson}")
     await state.clear()

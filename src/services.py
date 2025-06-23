@@ -12,7 +12,7 @@ from src.core.config import (
     WEEKDAY_MAP,
 )
 from src.db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
-from src.db.repositories import DBSession, UserRepo
+from src.db.repositories import DBSession, EventRepo, UserRepo
 from src.db.schemas import RolesSchema
 from src.messages import replies
 from src.utils import telegram_checks
@@ -385,3 +385,22 @@ class EventService(DBSession):
             messages[user_tg].append(row_text)
 
         return messages
+
+    def vacations(self, user_id: int):
+        return EventRepo(self.db).vacations(user_id)
+
+    def work_schedule(self, executor_id: int):
+        repo = EventRepo(self.db)
+        return repo.work_hours(executor_id), repo.weekends(executor_id)
+
+    def work_breaks(self, executor_id: int):
+        return EventRepo(self.db).work_breaks(executor_id)
+
+    def delete_work_hour(self, executor_id: int, kind: str):
+        return EventRepo(self.db).delete_work_hour_setting(executor_id, kind)
+
+    def available_work_weekdays(self, executor_id: int):
+        return EventRepo(self.db).available_work_weekdays(executor_id)
+
+    def cancel_event(self, event_id: int):
+        return EventRepo(self.db).cancel_event(event_id)

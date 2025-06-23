@@ -48,7 +48,9 @@ async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> 
     state_data = await state.get_data()
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
-    await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(list(range(7)), WorkBreaks.choose_duration))
+    await message.answer(
+        replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(list(range(7)), WorkBreaks.choose_duration),
+    )
 
 
 @router.callback_query(F.data.startswith(WorkBreaks.choose_duration))
@@ -79,8 +81,9 @@ async def result(message: Message, state: FSMContext, db: Session) -> None:
         await state.set_state(WorkBreaks.result)
         return
 
+    now = datetime.now()
     weekday = int(state_data["weekday"])
-    start_of_week = datetime.now() - timedelta(days=datetime.now().weekday())
+    start_of_week = now - timedelta(days=now.weekday())
     day = start_of_week + timedelta(days=weekday)
     event = RecurrentEvent(
         user_id=user.id,

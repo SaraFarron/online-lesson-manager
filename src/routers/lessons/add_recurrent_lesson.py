@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.core.config import LESSON_SIZE
 from src.db.models import RecurrentEvent
-from src.db.repositories import EventHistoryRepo
+from src.db.repositories import EventHistoryRepo, UserRepo
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
@@ -58,8 +58,9 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     state_data = await state.get_data()
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
+    now = datetime.now()
     time = datetime.strptime(get_callback_arg(callback.data, AddRecurrentLesson.choose_time), "%H:%M").time()
-    start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
+    start_of_week = now.date() - timedelta(days=now.weekday())
     current_day = start_of_week + timedelta(days=state_data["weekday"])
     start = datetime.combine(current_day, time)
     lesson = RecurrentEvent(
@@ -75,6 +76,6 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     username = user.username if user.username else user.full_name
     await message.answer(replies.LESSON_ADDED)
     EventHistoryRepo(db).create(username, AddRecurrentLesson.scene, "added_lesson", str(lesson))
-    executor_tg = UserService(db).executor_telegram_id(user)
+    executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} добавил(а) {lesson}")
     await state.clear()
