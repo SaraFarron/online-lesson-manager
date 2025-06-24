@@ -29,10 +29,7 @@ def profile_text(tg_id: int, username: str, fullname: str, events: list, vacatio
         start, end = datetime.strptime(vacation[0], DB_DATETIME), datetime.strptime(vacation[1], DB_DATETIME)
         start, end = datetime.strftime(start, DATE_FMT), datetime.strftime(end, DATE_FMT)
         vacations_list.append(f"{start} - {end}")
-    if vacations_list:
-        vac_text = "\n".join(["Каникулы:"] + vacations_list)
-    else:
-        vac_text = "Каникул нет"
+    vac_text = "\n".join(["Каникулы:"] + vacations_list) if vacations_list else "Каникул нет"
     link = f"@{username}" if username else f'<a href="tg://user?id={tg_id}">{fullname}</a>'
     return f"""
 Telegram id: {tg_id}

@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, Message
 
 from src.core.config import SHORT_DATE_FMT, TIME_FMT
 from src.db.models import Event, RecurrentEvent, User
+from src.db.schemas import RecurrentEventSchema
 
 MAX_HOUR = 23
 
@@ -79,16 +80,16 @@ async def send_message(telegram_id: int, message: str) -> None:
 
 def day_schedule_text(lessons: list, users_map: dict, user: User):
     result = []
+    event_type_lessons = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON)
     for lesson in lessons:
-        if lesson[3] in (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON) or lesson[3] == RecurrentEvent.EventTypes.LESSON:
-            dt = lesson[0]
-            if not isinstance(lesson[-1], bool) and lesson[3] == Event.EventTypes.LESSON:
-                lesson_str = f"Разовый урок в {datetime.strftime(dt, TIME_FMT)}"
+        if lesson.event_type in event_type_lessons or lesson.event_type == RecurrentEvent.EventTypes.LESSON:
+            if not isinstance(lesson, RecurrentEventSchema) and lesson.event_type == Event.EventTypes.LESSON:
+                lesson_str = f"Разовый урок в {datetime.strftime(lesson.start, TIME_FMT)}"
             else:
-                lesson_str = f"{lesson[3]} в {datetime.strftime(dt, TIME_FMT)}"
+                lesson_str = f"{lesson.event_type} в {datetime.strftime(lesson.start, TIME_FMT)}"
         else:
             continue
         if user.role == User.Roles.TEACHER:
-            lesson_str += f" у {users_map[lesson[2]]}"
+            lesson_str += f" у {users_map[lesson.user_id]}"
         result.append(lesson_str)
     return result

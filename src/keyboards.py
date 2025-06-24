@@ -7,6 +7,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from core.config import CHANGE_DELTA, DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
 from src.db.models import Event, RecurrentEvent, User
+from src.db.schemas import EventSchema, RecurrentEventSchema
 
 
 class Commands(Enum):
@@ -87,23 +88,23 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def choose_lesson(cls, lessons: list[tuple], callback: str):
+    def choose_lesson(cls, lessons: list[RecurrentEventSchema | EventSchema], callback: str):
         buttons = {}
         now = datetime.now()
         threshold = now + CHANGE_DELTA
         for lesson in lessons:
-            lesson_datetime = datetime.strptime(lesson[0], DB_DATETIME)
-            if len(lesson) == 6 and threshold > lesson_datetime:
+            lesson_datetime = lesson.start
+            if isinstance(lesson, EventSchema) and threshold > lesson_datetime:
                 continue
             lesson_date = datetime.strftime(lesson_datetime, DATE_FMT)
             lesson_weekday = WEEKDAY_MAP[lesson_datetime.weekday()]["short"]
             lesson_time = datetime.strftime(lesson_datetime, TIME_FMT)
-            if lesson[3] == RecurrentEvent.EventTypes.LESSON and len(lesson) == 7:
-                buttons[callback + "re" + str(lesson[-1])] = f"{lesson[3]} в {lesson_weekday} {lesson_time}"
-            elif lesson[3] == Event.EventTypes.MOVED_LESSON:
-                buttons[callback + "e" + str(lesson[-1])] = f"{lesson[3]} {lesson_date} в {lesson_time}"
-            elif lesson[3] == Event.EventTypes.LESSON and len(lesson) == 6:
-                buttons[callback + "e" + str(lesson[-1])] = f"Разовый {lesson[3]} {lesson_date} в {lesson_time}"
+            if lesson.event_type == RecurrentEvent.EventTypes.LESSON and isinstance(lesson, RecurrentEventSchema):
+                buttons[callback + "re" + str(lesson.id)] = f"{lesson.event_type} в {lesson_weekday} {lesson_time}"
+            elif lesson.event_type == Event.EventTypes.MOVED_LESSON:
+                buttons[callback + "e" + str(lesson.id)] = f"{lesson.event_type} {lesson_date} в {lesson_time}"
+            elif lesson.event_type == Event.EventTypes.LESSON and isinstance(lesson, EventSchema):
+                buttons[callback + "e" + str(lesson.id)] = f"Разовый {lesson.event_type} {lesson_date} в {lesson_time}"
             else:
                 continue
         return cls.inline_keyboard(buttons)
@@ -152,22 +153,18 @@ class Keyboards:
         buttons = {}
         events_types = [e.event_type for e in events]
         if RecurrentEvent.EventTypes.WORK_START in events_types:
-            start = [datetime.strptime(e.end, DB_DATETIME) for e in events if e.event_type == RecurrentEvent.EventTypes.WORK_START][0]
+            start = next(e.end for e in events if e.event_type == RecurrentEvent.EventTypes.WORK_START)
             buttons[callback + "delete_start"] = f"Удалить начало в {datetime.strftime(start, TIME_FMT)}"
         else:
             buttons[callback + "add_start"] = "Добавить начало"
         if RecurrentEvent.EventTypes.WORK_END in events_types:
-            end = [datetime.strptime(e.start, DB_DATETIME) for e in events if e.event_type == RecurrentEvent.EventTypes.WORK_END][0]
+            end = next(e.start for e in events if e.event_type == RecurrentEvent.EventTypes.WORK_END)
             buttons[callback + "delete_end"] = f"Удалить конец в {datetime.strftime(end, TIME_FMT)}"
         else:
             buttons[callback + "add_end"] = "Добавить конец"
 
         for weekend in weekends:
-            if not isinstance(weekend.start, datetime):
-                start = datetime.strptime(weekend.start, DB_DATETIME)
-            else:
-                start = weekend.start
-            weekday = WEEKDAY_MAP[start.weekday()]["long"]
+            weekday = WEEKDAY_MAP[weekend.start.weekday()]["long"]
             buttons[callback2 + f"delete_weekend/{weekend.id}"] = f"Удалить выходной в {weekday}"
         buttons[callback2 + "add_weekend"] = "Добавить выходной"
 
@@ -210,10 +207,8 @@ class Keyboards:
     def work_breaks(cls, events: list, add_callback: str, remove_callback: str):
         buttons = {}
         for event in events:
-            start = datetime.strptime(event.start, DB_DATETIME)
-            end = datetime.strptime(event.end, DB_DATETIME)
-            duration = datetime.strftime(start, TIME_FMT) + " - " + datetime.strftime(end, TIME_FMT)
-            weekday = WEEKDAY_MAP[start.weekday()]["short"]
+            duration = datetime.strftime(event.start, TIME_FMT) + " - " + datetime.strftime(event.end, TIME_FMT)
+            weekday = WEEKDAY_MAP[event.start.weekday()]["short"]
             buttons[remove_callback + str(event.id)] = f"Удалить Перерыв {weekday} {duration}"
         buttons[add_callback] = "Добавить перерыв"
         return cls.inline_keyboard(buttons)

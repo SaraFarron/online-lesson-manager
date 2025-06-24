@@ -54,7 +54,7 @@ class BaseEventSchema(BaseSchema):
 
 class EventSchema(BaseEventSchema):
     cancelled: bool
-    reschedule_id: int
+    reschedule_id: int | None
     is_reschedule: bool
 
     @staticmethod
@@ -74,7 +74,7 @@ class EventSchema(BaseEventSchema):
 
 class RecurrentEventSchema(BaseEventSchema):
     interval: int
-    interval_end: datetime
+    interval_end: datetime | None
 
     @staticmethod
     def from_row(row: Row):

@@ -148,7 +148,7 @@ class EventRepo(DBSession):
                 for cancel in cancels:
 
                     # Skip if cancellation is for a different event
-                    if cancel.event_id != event.event_id:
+                    if cancel.event_id != event.id:
                         continue
 
                     # Check if cancellation overlaps with this event occurrence
@@ -165,7 +165,7 @@ class EventRepo(DBSession):
         day_start = datetime.combine(day, start)
         day_end = datetime.combine(day, end)
         query = self.db.execute(text("""
-            select start, end, user_id, event_type, is_reschedule from events
+            select * from events
             where executor_id = :executor_id and start >= :day_start and end <= :day_end and cancelled is false
             order by start desc
         """), {"executor_id": executor_id, "day_start": day_start, "day_end": day_end})
@@ -252,7 +252,7 @@ class EventRepo(DBSession):
     def vacations(self, user_id: int):
         query = self.db.execute(
             text("""
-                select start, end, id from events
+                select * from events
                 where user_id = :user_id and event_type = :vacation and cancelled is false
             """),
             {"user_id": user_id, "vacation": Event.EventTypes.VACATION},

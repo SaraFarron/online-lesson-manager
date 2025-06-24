@@ -91,7 +91,7 @@ class EventService(DBSession):
         ev = repo.events_for_day(executor_id, day)
         rv = repo.recurrent_events_for_day(executor_id, day)
         events = ev + rv
-        user_ids = [e[2] for e in events]
+        user_ids = [e.user_id for e in events]
         query = text("""
             select start, end, user_id from events
             where user_id in :user_ids and event_type = :event_type and start <= :today and end >= :today
@@ -107,10 +107,10 @@ class EventService(DBSession):
             ),
         )
         users_with_vacations = [v[2] for v in vacations]
-        events = list(filter(lambda x: x[2] not in users_with_vacations, events))
-        events = sorted(events, key=lambda x: x[0])
+        events = list(filter(lambda x: x.user_id not in users_with_vacations, events))
+        events = sorted(events, key=lambda x: x.start)
         if user_id is not None:
-            events = list(filter(lambda x: x[2] == user_id, events))
+            events = list(filter(lambda x: x.user_id == user_id, events))
         return events
 
     def available_weekdays(self, executor_id: int):
@@ -123,7 +123,7 @@ class EventService(DBSession):
         for i in range(7):
             current_day = start_of_week + timedelta(days=i)
             events = repo.recurrent_events_for_day(executor_id, current_day)
-            lessons = [e for e in events if e[3] in lesson_types]
+            lessons = [e for e in events if e.event_type in lesson_types]
             if len(lessons) >= MAX_LESSONS_PER_DAY:
                 continue
             start = datetime.combine(current_day, start_t)
@@ -137,7 +137,7 @@ class EventService(DBSession):
         repo = EventRepo(self.db)
         events = repo.events_for_day(executor_id, day) + repo.recurrent_events_for_day(executor_id, day)
         lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
-        lessons = [e for e in events if e[3] in lesson_types]
+        lessons = [e for e in events if e.event_type in lesson_types]
         if len(lessons) >= MAX_LESSONS_PER_DAY:
             return []
 
@@ -164,16 +164,15 @@ class EventService(DBSession):
         end = datetime.combine(current_day, end)
         simple_lessons = {}
         for s in repo.events_executor(executor_id):
-            start_t = s[0]
-            weekday_t = start_t.weekday()
-            if s[3] in self.LESSON_TYPES and start_t > now:
+            weekday_t = s.start.weekday()
+            if s.event_type in self.LESSON_TYPES and s.start > now:
                 if weekday_t not in simple_lessons:
                     simple_lessons[weekday_t] = []
                 times = (
-                    start_t,
-                    start_t + timedelta(minutes=15),
-                    start_t + timedelta(minutes=30),
-                    start_t + timedelta(minutes=45),
+                    s.start,
+                    s.start + timedelta(minutes=15),
+                    s.start + timedelta(minutes=30),
+                    s.start + timedelta(minutes=45),
                 )
                 for t in times:
                     simple_lessons[weekday_t].append(t.time())
