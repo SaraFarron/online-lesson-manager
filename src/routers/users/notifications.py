@@ -56,6 +56,7 @@ async def notification(message: Message, state: FSMContext, db: Session) -> None
     receivers = receivers if isinstance(receivers, int) else len(receivers)
     if receivers == len(students):
         await message.answer(f"Message sent to {receivers} students")
+    await state.clear()
 
 
 class TelegramMessages:
