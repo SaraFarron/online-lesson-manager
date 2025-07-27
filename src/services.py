@@ -83,20 +83,12 @@ class UserService(DBSession):
 class EventService(DBSession):
     LESSON_TYPES = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
 
-    def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
-        executor = self.db.get(Executor, executor_id)
-        exec_user = self.db.query(User).filter(User.telegram_id == executor.telegram_id).first()
-        repo = EventRepo(self.db)
-        if repo.vacations_day(user_id, day) or repo.vacations_day(exec_user.id, day):
-            return []
-        ev = repo.events_for_day(executor_id, day)
-        rv = repo.recurrent_events_for_day(executor_id, day)
-        events = ev + rv
+    def get_users_with_vacations(self, events: list, day: date):
         user_ids = [e.user_id for e in events]
         query = text("""
-            select start, end, user_id from events
-            where user_id in :user_ids and event_type = :event_type and start <= :today and end >= :today
-        """).bindparams(bindparam("user_ids", expanding=True))
+                    select start, end, user_id from events
+                    where user_id in :user_ids and event_type = :event_type and start <= :today and end >= :today
+                """).bindparams(bindparam("user_ids", expanding=True))
         vacations = list(
             self.db.execute(
                 query,
@@ -107,7 +99,18 @@ class EventService(DBSession):
                 },
             ),
         )
-        users_with_vacations = [v[2] for v in vacations]
+        return [v[2] for v in vacations]
+
+    def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
+        executor = self.db.get(Executor, executor_id)
+        exec_user = self.db.query(User).filter(User.telegram_id == executor.telegram_id).first()
+        repo = EventRepo(self.db)
+        if repo.vacations_day(user_id, day) or repo.vacations_day(exec_user.id, day):
+            return []
+        ev = repo.events_for_day(executor_id, day)
+        rv = repo.recurrent_events_for_day(executor_id, day)
+        events = ev + rv
+        users_with_vacations = self.get_users_with_vacations(events, day)
         events = list(filter(lambda x: x.user_id not in users_with_vacations, events))
         events = sorted(events, key=lambda x: x.start)
         if user_id is not None:
@@ -141,6 +144,9 @@ class EventService(DBSession):
         lessons = [e for e in events if e.event_type in lesson_types]
         if len(lessons) >= MAX_LESSONS_PER_DAY:
             return []
+
+        users_with_vacations = self.get_users_with_vacations(events, day)
+        events = list(filter(lambda x: x.user_id not in users_with_vacations, events))
 
         start, end = repo.get_work_start(executor_id)[0], repo.get_work_end(executor_id)[0]
         start = datetime.combine(day, start)
