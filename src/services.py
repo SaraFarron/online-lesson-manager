@@ -139,6 +139,9 @@ class EventService(DBSession):
 
     def available_time(self, executor_id: int, day: date):
         repo = EventRepo(self.db)
+        if repo.vacations_day(executor_id, day):
+            return []
+
         events = repo.events_for_day(executor_id, day) + repo.recurrent_events_for_day(executor_id, day)
         lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
         lessons = [e for e in events if e.event_type in lesson_types]
