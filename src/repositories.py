@@ -280,6 +280,9 @@ class EventRepo(Repo):
         if len(lessons) >= MAX_LESSONS_PER_DAY:
             return []
 
+        if self.vacations_day(executor_id, day):
+            return []
+
         start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
         start = datetime.combine(day, start)
         end = datetime.combine(day, end)
