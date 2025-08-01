@@ -225,19 +225,12 @@ class EventRepo(Repo):
             result.append((start_dt, end_dt, *e[2:]))
         return result
 
-    def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
-        executor = self.db.get(Executor, executor_id)
-        exec_user = self.db.query(User).filter(User.telegram_id == executor.telegram_id).first()
-        if self.vacations_day(user_id, day) or self.vacations_day(exec_user.id, day):
-            return []
-        ev = self.events_for_day(executor_id, day)
-        rv = self.recurrent_events_for_day(executor_id, day)
-        events = ev + rv
+    def get_users_with_vacations(self, events: list, day: date):
         user_ids = [e[2] for e in events]
         query = text("""
-            select start, end, user_id from events
-            where user_id in :user_ids and event_type = :event_type and start <= :today and end >= :today
-        """).bindparams(bindparam("user_ids", expanding=True))
+                    select start, end, user_id from events
+                    where user_id in :user_ids and event_type = :event_type and start <= :today and end >= :today
+                """).bindparams(bindparam("user_ids", expanding=True))
         vacations = list(
             self.db.execute(
                 query,
@@ -248,7 +241,17 @@ class EventRepo(Repo):
                 },
             ),
         )
-        users_with_vacations = [v[2] for v in vacations]
+        return [v[2] for v in vacations]
+
+    def day_schedule(self, executor_id: int, day: date, user_id: int | None = None):
+        executor = self.db.get(Executor, executor_id)
+        exec_user = self.db.query(User).filter(User.telegram_id == executor.telegram_id).first()
+        if self.vacations_day(user_id, day) or self.vacations_day(exec_user.id, day):
+            return []
+        ev = self.events_for_day(executor_id, day)
+        rv = self.recurrent_events_for_day(executor_id, day)
+        events = ev + rv
+        users_with_vacations = self.get_users_with_vacations(events, day)
         events = list(filter(lambda x: x[2] not in users_with_vacations, events))
         events = sorted(events, key=lambda x: x[0])
         if user_id is not None:
@@ -282,6 +285,9 @@ class EventRepo(Repo):
 
         if self.vacations_day(executor_id, day):
             return []
+
+        users_with_vacations = self.get_users_with_vacations(events, day)
+        events = list(filter(lambda x: x[2] not in users_with_vacations, events))
 
         start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
         start = datetime.combine(day, start)
