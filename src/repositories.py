@@ -283,6 +283,9 @@ class EventRepo(Repo):
         if len(lessons) >= MAX_LESSONS_PER_DAY:
             return []
 
+        if self.vacations_day(executor_id, day):
+            return []
+
         users_with_vacations = self.get_users_with_vacations(events, day)
         events = list(filter(lambda x: x[2] not in users_with_vacations, events))
 
