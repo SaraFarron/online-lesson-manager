@@ -132,10 +132,6 @@ def find_three_lessons_block(events):
             if next_type == "Перерыв":
                 return False
 
-            # Конец рабочего дня — блок игнорируется
-            if next_type == "Конец рабочего дня":
-                continue
-
             # Если есть слот в 15 минут
             if next_start - block_end_time >= timedelta(minutes=15):
                 return block_end_time
