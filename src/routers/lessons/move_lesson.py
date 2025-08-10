@@ -14,7 +14,13 @@ from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
+from src.utils import (
+    get_callback_arg,
+    parse_date,
+    send_message,
+    telegram_checks,
+    find_three_lessons_block,
+)
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -150,8 +156,29 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     EventHistoryRepo(db).create(
         username, MoveLesson.scene, "moved_one_lesson", f"{old_lesson} -> {new_lesson}",
     )
-    executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{username} перенес(ла) {old_lesson} -> {new_lesson}")
+    executor, exec_user = UserRepo(db).users_executor(user)
+    await send_message(executor.telegram_id, f"{username} перенес(ла) {old_lesson} -> {new_lesson}")
+    schedule = EventRepo(db).day_schedule(
+        user.executor_id,
+        day,
+    )
+    block = find_three_lessons_block(schedule)
+    if isinstance(block, datetime):
+        event_break = Event(
+            user_id=exec_user.id,
+            executor_id=executor.id,
+            event_type=Event.EventTypes.WORK_BREAK,
+            start=block,
+            end=block + timedelta(minutes=15),
+        )
+        db.add(event_break)
+        db.commit()
+        break_time = datetime.strftime(event_break.start, TIME_FMT)
+        await send_message(
+            executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}"
+        )
+    elif isinstance(block, str):
+        await send_message(executor.telegram_id, block)
     await state.clear()
 
 # ---- RECURRENT LESSON ---- #
@@ -212,9 +239,12 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
 
     time = get_callback_arg(callback.data, MoveLesson.choose_recur_time)
-    start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
+    now = datetime.now()
+    start_of_week = now.date() - timedelta(days=now.weekday())
     current_day = start_of_week + timedelta(days=state_data["weekday"])
     start = datetime.combine(current_day, datetime.strptime(time, TIME_FMT).time())
+    if start.date() < now.date():
+        start += timedelta(days=7)
     lesson = RecurrentEvent(
         user_id=user.id,
         executor_id=user.executor_id,
@@ -233,8 +263,26 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     EventHistoryRepo(db).create(
         username, MoveLesson.scene, "moved_recur_lesson", f"{old_lesson_str} -> {lesson}",
     )
-    executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
+    executor, exec_user = UserRepo(db).users_executor(user)
+    await send_message(executor.telegram_id, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
+    schedule = EventRepo(db).day_schedule(user.executor_id, start.date())
+    block = find_three_lessons_block(schedule)
+    if isinstance(block, datetime):
+        event_break = Event(
+            user_id=exec_user.id,
+            executor_id=executor.id,
+            event_type=Event.EventTypes.WORK_BREAK,
+            start=block,
+            end=block + timedelta(minutes=15),
+        )
+        db.add(event_break)
+        db.commit()
+        break_time = datetime.strftime(event_break.start, TIME_FMT)
+        await send_message(
+            executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}"
+        )
+    elif isinstance(block, str):
+        await send_message(executor.telegram_id, block)
     await state.clear()
 
 # ---- RECURRENT LESSON ONCE ---- #
@@ -347,6 +395,24 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
     EventHistoryRepo(db).create(
         username, MoveLesson.scene, "recur_lesson_moved", f"{old_lesson_str} -> {lesson}",
     )
-    executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
+    executor, exec_user = UserRepo(db).users_executor(user)
+    await send_message(executor.telegram_id, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
+    schedule = EventRepo(db).day_schedule(user.executor_id, start.date())
+    block = find_three_lessons_block(schedule)
+    if isinstance(block, datetime):
+        event_break = Event(
+            user_id=exec_user.id,
+            executor_id=executor.id,
+            event_type=Event.EventTypes.WORK_BREAK,
+            start=block,
+            end=block + timedelta(minutes=15),
+        )
+        db.add(event_break)
+        db.commit()
+        break_time = datetime.strftime(event_break.start, TIME_FMT)
+        await send_message(
+            executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}"
+        )
+    elif isinstance(block, str):
+        await send_message(executor.telegram_id, block)
     await state.clear()

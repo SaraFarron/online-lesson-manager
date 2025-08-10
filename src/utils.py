@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from os import getenv
 
 import aiohttp
@@ -79,8 +79,11 @@ async def send_message(telegram_id: int, message: str) -> None:
 
 def day_schedule_text(lessons: list, users_map: dict, user: User):
     result = []
+    event_types = [Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON]
+    if user.role == User.Roles.TEACHER:
+        event_types.append(Event.EventTypes.WORK_BREAK)
     for lesson in lessons:
-        if lesson[3] in (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON) or lesson[3] == RecurrentEvent.EventTypes.LESSON:
+        if lesson[3] in event_types:
             dt = lesson[0]
             if not isinstance(lesson[-1], bool) and lesson[3] == Event.EventTypes.LESSON:
                 lesson_str = f"Разовый урок в {datetime.strftime(dt, TIME_FMT)}"
@@ -88,7 +91,57 @@ def day_schedule_text(lessons: list, users_map: dict, user: User):
                 lesson_str = f"{lesson[3]} в {datetime.strftime(dt, TIME_FMT)}"
         else:
             continue
-        if user.role == User.Roles.TEACHER:
+        if user.role == User.Roles.TEACHER and lesson[3] != Event.EventTypes.WORK_BREAK:
             lesson_str += f" у {users_map[lesson[2]]}"
         result.append(lesson_str)
     return result
+
+
+def find_three_lessons_block(events):
+    events = sorted(events, key=lambda x: x[0])
+    consecutive = 0
+    block_end_time = None
+    found_no_slot = False
+
+    for i, event in enumerate(events):
+        start, end, _, event_type, *_ = event
+
+        if event_type in ("Урок", "Перенос"):
+            if consecutive == 0:
+                consecutive = 1
+            else:
+                prev_start, prev_end, _, prev_type, *_ = events[i - 1]
+                if prev_type in ("Урок", "Перенос") and prev_end == start:
+                    consecutive += 1
+                else:
+                    consecutive = 1
+            block_end_time = end
+        else:
+            consecutive = 0
+
+        if consecutive >= 3:
+            next_index = i + 1
+            if next_index >= len(events):
+                found_no_slot = True
+                continue
+
+            next_event = events[next_index]
+            next_start, _, _, next_type, *_ = next_event
+
+            # Если сразу после блока перерыв — ничего делать не нужно
+            if next_type == "Перерыв":
+                return False
+
+            # Конец рабочего дня — блок игнорируется
+            if next_type == "Конец рабочего дня":
+                continue
+
+            # Если есть слот в 15 минут
+            if next_start - block_end_time >= timedelta(minutes=15):
+                return block_end_time
+            else:
+                found_no_slot = True
+
+    if found_no_slot:
+        return "Перерыв не был поставлен автоматически, т.к. слот после уроков меньше 15 минут"
+    return False

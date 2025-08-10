@@ -5,7 +5,15 @@ from math import ceil
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from core.config import CHANGE_DELTA, DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
+from core.config import (
+    CHANGE_DELTA,
+    DATE_FMT,
+    DB_DATETIME,
+    MAX_BUTTON_ROWS,
+    TIME_FMT,
+    WEEKDAY_MAP,
+    SHORT_DATE_FMT,
+)
 from src.models import Event, RecurrentEvent, User
 
 
@@ -95,7 +103,7 @@ class Keyboards:
             lesson_datetime = datetime.strptime(lesson[0], DB_DATETIME)
             if len(lesson) == 6 and threshold > lesson_datetime:
                 continue
-            lesson_date = datetime.strftime(lesson_datetime, DATE_FMT)
+            lesson_date = datetime.strftime(lesson_datetime, SHORT_DATE_FMT)
             lesson_weekday = WEEKDAY_MAP[lesson_datetime.weekday()]["short"]
             lesson_time = datetime.strftime(lesson_datetime, TIME_FMT)
             if lesson[3] == RecurrentEvent.EventTypes.LESSON and len(lesson) == 7:

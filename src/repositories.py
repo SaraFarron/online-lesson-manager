@@ -83,6 +83,11 @@ class UserRepo(Repo):
         executor = self.db.get(Executor, user.executor_id)
         return executor.telegram_id
 
+    def users_executor(self, user: User):
+        executor = self.db.get(Executor, user.executor_id)
+        exec_user = self.db.query(User).filter(User.telegram_id == executor.telegram_id).first()
+        return executor, exec_user
+
 
 class EventHistoryRepo(Repo):
     def create(self, author: str, scene: str, event_type: str, event_value: str):

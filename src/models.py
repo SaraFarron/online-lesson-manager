@@ -86,6 +86,7 @@ class Event(EventModel, Base):
         LESSON = "Урок"
         MOVED_LESSON = "Перенос"
         VACATION = "Каникулы"
+        WORK_BREAK = "Перерыв"
 
     def __str__(self):
         match self.event_type:

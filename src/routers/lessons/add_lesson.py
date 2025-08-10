@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -8,12 +8,19 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core import config
+from src.core.config import TIME_FMT
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import Event
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
-from src.utils import get_callback_arg, parse_date, send_message, telegram_checks
+from src.utils import (
+    get_callback_arg,
+    parse_date,
+    send_message,
+    telegram_checks,
+    find_three_lessons_block,
+)
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -92,6 +99,25 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     await message.answer(replies.LESSON_ADDED)
     username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(username, AddLesson.scene, "added_lesson", str(lesson))
-    executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{username} добавил(а) {lesson}")
+    executor, exec_user = UserRepo(db).users_executor(user)
+    await send_message(executor.telegram_id, f"{username} добавил(а) {lesson}")
+    schedule = EventRepo(db).day_schedule(
+        user.executor_id,
+        date.date(),
+    )
+    block = find_three_lessons_block(schedule)
+    if isinstance(block, datetime):
+        event_break = Event(
+            user_id=exec_user.id,
+            executor_id=executor.id,
+            event_type=Event.EventTypes.WORK_BREAK,
+            start=block,
+            end=block + timedelta(minutes=15)
+        )
+        db.add(event_break)
+        db.commit()
+        break_time = datetime.strftime(event_break.start, TIME_FMT)
+        await send_message(executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}")
+    elif isinstance(block, str):
+        await send_message(executor.telegram_id, block)
     await state.clear()
