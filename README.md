@@ -1,23 +1,32 @@
-![Update Online Lesson Manager](https://cronitor.io/badges/AJxpBZ/production/iKtBzEGJE15yW8sdZbfxxqvaD00.svg)
+# Online Lesson Manager
+A telegram bot for managing schedule for online lessons.
+It is a personal project that I do for my wife, who is an online teacher.
 
-Запуск
+## Run
+### Docker
 docker compose up -d --build
-
-Без докера
+### Poertry
 poetry run python src/main.py
 
-.env
+## .env
+```shell
+PYTHONPATH=python executable, might be deprecated
+BOT_TOKEN=telegram bot token from botfather
+BOT_TOKEN_PROD=might be deprecated
 
-PYTHONPATH=/YOUR_PATH/online-lesson-manager/src/
-BOT_TOKEN=
+IRINA_TG_ID=telegram id of 1st admin, might be deprecated
+SARA_TG_ID=telegram id of 2nd admin, might be deprecated
 
-Создать миграцию
+```
+## Migrations
+Everything is done through default alembic
+```shell
 alembic revision --autogenerate -m '...'
 
-Применить миграцию
 alembic upgrade head
-
-Миграции на проде
-
+```
+Migrations in production
+```shell
 docker compose exec bot sh
 PYTHONPATH=./src poetry run alembic upgrade head
+```
