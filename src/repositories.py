@@ -22,6 +22,7 @@ HISTORY_MAP = {
     "delete_vacation": "удалил каникулы",
     "added_vacation": "добавил каникулы",
     "recur_lesson_deleted": "разово отменил урок",
+    "recur_lesson_moved": "разово перенёс урок",
 }
 
 
