@@ -5,7 +5,7 @@ It is a personal project that I do for my wife, who is an online teacher.
 ## Run
 ### Docker
 docker compose up -d --build
-### Poertry
+### Poetry
 poetry run python src/main.py
 
 ## .env
