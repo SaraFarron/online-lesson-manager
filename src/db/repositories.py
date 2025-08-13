@@ -172,22 +172,18 @@ class EventRepo(DBSession):
         return [EventSchema.from_row(event) for event in query]
 
     @staticmethod
-    def get_available_slots(start: datetime, end: datetime, slot_size: timedelta, events: list):
-        # Generate all slots (15-minute increments)
-        all_slots = []
-        current_slot = start
+    def get_available_slots(start: time, end: time, slot_size: timedelta, events: list, day: date):
+        current_slot = datetime.combine(day, start)
+        end_of_times = datetime.combine(day, end)
 
-        while current_slot + LESSON_SIZE <= end:  # Check for full 1-hour availability
-            all_slots.append((current_slot, current_slot + LESSON_SIZE))  # 1-hour slot
-            current_slot += slot_size  # Move by 15 minutes
+        def is_occupied(slot_start: time, slot_end: time):
+            return any(slot_start < occupied.end.time() and slot_end > occupied.start.time() for occupied in events)
 
-        # Function to check if a 1-hour slot overlaps with any occupied period
-        def is_occupied(slot: tuple[datetime, datetime]):
-            # The slot is available
-            return any(not (slot[1] <= occupied.start or slot[0] >= occupied.end) for occupied in events)
-
-        # Filter out occupied slots
-        return [slot for slot in all_slots if not is_occupied(slot)]
+        while current_slot + LESSON_SIZE <= end_of_times:
+            end_slot = current_slot + LESSON_SIZE
+            if not is_occupied(current_slot.time(), end_slot.time()):
+                yield current_slot, end_slot
+            current_slot += slot_size
 
     def cancel_event(self, event_id: int):
         event = self.db.get(Event, event_id)

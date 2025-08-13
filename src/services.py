@@ -130,9 +130,7 @@ class EventService(DBSession):
             lessons = [e for e in events if e.event_type in lesson_types]
             if len(lessons) >= MAX_LESSONS_PER_DAY:
                 continue
-            start = datetime.combine(current_day, start_t)
-            end = datetime.combine(current_day, end_t)
-            available_time = repo.get_available_slots(start, end, SLOT_SIZE, events)
+            available_time = repo.get_available_slots(start_t, end_t, SLOT_SIZE, events, current_day)
             if available_time:
                 result.append(i)
         return result
@@ -152,11 +150,9 @@ class EventService(DBSession):
         events = list(filter(lambda x: x.user_id not in users_with_vacations, events))
 
         start, end = repo.get_work_start(executor_id)[0], repo.get_work_end(executor_id)[0]
-        start = datetime.combine(day, start)
-        end = datetime.combine(day, end)
         now = datetime.now()
         result = []
-        for slot in repo.get_available_slots(start, end, SLOT_SIZE, events):
+        for slot in repo.get_available_slots(start, end, SLOT_SIZE, events, day):
             if day == now.date() and now + CHANGE_DELTA > slot[0]:
                 continue
             result.append(slot[0])
@@ -170,8 +166,6 @@ class EventService(DBSession):
         events = repo.recurrent_events_for_day(executor_id, current_day)
 
         start, end = repo.get_work_start(executor_id)[0], repo.get_work_end(executor_id)[0]
-        start = datetime.combine(current_day, start)
-        end = datetime.combine(current_day, end)
         simple_lessons = {}
         for s in repo.events_executor(executor_id):
             weekday_t = s.start.weekday()
@@ -188,7 +182,7 @@ class EventService(DBSession):
                     simple_lessons[weekday_t].append(t.time())
 
         result = []
-        for s in repo.get_available_slots(start, end, SLOT_SIZE, events):
+        for s in repo.get_available_slots(start, end, SLOT_SIZE, events, current_day):
             if s[0].weekday() in simple_lessons and s[0].time() in simple_lessons[s[0].weekday()]:
                 continue
             result.append(s[0])
