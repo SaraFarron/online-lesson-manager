@@ -43,6 +43,8 @@ ignore = [
     "D400",
     "D401",
     "D415",
+    "DTZ005",
+    "DTZ007",
     "TRY003", # external messages in exceptions are too verbose
     "TD002",
     "TD003",
