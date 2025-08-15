@@ -168,7 +168,7 @@ class EventRepo(DBSession):
             select * from events
             where executor_id = :executor_id and start >= :day_start and end <= :day_end and cancelled is false
             order by start desc
-        """), {"executor_id": executor_id, "day_start": day_start, "day_end": day_end})
+        """), {"executor_id": executor_id, "day_start": day_start, "day_end": day_end + timedelta(seconds=1)})
         return [EventSchema.from_row(event) for event in query]
 
     @staticmethod
