@@ -97,7 +97,7 @@ def day_schedule_text(lessons: list, users_map: dict, user: User):
     return result
 
 
-def find_lesson_blocksF(events):
+def find_lesson_blocks(events):
     events = sorted(events, key=lambda x: x[0])
     consecutive = 0
     block_end_time = None
