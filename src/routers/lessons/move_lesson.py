@@ -19,7 +19,7 @@ from src.utils import (
     parse_date,
     send_message,
     telegram_checks,
-    find_three_lessons_block,
+    find_lesson_blocks,
 )
 
 router = Router()
@@ -162,7 +162,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         user.executor_id,
         day,
     )
-    block = find_three_lessons_block(schedule)
+    block = find_lesson_blocks(schedule)
     if isinstance(block, datetime):
         event_break = Event(
             user_id=exec_user.id,
@@ -266,7 +266,7 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     executor, exec_user = UserRepo(db).users_executor(user)
     await send_message(executor.telegram_id, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
     schedule = EventRepo(db).day_schedule(user.executor_id, start.date())
-    block = find_three_lessons_block(schedule)
+    block = find_lesson_blocks(schedule)
     if isinstance(block, datetime):
         event_break = Event(
             user_id=exec_user.id,
@@ -399,7 +399,7 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
     executor, exec_user = UserRepo(db).users_executor(user)
     await send_message(executor.telegram_id, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
     schedule = EventRepo(db).day_schedule(user.executor_id, start.date())
-    block = find_three_lessons_block(schedule)
+    block = find_lesson_blocks(schedule)
     if isinstance(block, datetime):
         event_break = Event(
             user_id=exec_user.id,

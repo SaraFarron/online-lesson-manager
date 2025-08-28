@@ -19,7 +19,7 @@ from src.utils import (
     parse_date,
     send_message,
     telegram_checks,
-    find_three_lessons_block,
+    find_lesson_blocks,
 )
 
 router = Router()
@@ -105,7 +105,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         user.executor_id,
         date.date(),
     )
-    block = find_three_lessons_block(schedule)
+    block = find_lesson_blocks(schedule)
     if isinstance(block, datetime):
         event_break = Event(
             user_id=exec_user.id,

@@ -97,7 +97,7 @@ def day_schedule_text(lessons: list, users_map: dict, user: User):
     return result
 
 
-def find_three_lessons_block(events):
+def find_lesson_blocksF(events):
     events = sorted(events, key=lambda x: x[0])
     consecutive = 0
     block_end_time = None
@@ -119,7 +119,7 @@ def find_three_lessons_block(events):
         else:
             consecutive = 0
 
-        if consecutive >= 3:
+        if consecutive >= 2:
             next_index = i + 1
             if next_index >= len(events):
                 found_no_slot = True
