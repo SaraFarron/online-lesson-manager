@@ -5,7 +5,7 @@ from math import ceil
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from core.config import CHANGE_DELTA, DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
+from src.core.config import CHANGE_DELTA, DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
 from src.db.models import Event, RecurrentEvent, User
 from src.db.schemas import EventSchema, RecurrentEventSchema
 
@@ -17,6 +17,7 @@ class Commands(Enum):
     DAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
     VACATIONS = "Расписание каникул"
+    CHOOSE_HOMEWORK = "Домашние задания"
 
 
 class AdminCommands(Enum):
@@ -44,7 +45,7 @@ class Keyboards:
             for text, callback_data in buttons:
                 builder.button(text=text, callback_data=callback_data)
         adjust = ceil(len(buttons) / MAX_BUTTON_ROWS)
-        builder.adjust(1 if not adjust else adjust, repeat=True)
+        builder.adjust(adjust if adjust else 1, repeat=True)
         if as_markup:
             return builder.as_markup()
         return builder
@@ -83,8 +84,8 @@ class Keyboards:
 
     @classmethod
     def choose_time(cls, times: list[datetime], callback: str):
-        times = [datetime.strftime(t, TIME_FMT) for t in times]
-        buttons = {callback + str(t): str(t) for t in times}
+        times_str = [datetime.strftime(t, TIME_FMT) for t in times]
+        buttons = {callback + str(t): str(t) for t in times_str}
         return cls.inline_keyboard(buttons)
 
     @classmethod
@@ -216,3 +217,18 @@ class Keyboards:
     @classmethod
     def send_messages(cls, callback: str):
         return cls.inline_keyboard({callback: "Отправить сообщения ученикам"})
+
+    @classmethod
+    def homeworks(cls, homeworks: list, callback: str):
+        buttons = {}
+        for hw in homeworks:
+            buttons[callback + str(hw.id)] = str(hw)
+        return cls.inline_keyboard(buttons)
+
+    @classmethod
+    def hw_actions(cls, callback: str):
+        buttons = {
+            callback + "get": "Посмотреть ДЗ",
+            callback + "send": "Сдать ДЗ",
+        }
+        return cls.inline_keyboard(buttons)

@@ -10,7 +10,7 @@ from src.core.config import (
     TIME_FMT,
     WEEKDAY_MAP,
 )
-from src.db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
+from src.db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, HomeWork, RecurrentEvent, User
 from src.db.repositories import DBSession, EventRepo, UserRepo
 from src.db.schemas import RolesSchema
 from src.messages import replies
@@ -74,7 +74,9 @@ class UserService(DBSession):
         events = self.db.query(Event).filter(Event.user_id == user_id)
         username = user.username if user.username else user.full_name
         history = self.db.query(EventHistory).filter(EventHistory.author == username)
-        event_breaks = self.db.query(CancelledRecurrentEvent).filter(CancelledRecurrentEvent.event_id.in_([re.id for re in recur_events]))
+        event_breaks = self.db.query(CancelledRecurrentEvent).filter(
+            CancelledRecurrentEvent.event_id.in_([re.id for re in recur_events])
+        )
         for e in list(event_breaks) + list(history) + list(recur_events) + list(events) + [user]:
             self.db.delete(e)
         self.db.commit()
@@ -246,7 +248,10 @@ class EventService(DBSession):
                     if event1[1] <= event2[0]:
                         break
                     if len(event1) == 7 and len(event2) == 6:
-                        e2_start, e2_end = datetime.combine(event2[4], event2[0]), datetime.combine(event2[4], event2[1])
+                        e2_start, e2_end = (
+                            datetime.combine(event2[4], event2[0]),
+                            datetime.combine(event2[4], event2[1]),
+                        )
                         c_start, c_end = datetime.combine(event2[4], event1[0]), datetime.combine(event2[4], event1[1])
                         if c_start <= e2_start <= c_end and c_start <= e2_end <= c_end:
                             break
@@ -265,7 +270,9 @@ class EventService(DBSession):
             user_overlap_map[ov2[2]] = ov2
 
         users_affected = self.db.query(User).filter(User.id.in_(list(user_overlap_map)))
-        users_map = {u.id: u.username if u.username else u.full_name for u in users_affected if u.role == User.Roles.STUDENT}
+        users_map = {
+            u.id: u.username if u.username else u.full_name for u in users_affected if u.role == User.Roles.STUDENT
+        }
         re_ids = [e[0][3] for e in overlaps if len(e) != 6] + [e[1][3] for e in overlaps if len(e) != 6]
         rec_map = {re.id: re for re in self.db.query(RecurrentEvent).filter(RecurrentEvent.id.in_(re_ids))}
 
@@ -328,7 +335,9 @@ class EventService(DBSession):
 
         users_affected = self.db.query(User).filter(User.id.in_(list(user_overlap_map)))
         users_map = {
-            u.id: (u.username if u.username else u.full_name, u.telegram_id) for u in users_affected if u.role == User.Roles.STUDENT
+            u.id: (u.username if u.username else u.full_name, u.telegram_id)
+            for u in users_affected
+            if u.role == User.Roles.STUDENT
         }
         re_ids = [e[0][3] for e in overlaps if len(e) != 6] + [e[1][3] for e in overlaps if len(e) != 6]
         rec_map = {re.id: re for re in self.db.query(RecurrentEvent).filter(RecurrentEvent.id.in_(re_ids))}
@@ -410,3 +419,8 @@ class EventService(DBSession):
 
     def cancel_event(self, event_id: int):
         return EventRepo(self.db).cancel_event(event_id)
+
+
+class HomeWorkService(DBSession):
+    def homeworks(self, user: User):
+        return self.db.query(HomeWork).filter(HomeWork.user_id == user.id)

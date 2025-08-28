@@ -4,7 +4,7 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import declarative_base, relationship
 
-from src.core.config import DATE_FMT, DATETIME_FMT, TIME_FMT, WEEKDAY_MAP
+from src.core.config import DATE_FMT, DATETIME_FMT, TIME_FMT, WEEKDAY_MAP, SHORT_DATE_FMT
 
 Base = declarative_base()
 
@@ -165,3 +165,32 @@ class EventHistory(Model, Base):
     event_type = Column(String)
     event_value = Column(String)
     created_at = Column(DateTime, default=datetime.now)
+
+
+class HomeWork(Model, Base):
+    @declared_attr
+    def user_id(cls):
+        return Column(Integer, ForeignKey("users.id"))
+
+    @declared_attr
+    def user(cls):
+        return relationship(User)
+
+    @declared_attr
+    def executor_id(cls):
+        return Column(Integer, ForeignKey("executors.id"), nullable=False)
+
+    @declared_attr
+    def executor(cls):
+        return relationship(Executor)
+
+    created_at = Column(DateTime, default=datetime.now)
+    filename = Column(String)
+    status = Column(String)
+
+    class HWStatus:
+        ONGOING = "Выдана"
+        DONE = "Выполнена"
+
+    def __str__(self):
+        return f"ДЗ от {datetime.strftime(self.created_at, SHORT_DATE_FMT)}"

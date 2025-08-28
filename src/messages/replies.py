@@ -91,6 +91,5 @@ SEND_NOTIFICATION = "Отправьте сообщение, которое хо�
 MEDIA_GROUP_UNSUPPORTED = "MEDIA_GROUP_UNSUPPORTED"
 UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE"
 
-# LESSONS_ARE_COMING = "🔔 Скоро уроки!\n"
-# LESSON_IS_COMING_TEACHER = "Урок у %s в %s"
-# LESSON_IS_COMING_STUDENT = "Урок в %s"
+# Homework
+CHOOSE_HOMEWORK = "Выберите ДЗ"
