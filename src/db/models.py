@@ -4,14 +4,14 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import declarative_base, relationship
 
-from src.core.config import DATE_FMT, DATETIME_FMT, TIME_FMT, WEEKDAY_MAP, SHORT_DATE_FMT
+from src.core.config import DATE_FMT, DATETIME_FMT, SHORT_DATE_FMT, TIME_FMT, WEEKDAY_MAP
 
 Base = declarative_base()
 
 
 class Model:
     @declared_attr
-    def id(cls):
+    def id(self):
         return Column(Integer, primary_key=True, autoincrement=True)
 
 
@@ -37,31 +37,31 @@ class User(Model, Base):
 
 class EventModel(Model):
     @declared_attr
-    def user_id(cls):
+    def user_id(self):
         return Column(Integer, ForeignKey("users.id"))
 
     @declared_attr
-    def user(cls):
+    def user(self):
         return relationship(User)
 
     @declared_attr
-    def executor_id(cls):
+    def executor_id(self):
         return Column(Integer, ForeignKey("executors.id"), nullable=False)
 
     @declared_attr
-    def executor(cls):
+    def executor(self):
         return relationship(Executor)
 
     @declared_attr
-    def event_type(cls):
+    def event_type(self):
         return Column(String)
 
     @declared_attr
-    def start(cls):
+    def start(self):
         return Column(DateTime)
 
     @declared_attr
-    def end(cls):
+    def end(self):
         return Column(DateTime)
 
 
@@ -87,7 +87,7 @@ class Event(EventModel, Base):
         MOVED_LESSON = "Перенос"
         VACATION = "Каникулы"
 
-    def __str__(self):
+    def __str__(self) -> str:
         match self.event_type:
             case self.EventTypes.LESSON:
                 date = datetime.strftime(self.start, DATE_FMT)
@@ -130,7 +130,7 @@ class RecurrentEvent(EventModel, Base):
         WEEKEND = "Выходной"
         WORK_BREAK = "Перерыв"
 
-    def __str__(self):
+    def __str__(self) -> str:
         match self.event_type:
             case self.EventTypes.LESSON:
                 weekday = WEEKDAY_MAP[self.start.weekday()]["long"]
@@ -169,19 +169,19 @@ class EventHistory(Model, Base):
 
 class HomeWork(Model, Base):
     @declared_attr
-    def user_id(cls):
+    def user_id(self):
         return Column(Integer, ForeignKey("users.id"))
 
     @declared_attr
-    def user(cls):
+    def user(self):
         return relationship(User)
 
     @declared_attr
-    def executor_id(cls):
+    def executor_id(self):
         return Column(Integer, ForeignKey("executors.id"), nullable=False)
 
     @declared_attr
-    def executor(cls):
+    def executor(self):
         return relationship(Executor)
 
     created_at = Column(DateTime, default=datetime.now)
@@ -192,5 +192,5 @@ class HomeWork(Model, Base):
         ONGOING = "Выдана"
         DONE = "Выполнена"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"ДЗ от {datetime.strftime(self.created_at, SHORT_DATE_FMT)}"

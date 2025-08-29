@@ -16,7 +16,7 @@ from src.db.schemas import (
 
 
 class DBSession:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
 
@@ -240,9 +240,7 @@ class EventRepo(DBSession):
         return list(weekends)
 
     def available_work_weekdays(self, executor_id: int):
-        weekends = []
-        for weekend in self.weekends(executor_id):
-            weekends.append(weekend.start.weekday())
+        weekends = [weekend.start.weekday() for weekend in self.weekends(executor_id)]
         return [i for i in range(7) if i not in weekends]
 
     def vacations(self, user_id: int):

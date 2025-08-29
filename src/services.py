@@ -44,11 +44,12 @@ class UserService(DBSession):
 
     def register(self, tg_id: int, tg_full_name: str, tg_username: str, role: str, code: str):
         """Register a user."""
+        ev = f"tg_id: {tg_id}, tg_full_name: {tg_full_name}, tg_username: {tg_username}, role: {role}, executor: {code}"
         event_log = EventHistory(
             author=tg_username,
             scene="start",
             event_type="register",
-            event_value=f"tg_id: {tg_id}, tg_full_name: {tg_full_name}, tg_username: {tg_username}, role: {role}, executor: {code}",
+            event_value=ev,
         )
 
         executor = self.db.query(Executor).filter(Executor.code == code).first()
@@ -75,7 +76,7 @@ class UserService(DBSession):
         username = user.username if user.username else user.full_name
         history = self.db.query(EventHistory).filter(EventHistory.author == username)
         event_breaks = self.db.query(CancelledRecurrentEvent).filter(
-            CancelledRecurrentEvent.event_id.in_([re.id for re in recur_events])
+            CancelledRecurrentEvent.event_id.in_([re.id for re in recur_events]),
         )
         for e in list(event_breaks) + list(history) + list(recur_events) + list(events) + [user]:
             self.db.delete(e)

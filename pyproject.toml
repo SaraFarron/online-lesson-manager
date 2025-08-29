@@ -29,6 +29,8 @@ select = [
 ]
 ignore = [
     #### specific rules
+    "ASYNC109",
+    "BLE001",
     "D100",   # ignore missing docs
     "D101",
     "D102",
@@ -45,6 +47,7 @@ ignore = [
     "D415",
     "DTZ005",
     "DTZ007",
+    "TRY002",
     "TRY003", # external messages in exceptions are too verbose
     "TD002",
     "TD003",
@@ -65,5 +68,36 @@ ignore = [
 	"TCH001",
     "TCH002",
     "TCH003",
+    "TRY004",
 	"E701",
+    "EM101",
+    "FBT001",
+    "FBT002",
+    "FBT003",
 ]
+[tool.basedpyright]
+reportArgumentType = false
+reportUnannotatedClassAttribute = false
+reportImplicitOverride = false
+reportAny = false
+reportOptionalMemberAccess = false
+reportCallIssue = false
+reportUnknownMemberType = false
+reportUnknownParameterType = false
+reportMissingParameterType = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+reportMissingTypeArgument = false
+reportAttributeAccessIssue = false
+reportUnusedCallResult = false
+reportPrivateLocalImportUsage = false
+reportUnnecessaryComparison = false
+reportGeneralTypeIssues = false
+reportOperatorIssue = false
+reportPossiblyUnboundVariable = false
+reportOptionalSubscript = false
+reportImplicitRelativeImport = false
+reportUnusedFunction = false
+reportIncompatibleMethodOverride = false
+reportExplicitAny = false
+reportIndexIssue = false

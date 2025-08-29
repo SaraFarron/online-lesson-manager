@@ -35,7 +35,10 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 
     await state.update_data(user_id=user.telegram_id)
     weekdays = EventService(db).available_weekdays(user.executor_id)
-    await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, AddRecurrentLesson.choose_weekday))
+    await message.answer(
+        replies.CHOOSE_WEEKDAY,
+        reply_markup=Keyboards.weekdays(weekdays, AddRecurrentLesson.choose_weekday),
+    )
 
 
 @router.callback_query(F.data.startswith(AddRecurrentLesson.choose_weekday))
@@ -50,7 +53,10 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
         await state.clear()
         return
     await state.update_data(weekday=weekday)
-    await message.answer(replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddRecurrentLesson.choose_time))
+    await message.answer(
+        replies.CHOOSE_TIME,
+        reply_markup=Keyboards.choose_time(available_time, AddRecurrentLesson.choose_time),
+    )
 
 
 @router.callback_query(F.data.startswith(AddRecurrentLesson.choose_time))

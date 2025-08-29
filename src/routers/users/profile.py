@@ -29,7 +29,7 @@ def profile_text(tg_id: int, username: str, fullname: str, events: list, vacatio
         start, end = datetime.strptime(vacation[0], DB_DATETIME), datetime.strptime(vacation[1], DB_DATETIME)
         start, end = datetime.strftime(start, DATE_FMT), datetime.strftime(end, DATE_FMT)
         vacations_list.append(f"{start} - {end}")
-    vac_text = "\n".join(["Каникулы:"] + vacations_list) if vacations_list else "Каникул нет"
+    vac_text = "\n".join(["Каникулы:", *vacations_list]) if vacations_list else "Каникул нет"
     link = f"@{username}" if username else f'<a href="tg://user?id={tg_id}">{fullname}</a>'
     return f"""
 Telegram id: {tg_id}
@@ -64,7 +64,7 @@ async def profile_handler(message: Message, state: FSMContext, db: Session) -> N
 @router.callback_query(F.data.startswith(Profile.profile))
 async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     state_data = await state.get_data()
-    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
+    message, _ = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     student_id = int(get_callback_arg(callback.data, Profile.profile))
     student = db.get(User, student_id)
@@ -86,7 +86,7 @@ async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> No
 @router.callback_query(F.data.startswith(Profile.delete_student))
 async def delete_student(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     state_data = await state.get_data()
-    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
+    message, _ = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     student_id = int(get_callback_arg(callback.data, Profile.delete_student))
     await state.update_data(student_id=student_id)

@@ -46,7 +46,7 @@ async def manage_work_breaks_handler(message: Message, state: FSMContext, db: Se
 @router.callback_query(F.data.startswith(WorkBreaks.add_break))
 async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     state_data = await state.get_data()
-    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
+    message, _ = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     await message.answer(
         replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(list(range(7)), WorkBreaks.choose_duration),
@@ -56,7 +56,7 @@ async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> 
 @router.callback_query(F.data.startswith(WorkBreaks.choose_duration))
 async def choose_duration(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     state_data = await state.get_data()
-    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
+    message, _ = UserService(db).check_user_with_id(callback, state_data["user_id"], RolesSchema.TEACHER)
 
     weekday = get_callback_arg(callback.data, WorkBreaks.choose_duration)
     await state.update_data(weekday=weekday)

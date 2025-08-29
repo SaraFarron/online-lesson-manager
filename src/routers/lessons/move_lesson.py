@@ -56,7 +56,7 @@ async def move_lesson_handler(message: Message, state: FSMContext, db: Session) 
 @router.callback_query(F.data.startswith(MoveLesson.choose_lesson))
 async def choose_lesson(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     state_data = await state.get_data()
-    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
+    message, _ = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     await state.update_data(lesson=get_callback_arg(callback.data, MoveLesson.choose_lesson))
     await message.answer(replies.MOVE_OR_DELETE, reply_markup=Keyboards.move_or_delete(MoveLesson.move_or_delete))
@@ -185,7 +185,10 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
         await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
     elif mode == "forever" and state_data["action"] == "move":
         weekdays = EventService(db).available_weekdays(user.executor_id)
-        await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, MoveLesson.choose_weekday))
+        await message.answer(
+            replies.CHOOSE_WEEKDAY,
+            reply_markup=Keyboards.weekdays(weekdays, MoveLesson.choose_weekday),
+        )
     else:
         await message.answer(replies.UNKNOWN_ACTION_ERR)
         await state.clear()
@@ -200,7 +203,10 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
     weekday = int(get_callback_arg(callback.data, MoveLesson.choose_weekday))
     await state.update_data(weekday=weekday)
     available_time = EventService(db).available_time_weekday(user.executor_id, weekday)
-    await message.answer(replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_time))
+    await message.answer(
+        replies.CHOOSE_TIME,
+        reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_time),
+    )
 
 
 @router.callback_query(F.data.startswith(MoveLesson.choose_recur_time))
