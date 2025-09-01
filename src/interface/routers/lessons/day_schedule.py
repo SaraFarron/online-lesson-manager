@@ -7,12 +7,12 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
+from src.core.middlewares import DatabaseMiddleware
 from src.db.models import User
-from src.keyboards import Commands
-from src.messages import replies
-from src.middlewares import DatabaseMiddleware
-from src.services import EventService, UserService
-from src.utils import day_schedule_text
+from src.interface.keyboards import Commands
+from src.interface.messages import replies
+from src.service.services import EventService, UserService
+from src.service.utils import day_schedule_text
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())

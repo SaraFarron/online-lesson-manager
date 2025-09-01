@@ -8,13 +8,13 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core.config import LESSON_SIZE
+from src.core.middlewares import DatabaseMiddleware
 from src.db.models import RecurrentEvent
 from src.db.repositories import EventHistoryRepo, UserRepo
-from src.keyboards import Commands, Keyboards
-from src.messages import replies
-from src.middlewares import DatabaseMiddleware
-from src.services import EventService, UserService
-from src.utils import get_callback_arg, send_message
+from src.interface.keyboards import Commands, Keyboards
+from src.interface.messages import replies
+from src.service.services import EventService, UserService
+from src.service.utils import get_callback_arg, send_message
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
