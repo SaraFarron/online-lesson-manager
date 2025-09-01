@@ -17,7 +17,7 @@ class Commands(Enum):
     DAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
     VACATIONS = "Расписание каникул"
-    CHOOSE_HOMEWORK = "Домашние задания"
+    # CHOOSE_HOMEWORK = "Домашние задания"
 
 
 class AdminCommands(Enum):
@@ -29,6 +29,7 @@ class AdminCommands(Enum):
     SEND_TO_EVERYONE = "Рассылка всем ученикам"
     STUDENTS = "Ученики"
     VACATIONS = "Расписание каникул"
+    # CHOOSE_HOMEWORK = "Домашние задания"
 
 
 class Keyboards:

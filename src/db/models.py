@@ -167,30 +167,41 @@ class EventHistory(Model, Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
-class HomeWork(Model, Base):
-    @declared_attr
-    def user_id(self):
-        return Column(Integer, ForeignKey("users.id"))
+class HomeWork:
+    user_id = 0
+    user = None
+    executor_id = 0
+    executor = None
+    created_at = datetime.now()
+    filename = "test"
+    status = "DONE"
+    # TODO Replace with Model in future
 
-    @declared_attr
-    def user(self):
-        return relationship(User)
 
-    @declared_attr
-    def executor_id(self):
-        return Column(Integer, ForeignKey("executors.id"), nullable=False)
+# class HomeWork(Model, Base):
+#     @declared_attr
+#     def user_id(self):
+#         return Column(Integer, ForeignKey("users.id"))
 
-    @declared_attr
-    def executor(self):
-        return relationship(Executor)
+#     @declared_attr
+#     def user(self):
+#         return relationship(User)
 
-    created_at = Column(DateTime, default=datetime.now)
-    filename = Column(String)
-    status = Column(String)
+#     @declared_attr
+#     def executor_id(self):
+#         return Column(Integer, ForeignKey("executors.id"), nullable=False)
 
-    class HWStatus:
-        ONGOING = "Выдана"
-        DONE = "Выполнена"
+#     @declared_attr
+#     def executor(self):
+#         return relationship(Executor)
 
-    def __str__(self) -> str:
-        return f"ДЗ от {datetime.strftime(self.created_at, SHORT_DATE_FMT)}"
+#     created_at = Column(DateTime, default=datetime.now)
+#     filename = Column(String)
+#     status = Column(String)
+
+#     class HWStatus:
+#         ONGOING = "Выдана"
+#         DONE = "Выполнена"
+
+#     def __str__(self) -> str:
+#         return f"ДЗ от {datetime.strftime(self.created_at, SHORT_DATE_FMT)}"
