@@ -43,14 +43,13 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     message, user = UserService(db).check_user_with_id(message, message.from_user.id)
 
-    date = parse_date(message.text, True)
-    if date is None:
+    day = parse_date(message.text, True)
+    if day is None:
         await state.set_state(AddLesson.choose_date)
         await message.answer(replies.WRONG_DATE_FMT)
         return
-    await state.update_data(day=date)
+    await state.update_data(day=day)
 
-    day = date.date()
     today = datetime.now().date()
     if today > day:
         await state.set_state(AddLesson.choose_date)

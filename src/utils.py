@@ -36,12 +36,12 @@ def parse_date(text: str, in_future=False):
             "%Y.%m.%d",
     ):
         try:
-            date = datetime.strptime(text, fmt)
+            date = datetime.strptime(text, fmt).date()
         except ValueError:
             continue
-        now = datetime.now()
+        now = datetime.now().date()
         if date.year < now.year:
-            if in_future and date.replace(year=now.year) <= now:
+            if in_future and date.replace(year=now.year) < now:
                 return date.replace(year=now.year + 1)
             return date.replace(year=now.year)
         return date

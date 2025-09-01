@@ -106,7 +106,7 @@ async def type_date(message: Message, state: FSMContext, db: Session) -> None:
         await message.answer(replies.WRONG_DATE_FMT)
         await state.set_state(MoveLesson.type_date)
         return
-    day = day.date()
+
     today = datetime.now().date()
     if today > day:
         await message.answer(replies.CHOOSE_FUTURE_DATE)
@@ -253,7 +253,7 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
         await message.answer(replies.WRONG_DATE_FMT)
         await state.set_state(MoveLesson.type_date)
         return
-    day = day.date()
+
     today = datetime.now().date()
     if today > day:
         await message.answer(replies.CHOOSE_FUTURE_DATE)
@@ -301,7 +301,7 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
         await message.answer(replies.WRONG_DATE_FMT)
         await state.set_state(MoveLesson.type_date)
         return
-    day = day.date()
+
     today = datetime.now().date()
     if today > day:
         await message.answer(replies.CHOOSE_FUTURE_DATE)
