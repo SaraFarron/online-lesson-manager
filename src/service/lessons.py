@@ -2,7 +2,7 @@ from datetime import datetime, time, timedelta
 
 from core import config
 from db.models import Event, RecurrentEvent
-from src.db.repositories import DBSession
+from db.repositories import DBSession
 
 
 class LessonsService(DBSession):

@@ -1,4 +1,3 @@
-from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -7,12 +6,10 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
-from src.core.middlewares import DatabaseMiddleware
-from src.db.models import User
-from src.interface.keyboards import Commands
-from src.interface.messages import replies
-from src.service.services import EventService, UserService
-from src.service.utils import day_schedule_text
+from core.middlewares import DatabaseMiddleware
+from interface.keyboards import Commands
+from service.schedule import ScheduleService
+from service.services import UserService
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -29,15 +26,7 @@ class DaySchedule(StatesGroup):
 async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
     message, user = UserService(db).check_user(message)
 
-    lessons = EventService(db).day_schedule(
-        user.executor_id,
-        datetime.now().date(),
-        None if user.role == User.Roles.TEACHER else user.id,
-    )
-    users_map = {
-        u.id: f"@{u.username}" if u.username else f'<a href="tg://user?id={u.telegram_id}">{u.full_name}</a>'
-        for u in db.query(User).filter(User.executor_id == user.executor_id)
-    }
-    result = day_schedule_text(lessons, users_map, user)
-    await message.answer("\n".join(result) if result else replies.NO_LESSONS)
+    day_schedule = ScheduleService(db).day_schedule_prompt(user)
+
+    await message.answer(day_schedule)
     await state.clear()

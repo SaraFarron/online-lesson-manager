@@ -3,18 +3,18 @@ from datetime import date, datetime, timedelta
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import bindparam, text
 
-from src.core.config import (
+from core.config import (
     CHANGE_DELTA,
     MAX_LESSONS_PER_DAY,
     SLOT_SIZE,
     TIME_FMT,
     WEEKDAY_MAP,
 )
-from src.db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, HomeWork, RecurrentEvent, User
-from src.db.repositories import DBSession, EventRepo, UserRepo
-from src.db.schemas import RolesSchema
-from src.interface.messages import replies
-from src.service.utils import telegram_checks
+from db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, HomeWork, RecurrentEvent, User
+from db.repositories import DBSession, EventRepo, UserRepo
+from db.schemas import RolesSchema
+from interface.messages import replies
+from service.utils import telegram_checks
 
 HISTORY_MAP = {
     "help": "запросил помощь",
