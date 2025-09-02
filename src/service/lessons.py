@@ -1,8 +1,11 @@
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from core import config
 from db.models import Event, RecurrentEvent
 from db.repositories import DBSession
+from db.schemas import UserSchema
+from interface.keyboards import Keyboards
+from service.services import EventService
 
 
 class LessonsService(DBSession):
@@ -35,3 +38,20 @@ class LessonsService(DBSession):
         self.db.add(lesson)
         self.db.commit()
         return lesson
+
+    def user_lessons_buttons(self, user: UserSchema, callback: str):
+        lessons = EventService(self.db).all_user_lessons(user)
+        return Keyboards.choose_lesson(lessons, callback)
+
+    def move_lesson(self, event_id: int, user_id: int, executor_id: int, day: date, time: time):
+        old_lesson = EventService(self.db).cancel_event(event_id)
+        new_lesson = Event(
+            user_id=user_id,
+            executor_id=executor_id,
+            event_type=Event.EventTypes.LESSON,
+            start=datetime.combine(day, time),
+            end=datetime.combine(day, time.replace(hour=time.hour + 1)),
+        )
+        self.db.add(new_lesson)
+        self.db.commit()
+        return old_lesson, new_lesson
