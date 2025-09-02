@@ -5,9 +5,9 @@ from typing import Any
 
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message
-from logger import logger
 from sqlalchemy.orm import Session
 
+from core.logger import logger
 from db.database import engine
 
 

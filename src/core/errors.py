@@ -2,8 +2,8 @@ from aiogram import Dispatcher, F
 from aiogram.filters.exception import ExceptionTypeFilter
 from aiogram.types.error_event import ErrorEvent
 from aiogram.types.message import Message
-from logger import logger
 
+from core.logger import logger
 from interface.messages import errors as err_msgs
 
 
