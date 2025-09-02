@@ -7,12 +7,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.core import config
 from src.core.middlewares import DatabaseMiddleware
-from src.db.models import Event
 from src.db.repositories import EventHistoryRepo, UserRepo
 from src.interface.keyboards import Commands, Keyboards
 from src.interface.messages import replies
+from src.service.lessons import LessonsService
 from src.service.services import EventService, UserService
 from src.service.utils import get_callback_arg, parse_date, send_message
 
@@ -44,17 +43,17 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     message, user = UserService(db).check_user_with_id(message, message.from_user.id)
 
     day = parse_date(message.text, True)
+    today = datetime.now().date()
     if day is None:
         await state.set_state(AddLesson.choose_date)
         await message.answer(replies.WRONG_DATE_FMT)
         return
-    await state.update_data(day=day)
-
-    today = datetime.now().date()
     if today > day:
         await state.set_state(AddLesson.choose_date)
         await message.answer(replies.CHOOSE_FUTURE_DATE)
         return
+
+    await state.update_data(day=day)
 
     available_time = EventService(db).available_time(user.executor_id, day)
     if available_time:
@@ -71,24 +70,15 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     state_data = await state.get_data()
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
-    date = state_data["day"]
-    time = datetime.strptime(
-        get_callback_arg(callback.data, AddLesson.choose_time),
-        config.TIME_FMT,
-    ).time()
-
-    lesson = Event(
+    lesson = LessonsService(db).create_lesson(
         user_id=user.id,
         executor_id=user.executor_id,
-        event_type=Event.EventTypes.LESSON,
-        start=datetime.combine(date, time),
-        end=datetime.combine(date, time.replace(hour=time.hour + 1)),
+        date=str(state_data["day"]),
+        time=get_callback_arg(callback.data, AddLesson.choose_time),
     )
-    db.add(lesson)
-    db.commit()
+
     await message.answer(replies.LESSON_ADDED)
-    username = user.username if user.username else user.full_name
-    EventHistoryRepo(db).create(username, AddLesson.scene, "added_lesson", str(lesson))
+    EventHistoryRepo(db).create(user.get_username(), AddLesson.scene, "added_lesson", str(lesson))
     executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{username} добавил(а) {lesson}")
+    await send_message(executor_tg, f"{user.get_username()} добавил(а) {lesson}")
     await state.clear()
