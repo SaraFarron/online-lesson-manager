@@ -7,8 +7,8 @@ from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
+from core.logger import logger
 from db.database import engine
-from logger import logger
 
 
 class DatabaseMiddleware(BaseMiddleware):

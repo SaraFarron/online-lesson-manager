@@ -3,11 +3,11 @@ from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
+from src.core.middlewares import DatabaseMiddleware
 from src.db.models import User
-from src.messages import replies
-from src.middlewares import DatabaseMiddleware
-from src.services import UserRepo, UserService
-from src.utils import telegram_checks
+from src.interface.messages import replies
+from src.service.services import UserRepo, UserService
+from src.service.utils import telegram_checks
 
 router: Router = Router()
 router.message.middleware(DatabaseMiddleware())

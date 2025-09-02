@@ -9,12 +9,12 @@ from aiogram.types import ContentType, Message
 from sqlalchemy.orm import Session
 
 from src.core.config import BOT_TOKEN
+from src.core.middlewares import DatabaseMiddleware
 from src.db.models import User
 from src.db.schemas import RolesSchema
-from src.keyboards import AdminCommands
-from src.messages import replies
-from src.middlewares import DatabaseMiddleware
-from src.services import UserService
+from src.interface.keyboards import AdminCommands
+from src.interface.messages import replies
+from src.service.services import UserService
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())

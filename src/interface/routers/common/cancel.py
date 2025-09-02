@@ -3,7 +3,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from src.messages import replies
+from src.interface.messages import replies
 
 COMMAND = "cancel"
 

@@ -13,8 +13,8 @@ from src.core.config import (
 from src.db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, HomeWork, RecurrentEvent, User
 from src.db.repositories import DBSession, EventRepo, UserRepo
 from src.db.schemas import RolesSchema
-from src.messages import replies
-from src.utils import telegram_checks
+from src.interface.messages import replies
+from src.service.utils import telegram_checks
 
 HISTORY_MAP = {
     "help": "запросил помощь",

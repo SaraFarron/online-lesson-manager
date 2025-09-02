@@ -9,14 +9,14 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.core.config import DATE_FMT, DATETIME_FMT, DB_DATETIME
+from src.core.middlewares import DatabaseMiddleware
 from src.db.models import Event, User
 from src.db.repositories import EventHistoryRepo
 from src.db.schemas import RolesSchema
-from src.keyboards import AdminCommands, Keyboards
-from src.messages import replies
-from src.middlewares import DatabaseMiddleware
-from src.services import HISTORY_MAP, UserService
-from src.utils import get_callback_arg
+from src.interface.keyboards import AdminCommands, Keyboards
+from src.interface.messages import replies
+from src.service.services import HISTORY_MAP, UserService
+from src.service.utils import get_callback_arg
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())

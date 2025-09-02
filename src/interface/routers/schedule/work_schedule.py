@@ -8,14 +8,14 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core.config import WEEKDAY_MAP
+from src.core.middlewares import DatabaseMiddleware
 from src.db.models import RecurrentEvent
 from src.db.repositories import EventHistoryRepo
 from src.db.schemas import RolesSchema
-from src.keyboards import AdminCommands, Keyboards
-from src.messages import replies
-from src.middlewares import DatabaseMiddleware
-from src.services import EventService, UserService
-from src.utils import get_callback_arg, parse_time
+from src.interface.keyboards import AdminCommands, Keyboards
+from src.interface.messages import replies
+from src.service.services import EventService, UserService
+from src.service.utils import get_callback_arg, parse_time
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())

@@ -6,14 +6,14 @@ from sqlalchemy.orm import Session
 
 from core import logs
 from core.config import TIMEZONE
+from core.logger import logger
 from db.database import engine
-from logger import logger
+from service.utils import day_schedule_text, send_message
 from src.db.models import User
-from src.services import EventService
-from utils import day_schedule_text, send_message
+from src.service.services import EventService
 
 
-def notification(events: list, user: User, users_map):
+def notification(events: list, user: User, users_map: dict):
     rows = day_schedule_text(events, users_map, user)
     if not rows:
         return None
