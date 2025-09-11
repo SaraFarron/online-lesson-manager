@@ -268,12 +268,13 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     schedule = EventRepo(db).day_schedule(user.executor_id, start.date())
     block = find_lesson_blocks(schedule)
     if isinstance(block, datetime):
-        event_break = Event(
+        event_break = RecurrentEvent(
             user_id=exec_user.id,
             executor_id=executor.id,
             event_type=Event.EventTypes.WORK_BREAK,
             start=block,
             end=block + timedelta(minutes=15),
+            interval=7,
         )
         db.add(event_break)
         db.commit()
