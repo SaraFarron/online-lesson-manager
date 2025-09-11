@@ -13,5 +13,10 @@
             "name": "prod",
             "database": "${workspaceFolder:online-lesson-manager}/db/prod.sqlite"
         }
-    ]
+    ],
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

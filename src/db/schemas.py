@@ -34,6 +34,9 @@ class UserSchema(BaseSchema):
             executor_id=user.executor_id,
         )
 
+    def get_username(self) -> str:
+        return self.username if self.username else self.full_name
+
 
 class ExecutorSchema(BaseSchema):
     code: str

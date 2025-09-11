@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -7,12 +7,11 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.core.config import LESSON_SIZE
 from src.core.middlewares import DatabaseMiddleware
-from src.db.models import RecurrentEvent
 from src.db.repositories import EventHistoryRepo, UserRepo
 from src.interface.keyboards import Commands, Keyboards
 from src.interface.messages import replies
+from src.service.lessons import LessonsService
 from src.service.services import EventService, UserService
 from src.service.utils import get_callback_arg, send_message
 
@@ -64,24 +63,15 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     state_data = await state.get_data()
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
-    now = datetime.now()
     time = datetime.strptime(get_callback_arg(callback.data, AddRecurrentLesson.choose_time), "%H:%M").time()
-    start_of_week = now.date() - timedelta(days=now.weekday())
-    current_day = start_of_week + timedelta(days=state_data["weekday"])
-    start = datetime.combine(current_day, time)
-    lesson = RecurrentEvent(
+    lesson = LessonsService(db).create_recurrent_lesson(
         user_id=user.id,
         executor_id=user.executor_id,
-        event_type=RecurrentEvent.EventTypes.LESSON,
-        start=start,
-        end=start + LESSON_SIZE,
-        interval=7,
+        weekday=state_data["weekday"],
+        time=time,
     )
-    db.add(lesson)
-    db.commit()
-    username = user.username if user.username else user.full_name
     await message.answer(replies.LESSON_ADDED)
-    EventHistoryRepo(db).create(username, AddRecurrentLesson.scene, "added_lesson", str(lesson))
+    EventHistoryRepo(db).create(user.get_username(), AddRecurrentLesson.scene, "added_lesson", str(lesson))
     executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{username} добавил(а) {lesson}")
+    await send_message(executor_tg, f"{user.get_username()} добавил(а) {lesson}")
     await state.clear()
