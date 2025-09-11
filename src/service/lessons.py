@@ -55,3 +55,20 @@ class LessonsService(DBSession):
         self.db.add(new_lesson)
         self.db.commit()
         return old_lesson, new_lesson
+
+    def update_recurrent_lesson(self, event_id: int, user_id: int, executor_id: int, start: datetime):
+        # TODO: update instead of delete + create
+        lesson = RecurrentEvent(
+            user_id=user_id,
+            executor_id=executor_id,
+            event_type=RecurrentEvent.EventTypes.LESSON,
+            start=start,
+            end=start + config.LESSON_SIZE,
+            interval=7,
+        )
+        self.db.add(lesson)
+        old_lesson = self.db.get(RecurrentEvent, event_id)
+        old_lesson_str = str(old_lesson)
+        self.db.delete(old_lesson)
+        self.db.commit()
+        return old_lesson_str, lesson

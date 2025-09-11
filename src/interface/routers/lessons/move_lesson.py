@@ -66,6 +66,8 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     action = get_callback_arg(callback.data, MoveLesson.move_or_delete)
+
+    # Delete one event
     if action == "delete" and state_data["lesson"].startswith("e"):
         lesson = EventService(db).cancel_event(int(state_data["lesson"].replace("e", "")))
         EventHistoryRepo(db).create(user.get_username(), MoveLesson.scene, "deleted_one_lesson", str(lesson))
@@ -74,14 +76,20 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext, db: Session
         await send_message(executor_tg, f"{user.get_username()} отменил(а) {lesson}")
         await state.clear()
         return
+
+    # Delete recurrent event
     if action == "delete" and state_data["lesson"].startswith("re"):
         await state.update_data(action=action)
         await message.answer(
             replies.DELETE_ONCE_OR_FOREVER, reply_markup=Keyboards.once_or_forever(MoveLesson.once_or_forever),
         )
+
+    # Move one event
     elif action == "move" and state_data["lesson"].startswith("e"):
         await state.set_state(MoveLesson.type_date)
         await message.answer(replies.CHOOSE_LESSON_DATE)
+
+    # Move recurrent event
     elif action == "move" and state_data["lesson"].startswith("re"):
         await state.update_data(action=action)
         await message.answer(
@@ -157,6 +165,7 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
     if mode == "once" and state_data["action"] == "delete":
         await state.set_state(MoveLesson.type_recur_date)
         await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
+
     elif mode == "forever" and state_data["action"] == "delete":
         lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("re", "")))
         if lesson is None:
@@ -171,9 +180,11 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext, db: Sessio
         executor_tg = UserRepo(db).executor_telegram_id(user)
         await send_message(executor_tg, f"{user.get_username()} отменил(ла) {lesson_str}")
         await state.clear()
+
     elif mode == "once" and state_data["action"] == "move":
         await state.set_state(MoveLesson.type_recur_date)
         await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
+
     elif mode == "forever" and state_data["action"] == "move":
         weekdays = EventService(db).available_weekdays(user.executor_id)
         await message.answer(
@@ -210,20 +221,12 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     start_of_week = now.date() - timedelta(days=now.weekday())
     current_day = start_of_week + timedelta(days=state_data["weekday"])
     start = datetime.combine(current_day, datetime.strptime(time, TIME_FMT).time())
-    # TODO update instead of delete+create
-    lesson = RecurrentEvent(
+    old_lesson_str, lesson = LessonsService(db).update_recurrent_lesson(  # TODO update_recurrent_lesson_start
+        event_id=int(state_data["lesson"].replace("re", "")),
         user_id=user.id,
         executor_id=user.executor_id,
-        event_type=RecurrentEvent.EventTypes.LESSON,
         start=start,
-        end=start + LESSON_SIZE,
-        interval=7,
     )
-    db.add(lesson)
-    old_lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("re", "")))
-    old_lesson_str = str(old_lesson)
-    db.delete(old_lesson)
-    db.commit()
     await message.answer(replies.LESSON_MOVED)
     username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(
