@@ -3,6 +3,8 @@ from datetime import date, datetime, timedelta
 from enum import Enum
 from math import ceil
 
+from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
+from aiogram.types.reply_keyboard_markup import ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from src.core.config import CHANGE_DELTA, DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
@@ -17,7 +19,7 @@ class Commands(Enum):
     DAY_SCHEDULE = "Расписание на сегодня"
     WEEK_SCHEDULE = "Расписание на неделю"
     VACATIONS = "Расписание каникул"
-    # CHOOSE_HOMEWORK = "Домашние задания"
+    # CHOOSE_HOMEWORK = "Домашние задания"  # noqa: ERA001
 
 
 class AdminCommands(Enum):
@@ -29,12 +31,16 @@ class AdminCommands(Enum):
     SEND_TO_EVERYONE = "Рассылка всем ученикам"
     STUDENTS = "Ученики"
     VACATIONS = "Расписание каникул"
-    # CHOOSE_HOMEWORK = "Домашние задания"
+    # CHOOSE_HOMEWORK = "Домашние задания"  # noqa: ERA001
 
 
 class Keyboards:
     @classmethod
-    def inline_keyboard(cls, buttons: dict[str, str] | Iterable[tuple[str, str]], as_markup=True):
+    def inline_keyboard(
+        cls,
+        buttons: dict[str, str] | Iterable[tuple[str, str]],
+        as_markup: bool=True,
+        ) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         """Create an inline keyboard."""
         if not buttons:
             return None
@@ -52,7 +58,7 @@ class Keyboards:
         return builder
 
     @classmethod
-    def choose_week(cls, current_monday: date, callback: str):
+    def choose_week(cls, current_monday: date, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         previous_week_start = datetime.strftime(current_monday - timedelta(days=7), DATE_FMT)
         next_week_start = datetime.strftime(current_monday + timedelta(days=7), DATE_FMT)
         buttons = {
@@ -62,7 +68,11 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def choose_lesson_type(cls, recurrent_type_callback: str, single_type_callback: str):
+    def choose_lesson_type(
+        cls,
+        recurrent_type_callback: str,
+        single_type_callback: str,
+        ) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {
             recurrent_type_callback: "Еженедельное занятие",
             single_type_callback: "Одноразовое занятие",
@@ -70,7 +80,11 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def weekdays(cls, days: list[int], callback: str, short=False):
+    def weekdays(
+        cls,
+        days: list[int],
+        callback: str, short: bool=False,
+        ) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {}
         for day in days:
             match day:
@@ -81,16 +95,21 @@ class Keyboards:
                 case 4: buttons[callback + "4"] = "ПТ" if short else "Пятница"
                 case 5: buttons[callback + "5"] = "СБ" if short else "Суббота"
                 case 6: buttons[callback + "6"] = "ВС" if short else "Воскресенье"
+                case _: continue
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def choose_time(cls, times: list[datetime], callback: str):
+    def choose_time(cls, times: list[datetime], callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         times_str = [datetime.strftime(t, TIME_FMT) for t in times]
         buttons = {callback + str(t): str(t) for t in times_str}
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def choose_lesson(cls, lessons: list[RecurrentEventSchema | EventSchema], callback: str):
+    def choose_lesson(
+        cls,
+        lessons: list[RecurrentEventSchema | EventSchema],
+        callback: str,
+        ) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {}
         now = datetime.now()
         threshold = now + CHANGE_DELTA
@@ -112,7 +131,7 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def move_or_delete(cls, callback: str):
+    def move_or_delete(cls, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {
             callback + "move": "Перенести",
             callback + "delete": "Отменить",
@@ -120,7 +139,7 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def once_or_forever(cls, callback: str):
+    def once_or_forever(cls, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {
             callback + "forever": "Навсегда",
             callback + "once": "На одну дату",
@@ -128,7 +147,7 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def check_notify(cls, callback: str):
+    def check_notify(cls, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {
             "Отправить сообщения": callback + "send",
             "Отмена": callback + "cancel",
@@ -136,7 +155,7 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def all_commands(cls, role: User.Roles):
+    def all_commands(cls, role: User.Roles) -> ReplyKeyboardMarkup:
         """Create a keyboard with available commands."""
         builder = ReplyKeyboardBuilder()
         match role:
@@ -151,7 +170,13 @@ class Keyboards:
         return builder.as_markup()
 
     @classmethod
-    def work_hours(cls, events: list, weekends: list, callback: str, callback2: str):
+    def work_hours(
+        cls,
+        events: list,
+        weekends: list,
+        callback: str,
+        callback2: str,
+        ) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {}
         events_types = [e.event_type for e in events]
         if RecurrentEvent.EventTypes.WORK_START in events_types:
@@ -173,7 +198,7 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def vacations(cls, events: list, callback: str):
+    def vacations(cls, events: list, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {}
         for e in events:
             start = datetime.strptime(e.start, DB_DATETIME) if isinstance(e.start, str) else e.start
@@ -184,21 +209,21 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def users(cls, users: list[User], callback: str):
+    def users(cls, users: list[User], callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {}
         for user in users:
             buttons[callback + str(user.id)] = user.username if user.username else user.full_name
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def profile(cls, user_id: int, callback: str):
+    def profile(cls, user_id: int, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {
             callback + str(user_id): "Удалить пользователя (запросит подтверждение)",
         }
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def confirm(cls, callback: str):
+    def confirm(cls, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {
             callback + "yes": "Да",
             callback + "no": "Нет",
@@ -206,7 +231,12 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def work_breaks(cls, events: list, add_callback: str, remove_callback: str):
+    def work_breaks(
+        cls,
+        events: list,
+        add_callback: str,
+        remove_callback: str,
+        ) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {}
         for event in events:
             duration = datetime.strftime(event.start, TIME_FMT) + " - " + datetime.strftime(event.end, TIME_FMT)
@@ -216,18 +246,18 @@ class Keyboards:
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def send_messages(cls, callback: str):
+    def send_messages(cls, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         return cls.inline_keyboard({callback: "Отправить сообщения ученикам"})
 
     @classmethod
-    def homeworks(cls, homeworks: list, callback: str):
+    def homeworks(cls, homeworks: list, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {}
         for hw in homeworks:
             buttons[callback + str(hw.id)] = str(hw)
         return cls.inline_keyboard(buttons)
 
     @classmethod
-    def hw_actions(cls, callback: str):
+    def hw_actions(cls, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         buttons = {
             callback + "get": "Посмотреть ДЗ",
             callback + "send": "Сдать ДЗ",

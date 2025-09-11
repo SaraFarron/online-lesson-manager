@@ -26,7 +26,7 @@ def telegram_checks(event: Message | CallbackQuery):
     return event.message
 
 
-def parse_date(text: str, in_future=False):
+def parse_date(text: str, in_future: bool=False):
     for fmt in (
             SHORT_DATE_FMT,
             SHORT_DATE_FMT.replace(".", " "),

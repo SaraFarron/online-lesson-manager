@@ -71,7 +71,8 @@ async def result(message: Message, state: FSMContext, db: Session) -> None:
     message, user = UserService(db).check_user_with_id(message, state_data["user_id"], RolesSchema.TEACHER)
 
     user_input = message.text.split("-")
-    if len(user_input) != 2:
+    expected_number_of_parts = 2
+    if len(user_input) != expected_number_of_parts:
         await message.answer(replies.WRONG_TIMES_FMT)
         await state.set_state(WorkBreaks.result)
         return

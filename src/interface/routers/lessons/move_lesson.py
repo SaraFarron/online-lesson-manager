@@ -221,7 +221,7 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     start_of_week = now.date() - timedelta(days=now.weekday())
     current_day = start_of_week + timedelta(days=state_data["weekday"])
     start = datetime.combine(current_day, datetime.strptime(time, TIME_FMT).time())
-    old_lesson_str, lesson = LessonsService(db).update_recurrent_lesson(  # TODO update_recurrent_lesson_start
+    old_lesson_str, lesson = LessonsService(db).update_recurrent_lesson(
         event_id=int(state_data["lesson"].replace("re", "")),
         user_id=user.id,
         executor_id=user.executor_id,

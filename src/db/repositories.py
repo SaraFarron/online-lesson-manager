@@ -63,21 +63,6 @@ class EventHistoryRepo(DBSession):
 class EventRepo(DBSession):
     LESSON_TYPES = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
 
-    @staticmethod
-    def will_overlap(recurrent_start, recurrent_end, interval_days, simple_start, simple_end):
-        now = datetime.now()
-        if simple_start < now:
-            return False
-        occurrence_start = recurrent_start
-        occurrence_end = recurrent_end
-        interval = timedelta(days=interval_days)
-        while occurrence_start < simple_end and occurrence_start < now + timedelta(days=31):
-            if occurrence_start < simple_end and occurrence_end > simple_start:
-                return True
-            occurrence_start += interval
-            occurrence_end += interval
-        return False
-
     def events_executor(self, executor_id: int):
         today = datetime.now().date()
         query = self.db.execute(

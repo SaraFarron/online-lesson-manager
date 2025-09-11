@@ -66,6 +66,7 @@ ignore = [
     "S321",
     "S603",
     "PT009",
+    "T201",
 	"TCH001",
     "TCH002",
     "TCH003",
@@ -102,3 +103,4 @@ reportUnusedFunction = false
 reportIncompatibleMethodOverride = false
 reportExplicitAny = false
 reportIndexIssue = false
+reportUnknownLambdaType = false

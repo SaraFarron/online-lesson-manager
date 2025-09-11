@@ -57,18 +57,17 @@ class LessonsService(DBSession):
         return old_lesson, new_lesson
 
     def update_recurrent_lesson(self, event_id: int, user_id: int, executor_id: int, start: datetime):
-        # TODO: update instead of delete + create
-        lesson = RecurrentEvent(
-            user_id=user_id,
-            executor_id=executor_id,
-            event_type=RecurrentEvent.EventTypes.LESSON,
-            start=start,
-            end=start + config.LESSON_SIZE,
-            interval=7,
-        )
-        self.db.add(lesson)
-        old_lesson = self.db.get(RecurrentEvent, event_id)
-        old_lesson_str = str(old_lesson)
-        self.db.delete(old_lesson)
+        lesson = self.db.get(RecurrentEvent, event_id)
+        old_lesson_str = str(lesson)
+        if not lesson:
+            msg = f"Recurrent lesson with ID {event_id} not found."
+            raise ValueError(msg)
+
+        lesson.user_id = user_id
+        lesson.executor_id = executor_id
+        lesson.start = start
+        lesson.end = start + config.LESSON_SIZE
+        lesson.interval = 7
+
         self.db.commit()
         return old_lesson_str, lesson

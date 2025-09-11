@@ -32,17 +32,18 @@ async def choose_hw_handler(message: Message, state: FSMContext, db: Session) ->
 
     await state.update_data(user_id=user.telegram_id)
     homeworks = HomeWorkService(db).homeworks(user)
-    await message.answer(replies.CHOOSE_HOMEWORK, reply_markup=Keyboards.homeworks(homeworks, ChooseHomework.homework_list))
+    await message.answer(
+        replies.CHOOSE_HOMEWORK,
+        reply_markup=Keyboards.homeworks(homeworks, ChooseHomework.homework_list),
+    )
 
 
 @router.callback_query(F.data.startswith(ChooseHomework.homework_list))
 async def choose_action(callback: CallbackQuery, state: FSMContext, db: Session):
     state_data = await state.get_data()
-    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
+    message, _ = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     hw_id = int(get_callback_arg(callback.data, ChooseHomework.homework_list))
     await state.update_data(hw_id=hw_id)
 
     await message.answer(replies.CHOOSE_ACTION, reply_markup=Keyboards.hw_actions(ChooseHomework.action))
-
-
