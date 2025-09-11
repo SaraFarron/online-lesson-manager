@@ -115,7 +115,7 @@ class EventService(DBSession):
         events = ev + rv
         users_with_vacations = self.get_users_with_vacations(events, day)
         events = list(filter(lambda x: x.user_id not in users_with_vacations, events))
-        events = sorted(events, key=lambda x: x.start)
+        events = sorted(events, key=lambda x: x.start.time())
         if user_id is not None:
             events = list(filter(lambda x: x.user_id == user_id, events))
         return events
