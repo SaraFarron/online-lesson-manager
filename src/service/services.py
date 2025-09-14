@@ -155,8 +155,12 @@ class EventService(DBSession):
 
         start, end = repo.get_work_start(executor_id)[0], repo.get_work_end(executor_id)[0]
         now = datetime.now()
+        today_start = now + CHANGE_DELTA
+        if today_start.time() > start and day == now.date():
+            start = today_start.time()
         result = []
-        for slot in repo.get_available_slots(start, end, SLOT_SIZE, events, day):
+        available_slots = list(repo.get_available_slots(start, end, SLOT_SIZE, events, day))
+        for slot in available_slots:
             if day == now.date() and now + CHANGE_DELTA > slot[0]:
                 continue
             result.append(slot[0])

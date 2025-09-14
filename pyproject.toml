@@ -16,6 +16,7 @@ alembic = "^1.13.2"
 sqlalchemy-utils = "^0.41.2"
 aiojobs = "^1.3.0"
 pytest = "^8.4.1"
+freezegun = "^1.5.5"
 
 
 [build-system]
@@ -63,6 +64,7 @@ ignore = [
 	"PTH123",
     "PTH207",
 	"S101",
+    "S311",
     "S321",
     "S603",
     "PT009",
@@ -104,3 +106,4 @@ reportIncompatibleMethodOverride = false
 reportExplicitAny = false
 reportIndexIssue = false
 reportUnknownLambdaType = false
+reportUnusedParameter = false

@@ -1,5 +1,7 @@
 from datetime import date, datetime, time, timedelta
 
+from sqlalchemy.orm import Session
+
 from core import config
 from db.models import Event, RecurrentEvent
 from db.repositories import DBSession
@@ -9,13 +11,23 @@ from service.services import EventService
 
 
 class LessonsService(DBSession):
-    def create_lesson(self, user_id: int, executor_id: int, date: str, time: str) -> Event:
+    def __init__(self, db: Session) -> None:
+        super().__init__(db)
+        self.event_service = EventService(db)
+
+    def create_lesson(self, user_id: int, executor_id: int, date: date, time: str) -> Event:
+        available_time = self.event_service.available_time(executor_id, date)
         ttime = datetime.strptime(time, config.TIME_FMT).time()
+        start = datetime.combine(date, ttime)
+        if start not in available_time:
+            msg = "Lesson overlaps with an existing event"
+            raise ValueError(msg)
+
         lesson = Event(
             user_id=user_id,
             executor_id=executor_id,
             event_type=Event.EventTypes.LESSON,
-            start=datetime.combine(date, ttime),
+            start=start,
             end=datetime.combine(date, ttime.replace(hour=ttime.hour + 1)),
         )
         self.db.add(lesson)
