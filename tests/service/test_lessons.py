@@ -101,28 +101,28 @@ def test_recurrent_lesson_cancellation_creates_cancelled_event(db: Session, test
     )
 
     # Cancel the recurrent lesson for a specific period
-    start = datetime.combine(datetime.now().date(), time(14, 0))
-    end = start + timedelta(days=7)
-    service.cancel_recurrent_lesson(recurrent_lesson.id, start, end)
+    cancel_dt = datetime.combine(datetime.now().date(), lesson_time)
+    new_dt = cancel_dt + timedelta(days=1)
+    service.move_recurrent_lesson_once(recurrent_lesson.id, cancel_dt.date(), new_dt.date(), new_dt)
 
     # Check that a CancelledRecurrentEvent was created
     cancelled_event = db.query(CancelledRecurrentEvent).filter_by(event_id=recurrent_lesson.id).first()
     assert cancelled_event is not None
-    assert cancelled_event.start == start
-    assert cancelled_event.end == end
+    assert cancelled_event.start == cancel_dt
+    assert cancelled_event.end == cancel_dt + timedelta(hours=1)
 
 
 def test_no_more_than_two_lessons_in_a_row(db: Session, test_teacher: User):
     service = LessonsService(db)
     executor_id = test_teacher.executor_id
-    date = datetime.now().date()
+    date = datetime.now().date() + timedelta(days=3)
 
     # Create two consecutive lessons
     service.create_lesson(test_teacher.id, executor_id, date, "10:00")
     service.create_lesson(test_teacher.id, executor_id, date, "11:00")
 
     # Attempt to create a third consecutive lesson
-    with pytest.raises(ValueError, match="Cannot create more than two lessons in a row"):
+    with pytest.raises(ValueError, match="Lesson overlaps with an existing event"):
         service.create_lesson(test_teacher.id, executor_id, date, "12:00")
 
 
