@@ -218,7 +218,7 @@ class EventRepo(Repo):
     def events_for_day(self, executor_id: int, day: date):
         start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
         day_start = datetime.combine(day, start)
-        day_end = datetime.combine(day, end)
+        day_end = datetime.combine(day, end) + timedelta(minutes=1)
         events = self.db.execute(text("""
             select start, end, user_id, event_type, is_reschedule from events
             where executor_id = :executor_id and start >= :day_start and end <= :day_end and cancelled is false
