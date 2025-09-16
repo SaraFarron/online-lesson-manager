@@ -139,32 +139,35 @@ class EventService(DBSession):
                 result.append(i)
         return result
 
-    def available_time(self, executor_id: int, day: date):
+    def get_day_events(self, executor_id: int, day: date):
         repo = EventRepo(self.db)
-        if repo.vacations_day(executor_id, day):
-            return []
-
         events = repo.events_for_day(executor_id, day) + repo.recurrent_events_for_day(executor_id, day)
-        lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
-        lessons = [e for e in events if e.event_type in lesson_types]
-        if len(lessons) >= MAX_LESSONS_PER_DAY:
-            return []
-
         users_with_vacations = self.get_users_with_vacations(events, day)
-        events = list(filter(lambda x: x.user_id not in users_with_vacations, events))
+        return list(filter(lambda x: x.user_id not in users_with_vacations, events))
 
+    def get_available_start_end(self, executor_id: int, day: date):
+        repo = EventRepo(self.db)
         start, end = repo.get_work_start(executor_id)[0], repo.get_work_end(executor_id)[0]
         now = datetime.now()
         today_start = now + CHANGE_DELTA
         if today_start.time() > start and day == now.date():
             start = today_start.time()
-        result = []
+        return start, end
+
+    def available_time(self, executor_id: int, day: date):
+        repo = EventRepo(self.db)
+        if repo.vacations_day(executor_id, day):
+            return []
+
+        events = self.get_day_events(executor_id, day)
+        lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
+        lessons = [e for e in events if e.event_type in lesson_types]
+        if len(lessons) >= MAX_LESSONS_PER_DAY:
+            return []
+
+        start, end = self.get_available_start_end(executor_id, day)
         available_slots = list(repo.get_available_slots(start, end, SLOT_SIZE, events, day))
-        for slot in available_slots:
-            if day == now.date() and now + CHANGE_DELTA > slot[0]:
-                continue
-            result.append(slot[0])
-        return result
+        return [s[0] for s in available_slots], lessons
 
     def available_time_weekday(self, executor_id: int, weekday: int):
         now = datetime.now()

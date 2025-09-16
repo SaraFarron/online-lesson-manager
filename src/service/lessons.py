@@ -16,22 +16,33 @@ class LessonsService(DBSession):
         self.event_service = EventService(db)
 
     def create_lesson(self, user_id: int, executor_id: int, date: date, time: str) -> Event:
-        available_time = self.event_service.available_time(executor_id, date)
+        available_time, lessons = self.event_service.available_time(executor_id, date)
         ttime = datetime.strptime(time, config.TIME_FMT).time()
         start = datetime.combine(date, ttime)
         if start not in available_time:
             msg = "Lesson overlaps with an existing event"
             raise ValueError(msg)
 
+        end = start + timedelta(hours=1)
         lesson = Event(
             user_id=user_id,
             executor_id=executor_id,
             event_type=Event.EventTypes.LESSON,
             start=start,
-            end=datetime.combine(date, ttime.replace(hour=ttime.hour + 1)),
+            end=end,
         )
         self.db.add(lesson)
-        # TODO create break if needed
+        previous_time = (start - timedelta(hours=1)).time()
+        lesson_before = [l for l in lessons if l.start == previous_time]
+        if previous_time not in available_time and lesson_before and end.time() in available_time:
+            work_break = Event(
+                user_id=executor_id,
+                executor_id=executor_id,
+                event_type=RecurrentEvent.EventTypes.WORK_BREAK,
+                start=end,
+                end=end + timedelta(minutes=15),
+            )
+            self.db.add(work_break)
         self.db.commit()
         return lesson
 
