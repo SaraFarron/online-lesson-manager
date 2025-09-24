@@ -271,6 +271,8 @@ class EventRepo(Repo):
         lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
         for i in range(7):
             current_day = start_of_week + timedelta(days=i)
+            if current_day < datetime.now().date():
+                current_day += timedelta(days=7)
             events = self.recurrent_events_for_day(executor_id, current_day)
             lessons = [e for e in events if e[3] in lesson_types]
             if len(lessons) >= MAX_LESSONS_PER_DAY:
