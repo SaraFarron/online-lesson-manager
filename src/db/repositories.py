@@ -122,7 +122,11 @@ class EventRepo(DBSession):
             days_diff = (day - event.start.date()).days
 
             # Check if this event should occur on target_date based on interval
-            if event.interval > 0 and days_diff % event.interval == 0:
+            condition = any([
+                event.interval > 0 and days_diff % event.interval == 0,
+                event.interval == 7 and event.start.weekday() == day.weekday(),
+            ])
+            if condition:
                 # Calculate the exact datetime on target_date
                 event_time = event.start.time()
                 event_start = datetime.combine(day, event_time)

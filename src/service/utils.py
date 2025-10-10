@@ -87,6 +87,8 @@ def day_schedule_text(lessons: list, users_map: dict, user: User):
                 lesson_str = f"Разовый урок в {datetime.strftime(lesson.start, TIME_FMT)}"
             else:
                 lesson_str = f"{lesson.event_type} в {datetime.strftime(lesson.start, TIME_FMT)}"
+        elif lesson.event_type == RecurrentEvent.EventTypes.WORK_BREAK:
+            lesson_str = f"{lesson.event_type} в {datetime.strftime(lesson.start, TIME_FMT)}"
         else:
             continue
         if user.role == User.Roles.TEACHER:
