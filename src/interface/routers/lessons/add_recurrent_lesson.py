@@ -46,7 +46,7 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     weekday = int(get_callback_arg(callback.data, AddRecurrentLesson.choose_weekday))
-    available_time = EventService(db).available_time_weekday(user.executor_id, weekday)
+    available_time, _ = EventService(db).available_time_weekday(user.executor_id, weekday)
     if not available_time:
         await message.answer(replies.NO_TIME)
         await state.clear()
@@ -64,7 +64,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     time = datetime.strptime(get_callback_arg(callback.data, AddRecurrentLesson.choose_time), "%H:%M").time()
-    lesson = LessonsService(db).create_recurrent_lesson(
+    lesson, created_break = LessonsService(db).create_recurrent_lesson(
         user_id=user.id,
         executor_id=user.executor_id,
         weekday=state_data["weekday"],
@@ -74,4 +74,6 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     EventHistoryRepo(db).create(user.get_username(), AddRecurrentLesson.scene, "added_lesson", str(lesson))
     executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{user.get_username()} добавил(а) {lesson}")
+    if created_break:
+        await send_message(executor_tg, f"Автоматически добавлен перерыв на {created_break}")
     await state.clear()

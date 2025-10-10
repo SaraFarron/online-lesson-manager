@@ -70,7 +70,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     state_data = await state.get_data()
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
-    lesson = LessonsService(db).create_lesson(
+    lesson, created_break = LessonsService(db).create_lesson(
         user_id=user.id,
         executor_id=user.executor_id,
         date=str(state_data["day"]),
@@ -81,4 +81,6 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     EventHistoryRepo(db).create(user.get_username(), AddLesson.scene, "added_lesson", str(lesson))
     executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{user.get_username()} добавил(а) {lesson}")
+    if created_break:
+        await send_message(executor_tg, f"Автоматически добавлен перерыв на {created_break}")
     await state.clear()

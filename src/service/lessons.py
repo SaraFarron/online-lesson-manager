@@ -15,7 +15,7 @@ class LessonsService(DBSession):
         super().__init__(db)
         self.event_service = EventService(db)
 
-    def create_lesson(self, user_id: int, executor_id: int, date: date, time: str) -> Event:
+    def create_lesson(self, user_id: int, executor_id: int, date: date, time: str):
         available_time, lessons = self.event_service.available_time(executor_id, date)
         ttime = datetime.strptime(time, config.TIME_FMT).time()
         start = datetime.combine(date, ttime)
@@ -34,6 +34,7 @@ class LessonsService(DBSession):
         self.db.add(lesson)
         previous_time = (start - timedelta(hours=1)).time()
         lesson_before = [l for l in lessons if l.start == previous_time]
+        created_break = False
         if previous_time not in available_time and lesson_before and end.time() in available_time:
             work_break = Event(
                 user_id=executor_id,
@@ -43,25 +44,43 @@ class LessonsService(DBSession):
                 end=end + timedelta(minutes=15),
             )
             self.db.add(work_break)
+            created_break = datetime.strftime(end, config.TIME_FMT)
         self.db.commit()
-        return lesson
+        return lesson, created_break
 
     def create_recurrent_lesson(self, user_id: int, executor_id: int, weekday: int, time: time):
+        # Get lessons for this weekday
+        available_time, lessons = self.event_service.available_time_weekday(executor_id, weekday)
         now = datetime.now()
         start_of_week = now.date() - timedelta(days=now.weekday())
         current_day = start_of_week + timedelta(days=weekday)
         start = datetime.combine(current_day, time)
+        end = start + config.LESSON_SIZE
         lesson = RecurrentEvent(
             user_id=user_id,
             executor_id=executor_id,
             event_type=RecurrentEvent.EventTypes.LESSON,
             start=start,
-            end=start + config.LESSON_SIZE,
+            end=end,
             interval=7,
         )
         self.db.add(lesson)
+        created_break = False
+        previous_time = (start - timedelta(hours=1)).time()
+        lesson_before = [l for l in lessons if l.start.time() == previous_time]
+        if previous_time not in available_time and lesson_before and end in available_time:
+            work_break = RecurrentEvent(
+                user_id=executor_id,
+                executor_id=executor_id,
+                event_type=RecurrentEvent.EventTypes.WORK_BREAK,
+                start=end,
+                end=end + timedelta(minutes=15),
+                interval=7,
+            )
+            self.db.add(work_break)
+            created_break = datetime.strftime(end, config.TIME_FMT)
         self.db.commit()
-        return lesson
+        return lesson, created_break
 
     def user_lessons_buttons(self, user: UserSchema, callback: str):
         lessons = EventService(self.db).all_user_lessons(user)

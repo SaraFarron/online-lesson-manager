@@ -175,6 +175,7 @@ class EventService(DBSession):
         start_of_week = now.date() - timedelta(days=now.weekday())
         current_day = start_of_week + timedelta(days=weekday)
         events = repo.recurrent_events_for_day(executor_id, current_day)
+        lessons = [e for e in events if e.event_type in self.LESSON_TYPES]
 
         start, end = repo.get_work_start(executor_id)[0], repo.get_work_end(executor_id)[0]
         simple_lessons = {}
@@ -197,7 +198,7 @@ class EventService(DBSession):
             if s[0].weekday() in simple_lessons and s[0].time() in simple_lessons[s[0].weekday()]:
                 continue
             result.append(s[0])
-        return result
+        return result, lessons
 
     def all_user_lessons(self, user: User):
         repo = EventRepo(self.db)
