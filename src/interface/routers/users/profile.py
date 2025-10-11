@@ -72,8 +72,11 @@ async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> No
         raise Exception("message", "Пользователь не найден", f"user not found: {student_id}")
     event_history = EventHistoryRepo(db).user_history(student.username)
     events = []
+    buggy_str = "<src.models.CancelledRecurrentEvent object at "
     for e in event_history:
         event = HISTORY_MAP.get(e.event_type, e.event_type)
+        if buggy_str in e.event_value:
+            e.event_value = e.event_value.split(buggy_str)[0] + "***" + e.event_value.split(">")[1]
         events.append(f"{datetime.strftime(e.created_at, DATETIME_FMT)} {event} {e.event_value}")
     vacations = list(db.execute(text("""
         select start, end from events
