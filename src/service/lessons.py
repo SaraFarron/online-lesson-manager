@@ -134,7 +134,8 @@ class LessonsService(DBSession):
             msg = f"Recurrent lesson already canceled for date {cancel_date}."
             raise ValueError(msg)
 
-        if new_time not in self.event_service.available_time(recurrent_lesson.executor_id, new_date):
+        available_time, _ = self.event_service.available_time(recurrent_lesson.executor_id, new_date)
+        if new_time not in available_time:
             msg = "New lesson time overlaps with an existing event."
             raise ValueError(msg)
 

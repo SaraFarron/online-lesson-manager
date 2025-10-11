@@ -118,7 +118,7 @@ async def type_date(message: Message, state: FSMContext, db: Session) -> None:
         return
 
     await state.update_data(day=day)
-    available_time = EventService(db).available_time(user.executor_id, day)
+    available_time, _ = EventService(db).available_time(user.executor_id, day)
     if available_time:
         await message.answer(
             replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_time),
@@ -303,7 +303,7 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
         return
 
     await state.update_data(new_day=day)
-    available_time = EventService(db).available_time(user.executor_id, day)
+    available_time, _ = EventService(db).available_time(user.executor_id, day)
     if available_time:
         await message.answer(
             replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, MoveLesson.choose_recur_new_time),
