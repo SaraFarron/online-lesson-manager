@@ -33,9 +33,9 @@ class LessonsService(DBSession):
         )
         self.db.add(lesson)
         previous_time = (start - timedelta(hours=1)).time()
-        lesson_before = [l for l in lessons if l.start == previous_time]
+        lesson_before = [l for l in lessons if l.start.time() == previous_time]
         created_break = False
-        if previous_time not in available_time and lesson_before and end.time() in available_time:
+        if previous_time not in available_time and lesson_before and end in available_time:
             work_break = Event(
                 user_id=executor_id,
                 executor_id=executor_id,

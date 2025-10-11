@@ -7,6 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
+from src.core.config import DATE_FMT
 from src.core.middlewares import DatabaseMiddleware
 from src.db.repositories import EventHistoryRepo, UserRepo
 from src.interface.keyboards import Commands, Keyboards
@@ -55,7 +56,7 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
 
     await state.update_data(day=day)
 
-    available_time = EventService(db).available_time(user.executor_id, day)
+    available_time, _ = EventService(db).available_time(user.executor_id, day)
     if available_time:
         await message.answer(
             replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time),
@@ -69,11 +70,12 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
 async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
     state_data = await state.get_data()
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
+    date = datetime.strptime(state_data["day"], DATE_FMT) if isinstance(state_data["day"], str) else state_data["day"]
 
     lesson, created_break = LessonsService(db).create_lesson(
         user_id=user.id,
         executor_id=user.executor_id,
-        date=str(state_data["day"]),
+        date=date,
         time=get_callback_arg(callback.data, AddLesson.choose_time),
     )
 
