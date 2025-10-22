@@ -139,7 +139,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         config.TIME_FMT,
     ).time()
 
-    old_lesson, new_lesson = LessonsService(db).move_lesson(
+    old_lesson, new_lesson, created_break = LessonsService(db).move_lesson(
         event_id=int(state_data["lesson"].replace("e", "")),
         user_id=user.id,
         executor_id=user.executor_id,
@@ -152,6 +152,8 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     )
     executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{user.get_username()} перенес(ла) {old_lesson} -> {new_lesson}")
+    if created_break:
+        await send_message(executor_tg, f"Автоматически добавлен перерыв на {created_break}")
     await state.clear()
 
 # ---- RECURRENT LESSON ---- #
@@ -221,7 +223,7 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     start_of_week = now.date() - timedelta(days=now.weekday())
     current_day = start_of_week + timedelta(days=state_data["weekday"])
     start = datetime.combine(current_day, datetime.strptime(time, TIME_FMT).time())
-    old_lesson_str, lesson = LessonsService(db).update_recurrent_lesson(
+    old_lesson_str, lesson, created_break = LessonsService(db).update_recurrent_lesson(
         event_id=int(state_data["lesson"].replace("re", "")),
         user_id=user.id,
         executor_id=user.executor_id,
@@ -234,9 +236,11 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     )
     executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
+    if created_break:
+        await send_message(executor_tg, f"Автоматически добавлен перерыв на {created_break}")
     await state.clear()
 
-# ---- RECURRENT LESSON ONCE ---- #
+# ---- RECURRENT LESSON ACTION ONCE ---- #
 
 @router.message(MoveLesson.type_recur_date)
 async def type_recur_date(message: Message, state: FSMContext, db: Session) -> None:
@@ -319,15 +323,12 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
 
     time = get_callback_arg(callback.data, MoveLesson.choose_recur_new_time)
-    start = datetime.combine(state_data["new_day"], datetime.strptime(time, TIME_FMT).time())
     old_start = datetime.strptime(f"{state_data['day']} {state_data['old_time']}", DATETIME_FMT)
-    lesson = Event(
+    lesson, created_break = LessonsService(db).create_lesson(
         user_id=user.id,
         executor_id=user.executor_id,
-        event_type=Event.EventTypes.MOVED_LESSON,
-        start=start,
-        end=start + LESSON_SIZE,
-        is_reschedule=True,
+        date=state_data["new_day"],
+        time=time,
     )
     cancel = CancelledRecurrentEvent(
         event_id=int(state_data["lesson"].replace("re", "")),
@@ -345,4 +346,6 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
     )
     executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
+    if created_break:
+        await send_message(executor_tg, f"Автоматически добавлен перерыв на {created_break}")
     await state.clear()

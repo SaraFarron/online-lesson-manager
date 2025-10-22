@@ -87,17 +87,35 @@ class LessonsService(DBSession):
         return Keyboards.choose_lesson(lessons, callback)
 
     def move_lesson(self, event_id: int, user_id: int, executor_id: int, day: date, time: time):
+        start = datetime.combine(day, time)
+        end = datetime.combine(day, time.replace(hour=time.hour + 1))
         old_lesson = EventService(self.db).cancel_event(event_id)
         new_lesson = Event(
             user_id=user_id,
             executor_id=executor_id,
             event_type=Event.EventTypes.LESSON,
-            start=datetime.combine(day, time),
-            end=datetime.combine(day, time.replace(hour=time.hour + 1)),
+            start=start,
+            end=end,
         )
+
+        available_time, lessons = self.event_service.available_time(executor_id, day)
+        previous_time = (start - timedelta(hours=1)).time()
+        lesson_before = [l for l in lessons if l.start.time() == previous_time]
+        created_break = False
+        if previous_time not in available_time and lesson_before and end in available_time:
+            work_break = Event(
+                user_id=executor_id,
+                executor_id=executor_id,
+                event_type=RecurrentEvent.EventTypes.WORK_BREAK,
+                start=end,
+                end=end + timedelta(minutes=15),
+            )
+            self.db.add(work_break)
+            created_break = datetime.strftime(end, config.TIME_FMT)
+
         self.db.add(new_lesson)
         self.db.commit()
-        return old_lesson, new_lesson
+        return old_lesson, new_lesson, created_break
 
     def update_recurrent_lesson(self, event_id: int, user_id: int, executor_id: int, start: datetime):
         lesson = self.db.get(RecurrentEvent, event_id)
@@ -112,8 +130,29 @@ class LessonsService(DBSession):
         lesson.end = start + config.LESSON_SIZE
         lesson.interval = 7
 
+        available_time, lessons = self.event_service.available_time_weekday(executor_id, start.weekday())
+        now = datetime.now()
+        start_of_week = now.date() - timedelta(days=now.weekday())
+        current_day = start_of_week + timedelta(days=start.weekday())
+        start = datetime.combine(current_day, start.time())
+        end = start + config.LESSON_SIZE
+        created_break = False
+        previous_time = (start - timedelta(hours=1)).time()
+        lesson_before = [l for l in lessons if l.start.time() == previous_time]
+        if previous_time not in available_time and lesson_before and end in available_time:
+            work_break = RecurrentEvent(
+                user_id=executor_id,
+                executor_id=executor_id,
+                event_type=RecurrentEvent.EventTypes.WORK_BREAK,
+                start=end,
+                end=end + timedelta(minutes=15),
+                interval=7,
+            )
+            self.db.add(work_break)
+            created_break = datetime.strftime(end, config.TIME_FMT)
+
         self.db.commit()
-        return old_lesson_str, lesson
+        return old_lesson_str, lesson, created_break
 
     def move_recurrent_lesson_once(self, event_id: int, cancel_date: date, new_date: date, new_time: time):
         recurrent_lesson = self.db.get(RecurrentEvent, event_id)
