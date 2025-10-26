@@ -26,6 +26,8 @@ class UserRepo(DBSession):
         user = self.db.query(User).filter(User.telegram_id == telegram_id).first()
         if user is None and raise_error:
             raise Exception("message", "У вас нет прав на эту команду", "permission denied user is None")
+        if user is None:
+            return None
         return UserSchema.from_user(user)
 
     def executor(self, user: User):
