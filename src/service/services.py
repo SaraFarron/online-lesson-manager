@@ -157,13 +157,13 @@ class EventService(DBSession):
     def available_time(self, executor_id: int, day: date):
         repo = EventRepo(self.db)
         if repo.vacations_day(executor_id, day):
-            return []
+            return [], []
 
         events = self.get_day_events(executor_id, day)
         lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
         lessons = [e for e in events if e.event_type in lesson_types]
         if len(lessons) >= MAX_LESSONS_PER_DAY:
-            return []
+            return [], []
 
         start, end = self.get_available_start_end(executor_id, day)
         available_slots = list(repo.get_available_slots(start, end, SLOT_SIZE, events, day))
