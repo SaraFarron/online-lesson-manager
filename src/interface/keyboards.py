@@ -7,7 +7,7 @@ from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 from aiogram.types.reply_keyboard_markup import ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-from src.core.config import CHANGE_DELTA, DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, TIME_FMT, WEEKDAY_MAP
+from src.core.config import CHANGE_DELTA, DATE_FMT, DB_DATETIME, MAX_BUTTON_ROWS, SHORT_DATE_FMT, TIME_FMT, WEEKDAY_MAP
 from src.db.models import Event, RecurrentEvent, User
 from src.db.schemas import EventSchema, RecurrentEventSchema
 
@@ -117,7 +117,7 @@ class Keyboards:
             lesson_datetime = lesson.start
             if isinstance(lesson, EventSchema) and threshold > lesson_datetime:
                 continue
-            lesson_date = datetime.strftime(lesson_datetime, DATE_FMT)
+            lesson_date = datetime.strftime(lesson_datetime, SHORT_DATE_FMT)
             lesson_weekday = WEEKDAY_MAP[lesson_datetime.weekday()]["short"]
             lesson_time = datetime.strftime(lesson_datetime, TIME_FMT)
             if lesson.event_type == RecurrentEvent.EventTypes.LESSON and isinstance(lesson, RecurrentEventSchema):
@@ -203,7 +203,7 @@ class Keyboards:
         for e in events:
             start = datetime.strptime(e.start, DB_DATETIME) if isinstance(e.start, str) else e.start
             end = datetime.strptime(e.end, DB_DATETIME) if isinstance(e.end, str) else e.end
-            event = f"{datetime.strftime(start, DATE_FMT)} - {datetime.strftime(end, DATE_FMT)}"
+            event = f"{datetime.strftime(start, SHORT_DATE_FMT)} - {datetime.strftime(end, SHORT_DATE_FMT)}"
             buttons[callback + f"delete_vacation/{e.id}"] = f"Удалить каникулы {event}"
         buttons[callback + "add_vacation"] = "Добавить каникулы"
         return cls.inline_keyboard(buttons)

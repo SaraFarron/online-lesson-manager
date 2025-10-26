@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.core.config import DATE_FMT, DATETIME_FMT, DB_DATETIME
+from src.core.config import DATE_FMT, DB_DATETIME, SHORT_DATE_FMT
 from src.core.middlewares import DatabaseMiddleware
 from src.db.models import Event, User
 from src.db.repositories import EventHistoryRepo
@@ -77,7 +77,7 @@ async def profile(callback: CallbackQuery, state: FSMContext, db: Session) -> No
         event = HISTORY_MAP.get(e.event_type, e.event_type)
         if buggy_str in e.event_value:
             e.event_value = e.event_value.split(buggy_str)[0] + "***" + e.event_value.split(">")[1]
-        events.append(f"{datetime.strftime(e.created_at, DATETIME_FMT)} {event} {e.event_value}")
+        events.append(f"{datetime.strftime(e.created_at, SHORT_DATE_FMT)} {event} {e.event_value}")
     vacations = list(db.execute(text("""
         select start, end from events
         where user_id = :user_id and event_type == :event_type and start >= :today

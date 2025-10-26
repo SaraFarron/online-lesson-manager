@@ -90,7 +90,7 @@ class Event(EventModel, Base):
     def __str__(self) -> str:
         match self.event_type:
             case self.EventTypes.LESSON:
-                date = datetime.strftime(self.start, DATE_FMT)
+                date = datetime.strftime(self.start, SHORT_DATE_FMT)
                 time = datetime.strftime(self.start, TIME_FMT)
                 return f"Урок {date} в {time}"
             case self.EventTypes.MOVED_LESSON:
@@ -98,7 +98,7 @@ class Event(EventModel, Base):
                 time = datetime.strftime(self.start, TIME_FMT)
                 return f"Перенос {date} в {time}"
             case self.EventTypes.VACATION:
-                start, end = datetime.strftime(self.start, DATE_FMT), datetime.strftime(self.end, DATE_FMT)
+                start, end = datetime.strftime(self.start, SHORT_DATE_FMT), datetime.strftime(self.end, SHORT_DATE_FMT)
                 return f"Каникулы с {start} по {end}"
             case _:
                 return f"{self.event_type} {self.st_str}-{self.et_str}"
