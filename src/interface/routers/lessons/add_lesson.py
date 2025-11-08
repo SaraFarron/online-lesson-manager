@@ -43,7 +43,7 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     message, user = UserService(db).check_user_with_id(message, message.from_user.id)
 
-    day = parse_date(message.text, True)
+    day = parse_date(message.text)
     today = datetime.now().date()
     if day is None:
         await state.set_state(AddLesson.choose_date)
@@ -52,6 +52,8 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     if today > day:
         await state.set_state(AddLesson.choose_date)
         await message.answer(replies.CHOOSE_FUTURE_DATE)
+        if len(message.text) <= 7:
+            await message.answer(replies.ADD_YEAR)
         return
 
     await state.update_data(day=day)
