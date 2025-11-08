@@ -106,7 +106,7 @@ async def type_date(message: Message, state: FSMContext, db: Session) -> None:
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
 
-    day = parse_date(message.text, True)
+    day = parse_date(message.text)
     if day is None:
         await message.answer(replies.WRONG_DATE_FMT)
         await state.set_state(MoveLesson.type_date)
@@ -115,6 +115,8 @@ async def type_date(message: Message, state: FSMContext, db: Session) -> None:
     today = datetime.now().date()
     if today > day:
         await message.answer(replies.CHOOSE_FUTURE_DATE)
+        if len(message.text) <= 7:
+            await message.answer(replies.ADD_YEAR)
         await state.set_state(MoveLesson.type_date)
         return
 
@@ -294,7 +296,7 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
 
-    day = parse_date(message.text, True)
+    day = parse_date(message.text)
     if day is None:
         await message.answer(replies.WRONG_DATE_FMT)
         await state.set_state(MoveLesson.type_date)
@@ -303,6 +305,8 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
     today = datetime.now().date()
     if today > day:
         await message.answer(replies.CHOOSE_FUTURE_DATE)
+        if len(message.text) <= 7:
+            await message.answer(replies.ADD_YEAR)
         await state.set_state(MoveLesson.type_date)
         return
 
@@ -343,7 +347,7 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
 
-    day = parse_date(message.text, True)
+    day = parse_date(message.text)
     if day is None:
         await message.answer(replies.WRONG_DATE_FMT)
         await state.set_state(MoveLesson.type_date)
@@ -352,6 +356,8 @@ async def type_recur_new_date(message: Message, state: FSMContext, db: Session) 
     today = datetime.now().date()
     if today > day:
         await message.answer(replies.CHOOSE_FUTURE_DATE)
+        if len(message.text) <= 7:
+            await message.answer(replies.ADD_YEAR)
         await state.set_state(MoveLesson.type_date)
         return
 
