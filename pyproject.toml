@@ -79,6 +79,7 @@ ignore = [
     "FBT001",
     "FBT002",
     "FBT003",
+    "W293",
 ]
 [tool.basedpyright]
 reportArgumentType = false
