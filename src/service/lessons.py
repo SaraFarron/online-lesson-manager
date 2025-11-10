@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core import config
@@ -200,3 +201,41 @@ class LessonsService(DBSession):
         self.db.add(new_lesson)
         self.db.commit()
         return cancelled_recurrent_event, new_lesson
+
+
+class Executor(BaseModel):
+    work_start: time
+    work_end: time
+
+
+def get_events_for_day() -> list[Event]:
+    pass
+
+
+def get_executor_by_user_id(db: Session, user_id: int) -> Executor:
+    pass
+
+
+def get_available_slots(start: time, end: time, slot_size: timedelta, events: list[Event], day: date):
+    current_slot = datetime.combine(day, start)
+    end_of_times = datetime.combine(day, end)
+
+    def is_occupied(slot_start: time, slot_end: time):
+        return any(slot_start < occupied.end.time() and slot_end > occupied.start.time() for occupied in events)
+
+    while current_slot + config.LESSON_SIZE <= end_of_times:
+        end_slot = current_slot + config.LESSON_SIZE
+        if not is_occupied(current_slot.time(), end_slot.time()):
+            yield current_slot, end_slot
+        current_slot += slot_size
+
+
+def available_time_for_day(db: Session, user_id: int, day: date) -> list[str]:
+    executor = get_executor_by_user_id(db, user_id)
+    day_events = get_events_for_day(db, user_id, day)
+    
+    free_slots = list(
+        get_available_slots(executor.work_start, executor.work_end, config.SLOT_SIZE, day_events, day),
+    )
+    free_slots.sort(key=lambda slot: slot[0])
+    return [datetime.strftime(slot[0], config.TIME_FMT) for slot in free_slots]
