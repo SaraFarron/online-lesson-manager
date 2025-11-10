@@ -1,9 +1,11 @@
-from abs import Pipeline
-from service.utils import parse_date, parse_time
-from service.lessons import available_time_for_day
-from datetime import time as _time
 from dataclasses import dataclass
+from datetime import time as _time
+
+from abs import Pipeline
+
 from interface.messages import replies
+from service.lessons import available_time_for_day
+from service.utils import parse_date
 
 
 @dataclass
