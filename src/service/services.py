@@ -13,7 +13,7 @@ from core.config import (
 )
 from db.models import CancelledRecurrentEvent, Event, EventHistory, Executor, HomeWork, RecurrentEvent, User
 from db.repositories import DBSession, EventRepo, UserRepo
-from db.schemas import RolesSchema
+from db.schemas import EventSchema, RolesSchema
 from interface.messages import replies
 from service.utils import telegram_checks
 
@@ -208,6 +208,8 @@ class EventService(DBSession):
         for e in recurs + events:
             if e.event_type not in self.LESSON_TYPES or e.user_id != user.id:
                 continue
+            if isinstance(e, EventSchema) and e.end < datetime.now():
+                continue
             result.append(e)
         return result
 
@@ -263,6 +265,8 @@ class EventService(DBSession):
                 weekdays[weekday].append((start.time(), end.time(), re.user_id, re.id, re.event_type))  # len 5
 
         for event in events:
+            if event.event_type == Event.EventTypes.VACATION:
+                continue
             weekday = event.start.weekday()
             if weekday not in weekdays:
                 weekdays[weekday] = []
