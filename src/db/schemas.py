@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from pydantic import BaseModel
 from sqlalchemy import Row
@@ -98,6 +98,16 @@ class CancelledRecurrentEventSchema(BaseSchema):
     break_type: str
     start: datetime
     end: datetime
+    
+    @staticmethod
+    def from_row(row: Row):
+        return CancelledRecurrentEventSchema(
+            id=row.id,
+            event_id=row.event_id,
+            break_type=row.break_type,
+            start=datetime.strptime(row.start, DB_DATETIME),
+            end=datetime.strptime(row.end, DB_DATETIME),
+        )
 
 
 class EventHistorySchema(BaseSchema):
@@ -116,4 +126,16 @@ class EventHistorySchema(BaseSchema):
             event_type=row.event_type,
             event_value=row.event_value,
             author=row.author,
+        )
+
+
+class ExecutorSettingsSchema(BaseModel):
+    work_start: time
+    work_end: time
+    
+    @staticmethod
+    def from_row(row: Row):
+        return ExecutorSettingsSchema(
+            work_start=datetime.strptime(row.work_start, DB_DATETIME),
+            work_end=datetime.strptime(row.work_end, DB_DATETIME),
         )

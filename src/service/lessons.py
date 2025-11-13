@@ -1,9 +1,9 @@
 from datetime import date, datetime, time, timedelta
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core import config
+from db.getters import get_exec_work_hours_by_user_id, get_events_for_day
 from db.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from db.repositories import DBSession
 from db.schemas import UserSchema
@@ -203,19 +203,6 @@ class LessonsService(DBSession):
         return cancelled_recurrent_event, new_lesson
 
 
-class Executor(BaseModel):
-    work_start: time
-    work_end: time
-
-
-def get_events_for_day() -> list[Event]:
-    pass
-
-
-def get_executor_by_user_id(db: Session, user_id: int) -> Executor:
-    pass
-
-
 def get_available_slots(start: time, end: time, slot_size: timedelta, events: list[Event], day: date):
     current_slot = datetime.combine(day, start)
     end_of_times = datetime.combine(day, end)
@@ -231,7 +218,7 @@ def get_available_slots(start: time, end: time, slot_size: timedelta, events: li
 
 
 def available_time_for_day(db: Session, user_id: int, day: date) -> list[str]:
-    executor = get_executor_by_user_id(db, user_id)
+    executor = get_exec_work_hours_by_user_id(db, user_id)
     day_events = get_events_for_day(db, user_id, day)
     
     free_slots = list(
