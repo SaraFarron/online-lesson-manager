@@ -66,7 +66,7 @@ async def action(callback: CallbackQuery, state: FSMContext, db: Session) -> Non
         elif action_type.endswith("end"):
             await state.update_data(mode="end")
         await state.set_state(WorkSchedule.choose_time)
-        await message.answer(replies.CHOOSE_TIME)
+        await message.answer(replies.INPUT_TIME)
     else:
         raise Exception("message", "Неизвестное действие", f"callback.data is unknown: {callback.data}")
 
