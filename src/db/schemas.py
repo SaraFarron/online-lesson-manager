@@ -129,13 +129,14 @@ class EventHistorySchema(BaseSchema):
         )
 
 
-class ExecutorSettingsSchema(BaseModel):
+class ExecutorSettingsSchema(BaseSchema):
     work_start: time
     work_end: time
     
     @staticmethod
     def from_row(row: Row):
         return ExecutorSettingsSchema(
+            id=row.id,
             work_start=datetime.strptime(row.work_start, DB_DATETIME),
             work_end=datetime.strptime(row.work_end, DB_DATETIME),
         )

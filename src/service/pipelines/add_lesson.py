@@ -26,7 +26,6 @@ class AddLessonPipeline(Pipeline):
         available_time = available_time_for_day(self.db, self.user_id, date)
         assert available_time, replies.NO_TIME
         return available_time
-        
     
     def choose_lesson_time(self, time: _time):
         pass

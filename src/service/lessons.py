@@ -3,10 +3,10 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy.orm import Session
 
 from core import config
-from db.getters import get_exec_work_hours_by_user_id, get_events_for_day
+from db.getters import get_cancels, get_events_for_day, get_exec_work_hours_by_user_id, get_recurrent_events
 from db.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from db.repositories import DBSession
-from db.schemas import UserSchema
+from db.schemas import EventSchema, RecurrentEventSchema, UserSchema
 from interface.keyboards import Keyboards
 from service.services import EventService
 
@@ -217,12 +217,44 @@ def get_available_slots(start: time, end: time, slot_size: timedelta, events: li
         current_slot += slot_size
 
 
+def get_recurrent_events_for_day(db: Session, executor_id: int, day: date) -> list[RecurrentEventSchema]:
+    weekday = day.weekday()
+    recurrent_events = get_recurrent_events(db, executor_id)
+    recurrent_events_for_day = [
+        re for re in recurrent_events
+        if re.start.weekday() == weekday
+    ]
+    event_ids = [re.id for re in recurrent_events_for_day]
+    cancels = {cancel.event_id: cancel for cancel in get_cancels(db, event_ids)}
+    final_recurrent_events = []
+    for recurrent_event in recurrent_events_for_day:
+        cancel = cancels.get(recurrent_event.id)
+        if cancel and cancel.start.date() == day:
+            continue
+        final_recurrent_events.append(recurrent_event)
+    return final_recurrent_events
+
+
+def get_day_schedule(db: Session, executor_id: int, day: date) -> list[EventSchema | RecurrentEventSchema]:
+    day_events = get_events_for_day(db, executor_id, day)
+    day_recurrent_events = get_recurrent_events_for_day(db, executor_id, day)
+    all_events = day_events + day_recurrent_events
+    all_events.sort(key=lambda event: event.start)
+    return all_events
+
+
 def available_time_for_day(db: Session, user_id: int, day: date) -> list[str]:
     executor = get_exec_work_hours_by_user_id(db, user_id)
-    day_events = get_events_for_day(db, user_id, day)
+    day_events = get_day_schedule(db, executor.id, day)
     
     free_slots = list(
-        get_available_slots(executor.work_start, executor.work_end, config.SLOT_SIZE, day_events, day),
+        get_available_slots(
+            executor.work_start,
+            executor.work_end,
+            config.SLOT_SIZE,
+            day_events,
+            day,
+        ),
     )
     free_slots.sort(key=lambda slot: slot[0])
     return [datetime.strftime(slot[0], config.TIME_FMT) for slot in free_slots]

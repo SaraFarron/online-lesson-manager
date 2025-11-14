@@ -3,13 +3,13 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from db.schemas import EventSchema, ExecutorSettingsSchema, RecurrentEventSchema, CancelledRecurrentEventSchema
+from db.schemas import CancelledRecurrentEventSchema, EventSchema, ExecutorSettingsSchema, RecurrentEventSchema
 
 
 def get_exec_work_hours_by_user_id(db: Session, user_id: int) -> ExecutorSettingsSchema | None:
     result = db.execute(text(
         """
-            SELECT e.work_start as work_start, e.work_end as work_end
+            SELECT e.work_start as work_start, e.work_end as work_end, id
             FROM executors AS e
             JOIN users AS u ON e.id = u.executor_id
             WHERE u.id = :user_id
