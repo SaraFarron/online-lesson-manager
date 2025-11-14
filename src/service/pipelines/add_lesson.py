@@ -3,6 +3,8 @@ from datetime import time as _time
 
 from abs import Pipeline
 
+from db.getters import get_exec_work_hours_by_user_id
+from db.makers import create_lesson
 from interface.messages import replies
 from service.lessons import available_time_for_day
 from service.utils import parse_date
@@ -23,12 +25,27 @@ class AddLessonPipeline(Pipeline):
         assert date, replies.WRONG_DATE_FMT
         self._day_is_fine(date)
         self.input_date = date
-        available_time = available_time_for_day(self.db, self.user_id, date)
+        
+        executor = get_exec_work_hours_by_user_id(self.db, self.user_id)
+        self.executor_id = executor.id
+        available_time = available_time_for_day(
+            self.db, self.user_id, date, executor.id,
+        )
         assert available_time, replies.NO_TIME
         return available_time
     
     def choose_lesson_time(self, time: _time):
-        pass
+        assert self.executor_id is not None
+        assert self.input_date is not None
+
+        available_time = available_time_for_day(
+            self.db, self.user_id, self.input_date,
+        )
+        assert time.strftime("%H:%M") in available_time, replies.TIME_NOT_AVAILABLE
+        create_lesson(
+            self.db, self.user_id, self.executor_id, self.input_date, time,
+        )
+        return replies.LESSON_ADDED
 
 
 class AddRecurrentLessonPipeline(Pipeline):

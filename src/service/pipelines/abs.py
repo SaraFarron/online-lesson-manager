@@ -12,6 +12,7 @@ class Pipeline:
     db: Session
     user_id: int
     telegram_id: int
+    executor_id: int | None = None
     input_date: date | None = None
     input_time: _time | None = None
     input_weekday: int | None = None  # 0 - Monday, 6 - Sunday

@@ -62,3 +62,16 @@ def get_cancels(db: Session, event_ids: list[int]):
     return [
         CancelledRecurrentEventSchema.from_row(row) for row in result
     ]
+
+
+def get_executor_settings_by_id(db: Session, executor_id: int) -> ExecutorSettingsSchema | None:
+    result = db.execute(
+        text("""
+            select id, work_start, work_end from executors
+            where id = :executor_id
+        """),
+        {"executor_id": executor_id},
+    ).first()
+    if result:
+        return ExecutorSettingsSchema.from_row(result)
+    return None

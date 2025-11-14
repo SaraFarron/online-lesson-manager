@@ -3,7 +3,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy.orm import Session
 
 from core import config
-from db.getters import get_cancels, get_events_for_day, get_exec_work_hours_by_user_id, get_recurrent_events
+from db.getters import get_cancels, get_events_for_day, get_exec_work_hours_by_user_id, get_recurrent_events, get_executor_settings_by_id
 from db.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from db.repositories import DBSession
 from db.schemas import EventSchema, RecurrentEventSchema, UserSchema
@@ -243,10 +243,13 @@ def get_day_schedule(db: Session, executor_id: int, day: date) -> list[EventSche
     return all_events
 
 
-def available_time_for_day(db: Session, user_id: int, day: date) -> list[str]:
-    executor = get_exec_work_hours_by_user_id(db, user_id)
-    day_events = get_day_schedule(db, executor.id, day)
-    
+def available_time_for_day(db: Session, user_id: int, day: date, executor_id: int | None = None) -> list[str]:
+    if executor_id:
+        executor = get_executor_settings_by_id(db, executor_id)
+    else:
+        executor = get_exec_work_hours_by_user_id(db, user_id)
+
+    day_events = get_day_schedule(db, executor.id, day)    
     free_slots = list(
         get_available_slots(
             executor.work_start,
