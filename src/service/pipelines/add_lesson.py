@@ -1,18 +1,16 @@
 from dataclasses import dataclass
 from datetime import time as _time
 
-from abs import Pipeline
-
 from db.getters import get_exec_work_hours_by_user_id
 from db.makers import create_lesson
 from interface.messages import replies
 from service.lessons import available_time_for_day
+from service.pipelines.abs import Pipeline
 from service.utils import parse_date
 
 
 @dataclass
 class AddLessonPipeline(Pipeline):
-    
     def _new_lesson_data_is_fine(self):
         """
         Check if new lesson data:

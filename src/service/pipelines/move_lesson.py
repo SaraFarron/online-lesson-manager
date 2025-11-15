@@ -1,4 +1,4 @@
-from abs import Pipeline
+from service.pipelines.abs import Pipeline
 
 
 class MoveDeleteLessonPipeline(Pipeline):

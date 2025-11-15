@@ -137,6 +137,6 @@ class ExecutorSettingsSchema(BaseSchema):
     def from_row(row: Row):
         return ExecutorSettingsSchema(
             id=row.id,
-            work_start=datetime.strptime(row.work_start, DB_DATETIME),
-            work_end=datetime.strptime(row.work_end, DB_DATETIME),
+            work_start=datetime.strptime(row.start, DB_DATETIME).time(),
+            work_end=datetime.strptime(row.end, DB_DATETIME).time(),
         )
