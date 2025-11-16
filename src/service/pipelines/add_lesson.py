@@ -26,12 +26,10 @@ class AddLessonPipeline(Pipeline):
         
         executor = get_exec_work_hours_by_user_id(self.db, self.user_id)
         self.executor_id = executor.id
-        available_time = available_time_for_day(
+        return available_time_for_day(
             self.db, self.user_id, date, executor.id,
         )
-        assert available_time, replies.NO_TIME
-        return available_time
-    
+
     def choose_lesson_time(self, time: _time):
         assert self.executor_id is not None
         assert self.input_date is not None

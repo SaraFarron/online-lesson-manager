@@ -312,10 +312,10 @@ class TestAddLessonPipeline:
             telegram_id=student_with_teacher.telegram_id,
         )
         
-        pipeline.choose_lesson_date("15.09")
+        lessons = pipeline.choose_lesson_date("15.09")
         lesson_time = time(hour=15, minute=0)
         
-        # Should raise error when trying to create one more lesson
+        assert not lessons  # Should be empty as no slots available
         with pytest.raises(AssertionError):
             pipeline.choose_lesson_time(lesson_time)
 

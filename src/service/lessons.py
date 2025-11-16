@@ -3,7 +3,13 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy.orm import Session
 
 from core import config
-from db.getters import get_cancels, get_events_for_day, get_exec_work_hours_by_user_id, get_recurrent_events, get_executor_settings_by_id
+from db.getters import (
+    get_cancels,
+    get_events_for_day,
+    get_exec_work_hours_by_user_id,
+    get_executor_settings_by_id,
+    get_recurrent_events,
+)
 from db.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from db.repositories import DBSession
 from db.schemas import EventSchema, RecurrentEventSchema, UserSchema
@@ -249,10 +255,15 @@ def available_time_for_day(db: Session, user_id: int, day: date, executor_id: in
     else:
         executor = get_exec_work_hours_by_user_id(db, user_id)
 
-    day_events = get_day_schedule(db, executor.id, day)    
+    day_events = get_day_schedule(db, executor.id, day)
+    lessons_count = sum(1 for event in day_events if event.is_lesson)
+    if lessons_count >= config.MAX_LESSONS_PER_DAY:
+        return []
+    today = datetime.now().date()
+    start = (datetime.now() + config.CHANGE_DELTA).time() if day == today else executor.work_start
     free_slots = list(
         get_available_slots(
-            executor.work_start,
+            start,
             executor.work_end,
             config.SLOT_SIZE,
             day_events,

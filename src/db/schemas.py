@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy import Row
 
 from src.core.config import DB_DATETIME
-from src.db.models import Executor, User
+from src.db.models import Event, Executor, RecurrentEvent, User
 
 
 class BaseSchema(BaseModel):
@@ -53,6 +53,12 @@ class BaseEventSchema(BaseSchema):
     event_type: str
     start: datetime
     end: datetime
+    
+    @property
+    def is_lesson(self) -> bool:
+        return self.event_type in (
+            Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON,
+        )
 
 
 class EventSchema(BaseEventSchema):

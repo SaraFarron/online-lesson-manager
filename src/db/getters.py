@@ -90,7 +90,12 @@ def get_executor_settings_by_id(db: Session, executor_id: int) -> ExecutorSettin
             "start_type": RecurrentEvent.EventTypes.WORK_START,
             "end_type": RecurrentEvent.EventTypes.WORK_END,
         },
-    ).first()
-    if result:
-        return ExecutorSettingsSchema.from_row(result)
-    return None
+    ).all()
+    assert len(result) == 2, "Executor must have both WORK_START and WORK_END recurrent events"
+    for row in result:
+        if row.event_type == RecurrentEvent.EventTypes.WORK_START:
+            work_start = datetime.strptime(row.start, DB_DATETIME).time()
+        elif row.event_type == RecurrentEvent.EventTypes.WORK_END:
+            work_end = datetime.strptime(row.end, DB_DATETIME).time()
+
+    return ExecutorSettingsSchema(id=result[0].id, work_start=work_start, work_end=work_end)
