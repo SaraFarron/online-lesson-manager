@@ -112,7 +112,7 @@ class EventRepo(DBSession):
         cancellations = self.recurrent_events_cancels(events)
         return events, cancellations
 
-    def recurrent_events_for_day(self, executor_id: int, day: date):
+    def recurrent_events_for_day(self, executor_id: int, day: date) -> list[RecurrentEventSchema]:
         events, cancels = self.recurrent_events(executor_id)
         result = []
         for event in events:

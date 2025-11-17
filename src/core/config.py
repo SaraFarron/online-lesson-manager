@@ -64,3 +64,4 @@ DB_DATETIME = "%Y-%m-%d %H:%M:%S.%f"
 SLOT_SIZE = timedelta(minutes=15)
 LESSON_SIZE = timedelta(hours=1)
 MAX_LESSONS_PER_DAY = 6
+MAX_CONSECUTIVE_LESSONS = 2
