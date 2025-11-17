@@ -134,6 +134,8 @@ class EventService(DBSession):
             lessons = [e for e in events if e.event_type in lesson_types]
             if len(lessons) >= MAX_LESSONS_PER_DAY:
                 continue
+            if RecurrentEvent.EventTypes.WEEKEND in [e.event_type for e in events]:
+                continue
             available_time = repo.get_available_slots(start_t, end_t, SLOT_SIZE, events, current_day)
             if available_time:
                 result.append(i)
