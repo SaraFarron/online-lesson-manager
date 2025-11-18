@@ -31,13 +31,14 @@ def create_work_breaks(
         if len(consecutive_group) >= MAX_CONSECUTIVE_LESSONS:
             last_lesson = consecutive_group[-1]
             work_break_start = last_lesson.end
-            all_recurrent = all(isinstance(lesson, RecurrentEvent) for lesson in consecutive_group)
+            # Check if all lessons are recurrent (RecurrentEventSchema)
+            all_recurrent = all(isinstance(lesson, RecurrentEventSchema) for lesson in consecutive_group)
             should_create_break = True
             
             # Check if there's a WORK_END event after the last lesson
             work_end_event = None
             for event in events:
-                if (isinstance(event, RecurrentEvent) and
+                if (isinstance(event, RecurrentEventSchema) and
                         event.event_type == RecurrentEvent.EventTypes.WORK_END and
                         event.start > last_lesson.end):
                     work_end_event = event
