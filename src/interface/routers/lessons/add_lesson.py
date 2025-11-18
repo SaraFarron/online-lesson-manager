@@ -7,14 +7,15 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.core.config import DATE_FMT
-from src.core.middlewares import DatabaseMiddleware
-from src.db.repositories import EventHistoryRepo, UserRepo
-from src.interface.keyboards import Commands, Keyboards
-from src.interface.messages import replies
-from src.service.lessons import LessonsService
-from src.service.services import EventService, UserService
-from src.service.utils import get_callback_arg, parse_date, send_message
+from core.config import DATE_FMT
+from core.middlewares import DatabaseMiddleware
+from db.repositories import EventHistoryRepo, UserRepo
+from interface.keyboards import Commands, Keyboards
+from interface.messages import replies
+from interface.utils import auto_place_work_breaks
+from service.lessons import LessonsService
+from service.services import EventService, UserService
+from service.utils import get_callback_arg, parse_date, send_message
 
 router = Router()
 router.message.middleware(DatabaseMiddleware())
@@ -74,7 +75,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
     date = datetime.strptime(state_data["day"], DATE_FMT) if isinstance(state_data["day"], str) else state_data["day"]
 
-    lesson, created_break = LessonsService(db).create_lesson(
+    lesson = LessonsService(db).create_lesson(
         user_id=user.id,
         executor_id=user.executor_id,
         date=date,
@@ -85,6 +86,5 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     EventHistoryRepo(db).create(user.get_username(), AddLesson.scene, "added_lesson", str(lesson))
     executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{user.get_username()} добавил(а) {lesson}")
-    if created_break:
-        await send_message(executor_tg, f"Автоматически добавлен перерыв на {created_break}")
+    await auto_place_work_breaks(db, user, date, executor_tg)
     await state.clear()
