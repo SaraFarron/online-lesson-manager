@@ -154,6 +154,14 @@ class EventService(DBSession):
         today_start = now + CHANGE_DELTA
         if today_start.time() > start and day == now.date():
             start = today_start.time()
+        if start.minute not in (0, 15, 30, 45):
+            # Round minutes to the nearest quarter hour
+            new_minute = round(start.minute / 15) * 15
+            new_hour = start.hour
+            if new_minute == 60:
+                new_minute = 0
+                new_hour = (new_hour + 1) % 24
+            start = start.replace(hour=new_hour, minute=new_minute, second=0, microsecond=0)
         return start, end
 
     def available_time(self, executor_id: int, day: date):
