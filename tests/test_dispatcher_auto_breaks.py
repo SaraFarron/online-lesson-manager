@@ -184,8 +184,8 @@ class TestScheduleWorkBreak:
             user_id=student_with_teacher.id,
             executor_id=executor_with_schedule.id,
             event_type=RecurrentEvent.EventTypes.LESSON,
-            start=datetime(2025, 9, 15, 10, 0),
-            end=datetime(2025, 9, 15, 11, 0),
+            start=datetime(2025, 9, 8, 10, 0),
+            end=datetime(2025, 9, 8, 11, 0),
             interval=7,  # Weekly
         )
         lesson2 = RecurrentEvent(
