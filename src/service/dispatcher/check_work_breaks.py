@@ -66,6 +66,16 @@ def create_work_breaks(
 ):
     work_breaks = []
     created_work_breaks = {e.start for e in events if e.event_type == RecurrentEvent.EventTypes.WORK_BREAK}
+    filled_time = set()
+    for l in lessons:
+        fills = (
+            l.start,
+            l.start + timedelta(minutes=15),
+            l.start + timedelta(minutes=30),
+            l.start + timedelta(minutes=45),
+        )
+        for fill in fills:
+            filled_time.add(fill)
     i = 0
     
     while i < len(lessons):
@@ -89,6 +99,10 @@ def create_work_breaks(
             
             # If work_break was already created
             if work_break_start in created_work_breaks:
+                should_create_break = False
+            
+            # For some reason i need to check for that
+            if work_break_start in filled_time:
                 should_create_break = False
             
             if should_create_break:

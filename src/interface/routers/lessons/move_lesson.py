@@ -351,5 +351,5 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
     )
     executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
-    await auto_place_work_breaks(db, user, state_data["day"], executor_tg)
+    await auto_place_work_breaks(db, user, state_data["new_day"], executor_tg)
     await state.clear()
