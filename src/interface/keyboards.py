@@ -40,6 +40,7 @@ class Keyboards:
         cls,
         buttons: dict[str, str] | Iterable[tuple[str, str]],
         as_markup: bool=True,
+        adjust: int | None = None,
         ) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
         """Create an inline keyboard."""
         if not buttons:
@@ -51,7 +52,8 @@ class Keyboards:
         else:
             for text, callback_data in buttons:
                 builder.button(text=text, callback_data=callback_data)
-        adjust = ceil(len(buttons) / MAX_BUTTON_ROWS)
+        if adjust is None:
+            adjust = ceil(len(buttons) / MAX_BUTTON_ROWS)
         builder.adjust(adjust if adjust else 1, repeat=True)
         if as_markup:
             return builder.as_markup()
@@ -241,9 +243,9 @@ class Keyboards:
         for event in events:
             duration = datetime.strftime(event.start, TIME_FMT) + " - " + datetime.strftime(event.end, TIME_FMT)
             weekday = WEEKDAY_MAP[event.start.weekday()]["short"]
-            buttons[remove_callback + str(event.id)] = f"Удалить Перерыв {weekday} {duration}"
+            buttons[remove_callback + str(event.id)] = f"Удалить на {weekday} {duration}"
         buttons[add_callback] = "Добавить перерыв"
-        return cls.inline_keyboard(buttons)
+        return cls.inline_keyboard(buttons, adjust=1)
 
     @classmethod
     def send_messages(cls, callback: str) -> InlineKeyboardMarkup | InlineKeyboardBuilder | None:
