@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from core import config
 from core.config import DATE_FMT, DATETIME_FMT, LESSON_SIZE, TIME_FMT, WEEKDAY_MAP
 from core.middlewares import DatabaseMiddleware
+from db.getters import cancel_for_event
 from db.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from db.repositories import EventHistoryRepo, UserRepo
 from interface.keyboards import Commands, Keyboards
@@ -261,11 +262,18 @@ async def type_recur_date(message: Message, state: FSMContext, db: Session) -> N
         await state.set_state(MoveLesson.type_date)
         return
 
-    lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("re", "")))
+    event_id = int(state_data["lesson"].replace("re", ""))
+    lesson = db.get(RecurrentEvent, event_id)
     if day.weekday() != lesson.start.weekday():
         msg = f"В {WEEKDAY_MAP[day.weekday()]['long']} нет этого занятия"
         await message.answer(msg)
         await state.set_state(MoveLesson.type_date)
+        return
+    
+    existing_cancel = cancel_for_event(db, event_id, day)
+    if existing_cancel:
+        await message.answer(replies.LESSON_ALREADY_CANCELED)
+        await state.clear()
         return
 
     if state_data["action"] == "delete":

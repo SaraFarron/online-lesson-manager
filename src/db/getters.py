@@ -79,6 +79,23 @@ def get_cancels(db: Session, event_ids: list[int]):
     ]
 
 
+def cancel_for_event(db: Session, event_id: int, day: date) -> CancelledRecurrentEventSchema | None:
+    day_start = datetime.combine(day, time(hour=0, minute=0))
+    day_end = datetime.combine(day, time(hour=23, minute=59))
+    result = db.execute(
+        text("""
+            select * from event_breaks
+            where event_id = :event_id and start >= :day_start and end <= :day_end
+            order by start
+        """),
+        {"event_id": event_id, "day_start": day_start, "day_end": day_end + timedelta(seconds=1)},
+    ).first()
+    
+    if result:
+        return CancelledRecurrentEventSchema.from_row(result)
+    return None
+
+
 def get_executor_settings_by_id(db: Session, executor_id: int) -> ExecutorSettingsSchema | None:
     result = db.execute(
         text("""
