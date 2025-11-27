@@ -39,7 +39,9 @@ class AdminCommands(Enum):
 
 class Keyboards:
     @classmethod
-    def inline_keyboard(cls, buttons: dict[str, str] | Iterable[tuple[str, str]], as_markup=True):
+    def inline_keyboard(
+        cls, buttons: dict[str, str] | Iterable[tuple[str, str]], as_markup=True, adjust: int | None = None,
+        ):
         """Create an inline keyboard."""
         if not buttons:
             return None
@@ -50,7 +52,8 @@ class Keyboards:
         else:
             for text, callback_data in buttons:
                 builder.button(text=text, callback_data=callback_data)
-        adjust = ceil(len(buttons) / MAX_BUTTON_ROWS)
+        if adjust is None:
+            adjust = ceil(len(buttons) / MAX_BUTTON_ROWS)
         builder.adjust(1 if not adjust else adjust, repeat=True)
         if as_markup:
             return builder.as_markup()
@@ -224,7 +227,7 @@ class Keyboards:
             weekday = WEEKDAY_MAP[start.weekday()]["short"]
             buttons[remove_callback + str(event.id)] = f"Удалить Перерыв {weekday} {duration}"
         buttons[add_callback] = "Добавить перерыв"
-        return cls.inline_keyboard(buttons)
+        return cls.inline_keyboard(buttons, adjust=1)
 
     @classmethod
     def send_messages(cls, callback: str):
