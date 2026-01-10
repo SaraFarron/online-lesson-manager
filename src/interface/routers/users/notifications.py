@@ -33,9 +33,7 @@ class Notifications(StatesGroup):
 @router.message(F.text == AdminCommands.SEND_TO_EVERYONE.value)
 async def notifications_handler(message: Message, state: FSMContext, db: Session) -> None:
     message, user = UserService(db).check_user(message, RolesSchema.TEACHER)
-
     await state.update_data(user_id=user.telegram_id)
-
     await state.set_state(Notifications.notification)
     await message.answer(replies.SEND_NOTIFICATION)
 
@@ -46,14 +44,35 @@ async def notification(message: Message, state: FSMContext, db: Session) -> None
     message, user = UserService(db).check_user_with_id(message, state_data["user_id"], RolesSchema.TEACHER)
 
     students = list(db.query(User).filter(User.executor_id == user.executor_id))
-    receivers = await TelegramMessages().send_complex_message(message, students)
+    receivers, errors = await TelegramMessages().send_complex_message(message, students)
     receivers = receivers if isinstance(receivers, int) else len(receivers)
     if receivers == len(students):
-        await message.answer(f"Message sent to {receivers} students")
+        await message.answer(f"Сообщение отправлено {receivers} ученикам.")
+    if errors:
+        await message.answer("Не удалось отправить сообщение ученикам:\n" + ", ".join(errors))
     await state.clear()
 
 
 class TelegramMessages:
+    async def send_message(self, telegram_id: int, username: str, message: Message):
+        attempt, max_attempts = 0, 3
+        while attempt < max_attempts:
+            try:
+                if message.content_type == ContentType.TEXT:
+                    await self.send_text_message(telegram_id, message.text)
+                elif message.content_type == ContentType.PHOTO:
+                    await self.send_photo_message(telegram_id, message.photo[-1].file_id, message.caption)
+                elif message.content_type == ContentType.VIDEO:
+                    await self.send_video_message(telegram_id, message.video.file_id, message.caption)
+                else:
+                    await message.answer(replies.UNSUPPORTED_MEDIA_TYPE)
+                return True
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed to send message to {username}: {e}")
+                attempt += 1
+                await asyncio.sleep(1)  # Wait before retrying
+        return False
+    
     async def send_complex_message(self, message: Message, students: list):
         # Handle media groups
         if message.media_group_id:
@@ -68,19 +87,14 @@ class TelegramMessages:
             return 0
 
         # Handle single messages
-        receivers = []
+        receivers, errors = [], []
         for student in students:
-            receivers.append(student.username)
-
-            if message.content_type == ContentType.TEXT:
-                await self.send_text_message(student.telegram_id, message.text)
-            elif message.content_type == ContentType.PHOTO:
-                await self.send_photo_message(student.telegram_id, message.photo[-1].file_id, message.caption)
-            elif message.content_type == ContentType.VIDEO:
-                await self.send_video_message(student.telegram_id, message.video.file_id, message.caption)
+            success = await self.send_message(student.telegram_id, student.username, message)
+            if success:
+                receivers.append(student.username)
             else:
-                await message.answer(replies.UNSUPPORTED_MEDIA_TYPE)
-        return receivers
+                errors.append(student.username)
+        return receivers, errors
 
     async def send_media_group(self, telegram_id: int, media_messages: list[Message]) -> None:
         """Send a media group (album) to a user"""
