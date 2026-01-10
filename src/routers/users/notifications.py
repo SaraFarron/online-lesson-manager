@@ -1,12 +1,11 @@
 import asyncio
-from typing import List
 
 import aiohttp
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ContentType, Message, InputMediaPhoto, InputMediaVideo
+from aiogram.types import ContentType, Message
 from sqlalchemy.orm import Session
 from src.keyboards import AdminCommands
 from src.messages import replies
@@ -52,14 +51,35 @@ async def notification(message: Message, state: FSMContext, db: Session) -> None
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
     students = list(db.query(User).filter(User.executor_id == user.executor_id))
-    receivers = await TelegramMessages().send_complex_message(message, students)
+    receivers, errors = await TelegramMessages().send_complex_message(message, students)
     receivers = receivers if isinstance(receivers, int) else len(receivers)
     if receivers == len(students):
-        await message.answer(f"Message sent to {receivers} students")
+        await message.answer(f"Сообщение отправлено {receivers} ученикам.")
+    if errors:
+        await message.answer("Не удалось отправить сообщение ученикам:\n" + ", ".join(errors))
     await state.clear()
 
 
 class TelegramMessages:
+    async def send_message(self, telegram_id: int, username: str, message: Message):
+        attempt, max_attempts = 0, 3
+        while attempt < max_attempts:
+            try:
+                if message.content_type == ContentType.TEXT:
+                    await self.send_text_message(telegram_id, message.text)
+                elif message.content_type == ContentType.PHOTO:
+                    await self.send_photo_message(telegram_id, message.photo[-1].file_id, message.caption)
+                elif message.content_type == ContentType.VIDEO:
+                    await self.send_video_message(telegram_id, message.video.file_id, message.caption)
+                else:
+                    await message.answer(replies.UNSUPPORTED_MEDIA_TYPE)
+                return True
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed to send message to {username}: {e}")
+                attempt += 1
+                await asyncio.sleep(1)  # Wait before retrying
+        return False
+    
     async def send_complex_message(self, message: Message, students: list):
         # Handle media groups
         if message.media_group_id:
@@ -74,23 +94,17 @@ class TelegramMessages:
             return 0
 
         # Handle single messages
-        receivers = []
+        receivers, errors = [], []
         for student in students:
-            receivers.append(student.username)
-
-            if message.content_type == ContentType.TEXT:
-                await self.send_text_message(student.telegram_id, message.text)
-            elif message.content_type == ContentType.PHOTO:
-                await self.send_photo_message(student.telegram_id, message.photo[-1].file_id, message.caption)
-            elif message.content_type == ContentType.VIDEO:
-                await self.send_video_message(student.telegram_id, message.video.file_id, message.caption)
+            success = await self.send_message(student.telegram_id, student.username, message)
+            if success:
+                receivers.append(student.username)
             else:
-                await message.answer(replies.UNSUPPORTED_MEDIA_TYPE)
-        return receivers
+                errors.append(student.username)
+        return receivers, errors
 
-    async def send_media_group(self, telegram_id: int, media_messages: List[Message]) -> None:
+    async def send_media_group(self, telegram_id: int, media_messages: list[Message]) -> None:
         """Send a media group (album) to a user"""
-
         # Prepare media group
         media_group = []
         combined_caption = None
@@ -130,7 +144,7 @@ class TelegramMessages:
                     print(f"Failed to send media group: {response}")
                 return response
 
-    async def process_media_group(self, group_id: str, students: List):
+    async def process_media_group(self, group_id: str, students: list):
         """Process a complete media group for all students"""
         if group_id not in media_group_storage:
             return 0
