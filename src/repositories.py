@@ -275,7 +275,7 @@ class EventRepo(Repo):
                 current_day += timedelta(days=7)
             events = self.recurrent_events_for_day(executor_id, current_day)
             lessons = [e for e in events if e[3] in lesson_types]
-            if len(lessons) >= MAX_LESSONS_PER_DAY:
+            if len(lessons) >= MAX_LESSONS_PER_DAY and current_day.weekday() != 6:
                 continue
             start = datetime.combine(current_day, start_t)
             end = datetime.combine(current_day, end_t)
@@ -288,7 +288,7 @@ class EventRepo(Repo):
         events = self.events_for_day(executor_id, day) + self.recurrent_events_for_day(executor_id, day)
         lesson_types = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON)
         lessons = [e for e in events if e[3] in lesson_types]
-        if len(lessons) >= MAX_LESSONS_PER_DAY:
+        if len(lessons) >= MAX_LESSONS_PER_DAY and day.weekday() != 6:
             return []
 
         if self.vacations_day(executor_id, day):
