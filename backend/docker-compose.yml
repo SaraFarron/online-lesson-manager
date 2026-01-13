@@ -1,0 +1,65 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/lesson_manager
+      - APP_ENV=development
+      - DEBUG=true
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount source code for development hot-reload
+      - .:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - app-network
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=lesson_manager
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # Utility service for running migrations
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/lesson_manager
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: alembic upgrade head
+    networks:
+      - app-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
