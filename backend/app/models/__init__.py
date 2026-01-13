@@ -1,3 +1,3 @@
-from app.models.lesson import Lesson
+from app.models.users import TeacherSettings, User
 
-__all__ = ["Lesson"]
+__all__ = ["User", "TeacherSettings"]

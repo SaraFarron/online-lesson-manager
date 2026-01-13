@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.db.base import Base
 
 # Import all models so Alembic can detect them
-from app.models import Lesson  # noqa: F401
+from app.models import TeacherSettings, User  # noqa: F401
 
 # Alembic Config object
 config = context.config
