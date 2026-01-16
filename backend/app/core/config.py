@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     # Database
     database_url: str
 
+    # Security
+    service_key: str
+
+    # Date Time formats
+    datetime_format: str = "%Y-%m-%d %H:%M:%S"
+    date_format: str = "%Y-%m-%d"
+    time_format: str = "%H:%M:%S"
+
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"
