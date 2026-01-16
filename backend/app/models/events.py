@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.models.users import User
+    from app.models import User
 
 
 class Event(Base):
@@ -42,6 +42,9 @@ class Event(Base):
         foreign_keys=[student_id],
         back_populates="events_as_student",
     )
+
+    class Types:
+        LESSON = "lesson"
 
 
 class RecurrentEvent(Base):
