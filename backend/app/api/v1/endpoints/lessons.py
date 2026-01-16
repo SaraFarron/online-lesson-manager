@@ -27,7 +27,8 @@ async def get_lessons_by_weekday(
 ) -> list[LessonResponse]:
     """Get lessons for a specific day of the week (0=Monday, 6=Sunday)."""
     service = LessonService(db)
-    return await service.get_lessons_by_weekday(day_of_week)
+    lessons = await service.get_lessons_by_weekday(day_of_week, user)
+    return [LessonResponse.model_validate(event) for event in lessons]
 
 
 @router.post("/recurrent", response_model=LessonResponse, status_code=status.HTTP_201_CREATED)

@@ -23,9 +23,9 @@ class LessonService:
         date = datetime.strptime(day, settings.date_format).date()
         return await self.repository.get_by_day(date, user)
 
-    async def get_lessons_by_weekday(self, day_of_week: int) -> list[Event]:
+    async def get_lessons_by_weekday(self, day_of_week: int, user: User) -> list[Event]:
         """Get lessons for a specific day of the week (0=Monday, 6=Sunday)."""
-        return await self.repository.get_by_weekday(day_of_week)
+        return await self.repository.get_by_weekday(day_of_week, user)
 
     async def create_recurrent_lesson(self, lesson_data: LessonCreate) -> Event:
         """Create a new recurrent lesson."""

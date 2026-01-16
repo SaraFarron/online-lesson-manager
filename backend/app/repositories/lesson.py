@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import extract, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Event, User
@@ -36,7 +36,7 @@ class LessonRepository(BaseRepository[Event]):
         """Get lessons for a specific day."""
         day_start = datetime.combine(day, datetime.min.time())
         day_end = datetime.combine(day, datetime.max.time())
-        if user.role == "teacher":
+        if user.role == User.Roles.TEACHER:
             query = select(Event).where(
                 Event.title == Event.Types.LESSON,
                 Event.start >= day_start,
@@ -53,8 +53,22 @@ class LessonRepository(BaseRepository[Event]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_by_weekday(self, day_of_week: int) -> list[Event]:
+    async def get_by_weekday(self, day_of_week: int, user: User) -> list[Event]:
         """Get lessons for a specific day of the week (0=Monday, 6=Sunday)."""
-        query = select(Event).where()
+        # Adjust cringe to SQL DOW (0=Sunday, 1=Monday, ..., 6=Saturday)
+        sql_dow = day_of_week + 1 if day_of_week < 6 else 0
+
+        if user.role == User.Roles.TEACHER:
+            query = select(Event).where(
+                Event.title == Event.Types.LESSON,
+                extract('dow', Event.start) == sql_dow,
+                Event.teacher_id == user.id,
+            )
+        else:
+            query = select(Event).where(
+                Event.title == Event.Types.LESSON,
+                extract('dow', Event.start) == sql_dow,
+                Event.student_id == user.id,
+            )
         result = await self.session.execute(query)
         return list(result.scalars().all())

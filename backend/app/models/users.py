@@ -84,6 +84,11 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
+    class Roles:
+        STUDENT = "student"
+        TEACHER = "teacher"
+        ADMIN = "admin"
+
 
 class TeacherSettings(Base):
     """Teacher settings model."""
