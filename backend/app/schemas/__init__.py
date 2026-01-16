@@ -1,3 +1,3 @@
-from app.schemas.lesson import LessonCreate, LessonResponse, LessonUpdate
+from app.schemas.lesson import LessonCreate, LessonMove, LessonResponse
 
-__all__ = ["LessonCreate", "LessonResponse", "LessonUpdate"]
+__all__ = ["LessonCreate", "LessonResponse", "LessonMove"]
