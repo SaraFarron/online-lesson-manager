@@ -22,9 +22,10 @@ class AuthService:
 
     def form_response(self, token: UserToken, user: User) -> dict:
         """Form the authorized user response dictionary."""
+        expires_in = round((token.expires_at - datetime.now(UTC)).total_seconds())
         return {
             "accessToken": token.token,
-            "expiresIn": token.expires_at.isoformat(),
+            "expiresIn": expires_in,
             "user": {
                 "id": user.id,
                 "name": user.username or user.full_name or user.telegram_id or f"User {user.id}",

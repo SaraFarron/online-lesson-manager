@@ -8,6 +8,8 @@ from fastapi.security import HTTPBearer
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.core.exceptions import register_exception_handlers
+from app.core.middleware import ResponseWrapperMiddleware
 from app.db.session import async_session_factory
 from app.services.cleanup import cleanup_expired_tokens
 
@@ -61,6 +63,12 @@ def create_app() -> FastAPI:
         redoc_url=f"{settings.api_v1_prefix}/redoc",
         lifespan=lifespan,
     )
+
+    # Register exception handlers
+    register_exception_handlers(app)
+
+    # Response wrapper middleware (add first so it runs last)
+    app.add_middleware(ResponseWrapperMiddleware)
 
     # CORS middleware - configure for your frontend
     app.add_middleware(

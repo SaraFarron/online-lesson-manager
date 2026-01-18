@@ -16,4 +16,4 @@ async def login(db: DatabaseSession, token: str) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
         )
-    return {"success": True, "data": response}
+    return response
