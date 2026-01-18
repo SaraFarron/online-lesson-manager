@@ -300,3 +300,10 @@ All configuration is done via environment variables:
 ## License
 
 MIT
+
+
+# Migration shortcut
+```sh
+docker compose run --rm --user root api alembic revision --autogenerate -m "add_tokens_and_history"
+docker compose run --rm api alembic upgrade head
+```

@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,9 +8,26 @@ from fastapi.security import HTTPBearer
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.db.session import async_session_factory
+from app.services.cleanup import cleanup_expired_tokens
+
+logger = logging.getLogger(__name__)
 
 # Security scheme for Swagger UI
 bearer_scheme = HTTPBearer()
+
+
+async def periodic_cleanup(interval_seconds: int = 3600):
+    """Run cleanup task periodically."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            async with async_session_factory() as session:
+                deleted = await cleanup_expired_tokens(session)
+                if deleted > 0:
+                    logger.info(f"Cleaned up {deleted} expired tokens")
+        except Exception as e:
+            logger.error(f"Error during token cleanup: {e}")
 
 
 @asynccontextmanager
@@ -18,9 +37,19 @@ async def lifespan(app: FastAPI):
 
     Add startup logic before yield, cleanup logic after yield.
     """
-    # Startup
+    # Startup - start background cleanup task
+    cleanup_task = asyncio.create_task(periodic_cleanup())
+    logger.info("Started periodic token cleanup task")
+
     yield
-    # Shutdown
+
+    # Shutdown - cancel cleanup task
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("Stopped periodic token cleanup task")
 
 
 def create_app() -> FastAPI:

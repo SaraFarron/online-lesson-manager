@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, DateTime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -26,7 +26,7 @@ class Base(DeclarativeBase):
 
     # Common columns for all models
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
         default=utc_now, onupdate=utc_now
     )

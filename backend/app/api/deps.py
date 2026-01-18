@@ -1,14 +1,16 @@
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
 from app.db.session import async_session_factory
-from app.models import User
+from app.models import User, UserToken
 
 # Security scheme for Bearer token authentication
 bearer_scheme = HTTPBearer()
@@ -62,15 +64,24 @@ async def get_current_user(
     """
     token = credentials.credentials
 
-    # Find user by token
-    result = await db.execute(select(User).where(User.token == token))
-    user = result.scalar_one_or_none()
+    # Find valid (non-expired) token with user
+    result = await db.execute(
+        select(UserToken)
+        .where(
+            UserToken.token == token,
+            UserToken.expires_at > datetime.now(UTC),  # Check expiration
+        )
+        .options(joinedload(UserToken.user))
+    )
+    user_token = result.scalar_one_or_none()
 
-    if not user:
+    if not user_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
+
+    user = user_token.user
 
     if not user.is_active:
         raise HTTPException(

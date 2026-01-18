@@ -1,10 +1,10 @@
 from datetime import datetime, time
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Time
+from sqlalchemy import DateTime, ForeignKey, String, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base, utc_now
+from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models import Event, RecurrentEvent
@@ -25,8 +25,14 @@ class User(Base):
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(50), default="student")
     is_active: Mapped[bool] = mapped_column(default=True)
-    token: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    # UserToken field
+    token: Mapped[str | None] = relationship(
+        "UserToken",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    invite_code: Mapped[str | None] = mapped_column(String(25), unique=True, nullable=True)
 
     # Self-referential relationship: user's teacher
     teacher: Mapped["User | None"] = relationship(
@@ -90,6 +96,23 @@ class User(Base):
         ADMIN = "admin"
 
 
+class UserToken(Base):
+    """User token model."""
+
+    __tablename__ = "user_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    # Relationship back to User
+    user: Mapped["User"] = relationship("User")
+
+
 class TeacherSettings(Base):
     """Teacher settings model."""
 
@@ -123,7 +146,6 @@ class UserHistory(Base):
     )
     action: Mapped[str] = mapped_column(String(255), nullable=False)
     action_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=utc_now)
 
     # Relationship back to User
     user: Mapped["User"] = relationship("User", back_populates="history")
