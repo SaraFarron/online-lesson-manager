@@ -1,0 +1,28 @@
+# Docker Compose example for Calendar App
+# Usage: docker-compose up -d
+
+services:
+  calendar-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: calendar-app
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    # Optional: Add healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# Alternative: Use pre-built image (if published to registry)
+# services:
+#   calendar-app:
+#     image: your-registry/calendar-app:latest
+#     container_name: calendar-app
+#     ports:
+#       - "8080:80"
+#     restart: unless-stopped
