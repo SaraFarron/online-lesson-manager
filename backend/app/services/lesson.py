@@ -39,7 +39,7 @@ class LessonService:
         self, skip: int = 0, limit: int = 100
     ) -> list[Event]:
         """Get all lessons with pagination."""
-        return await self.repository.get_all(skip=skip, limit=limit)
+        return await self.repository.get_by_user(skip=skip, limit=limit)
 
     async def get_published_lessons(
         self, skip: int = 0, limit: int = 100

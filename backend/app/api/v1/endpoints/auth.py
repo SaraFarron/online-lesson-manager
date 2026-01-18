@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import DatabaseSession
-from app.services.auth import AuthService
+from app.services import AuthService
 
 router = APIRouter()
 

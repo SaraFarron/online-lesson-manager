@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Path, status
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.schemas.lesson import LessonCreate, LessonMove, LessonResponse
-from app.services.lesson import LessonService
+from app.services import LessonService
 
 router = APIRouter()
 
