@@ -30,3 +30,15 @@ class RecurrentEventRepository(BaseRepository[RecurrentEvent]):
 
     def __init__(self, session: AsyncSession):
         super().__init__(RecurrentEvent, session)
+
+    async def get_by_user(self, user: User) -> list[RecurrentEvent]:
+        if user.role == User.Roles.TEACHER:
+            query = select(RecurrentEvent).where(
+                RecurrentEvent.teacher_id == user.id,
+            )
+        else:
+            query = select(RecurrentEvent).where(
+                RecurrentEvent.student_id == user.id
+            )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())

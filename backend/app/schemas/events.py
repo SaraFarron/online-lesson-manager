@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from pydantic import BaseModel
 
-from app.models import User
+from app.models import Event, RecurrentEvent, User
 
 
 class EventResponse(BaseModel):
@@ -14,6 +14,17 @@ class EventResponse(BaseModel):
     startTime: str
     duration: int
     isRecurring: bool
+
+    @classmethod
+    def from_models(cls, event: Event | RecurrentEvent):
+        return EventResponse(
+            id=event.id,
+            title=event.title,
+            date=event.start.date().isoformat(),
+            startTime=event.start.time().isoformat(),
+            duration=round((event.end - event.start).total_seconds() / 60),
+            isRecurring=isinstance(event, RecurrentEvent),
+        )
 
 
 class EventsTotalResponse(BaseModel):
@@ -32,7 +43,7 @@ class EventCreate(BaseModel):
     duration: int
     isRecurring: bool = False
 
-    def to_dict(self, user: User) -> dict:
+    def to_dict(self, user: User) -> dict[str, datetime | str | int | None]:
         """Convert EventCreate to dictionary."""
         start = datetime.strptime(self.date + " " + self.startTime, "%Y-%m-%d %H:%M")
         end = start + timedelta(minutes=self.duration)
