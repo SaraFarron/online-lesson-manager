@@ -29,17 +29,17 @@ async def get_event_by_id(
 ) -> EventResponse:
     """
     Get event by ID.
-    
+
     - Odd IDs (1, 3, 5, ...) are regular events
     - Even IDs (2, 4, 6, ...) are recurrent events
     """
     service = EventService(db)
-    
+
     if event_id % 2 == 1:  # Odd ID = regular event
         event = await service.get_event_by_id(event_id, user)
     else:  # Even ID = recurrent event
         event = await service.get_recurrent_event_by_id(event_id, user)
-    
+
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
