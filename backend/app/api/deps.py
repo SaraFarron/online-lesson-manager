@@ -64,14 +64,20 @@ async def get_current_user(
     """
     token = credentials.credentials
 
-    # Find valid (non-expired) token with user
+    # Find valid (non-expired) token with user and eagerly load relationships needed for working_hours()
     result = await db.execute(
         select(UserToken)
         .where(
             UserToken.token == token,
             UserToken.expires_at > datetime.now(UTC),  # Check expiration
         )
-        .options(joinedload(UserToken.user))
+        .options(
+            joinedload(UserToken.user)
+            .joinedload(User.teacher_settings),  # For teachers
+            joinedload(UserToken.user)
+            .joinedload(User.teacher)  # For students
+            .joinedload(User.teacher_settings),  # Teacher's settings
+        )
     )
     user_token = result.scalar_one_or_none()
 

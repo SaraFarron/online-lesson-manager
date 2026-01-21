@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Event, RecurrentEvent, User
+from app.models import Event, RecurrentCancels, RecurrentEvent, User
 from app.repositories.base import BaseRepository
 
 
@@ -40,5 +40,20 @@ class RecurrentEventRepository(BaseRepository[RecurrentEvent]):
             query = select(RecurrentEvent).where(
                 RecurrentEvent.student_id == user.id
             )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+
+class RecurrentCancelsRepository(BaseRepository[RecurrentCancels]):
+    """Repository for RecurrentEvent cancellation-specific database operations."""
+
+    def __init__(self, session: AsyncSession):
+        super().__init__(RecurrentCancels, session)
+
+    async def get_cancels_by_recurrent_events(self, recurrent_event_ids: list[int]) -> list[RecurrentCancels]:
+        """Get all cancellations for specific recurrent events."""
+        query = select(RecurrentCancels).where(
+            RecurrentCancels.id.in_(recurrent_event_ids),
+        )
         result = await self.session.execute(query)
         return list(result.scalars().all())

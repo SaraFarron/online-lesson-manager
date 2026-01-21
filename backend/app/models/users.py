@@ -95,6 +95,19 @@ class User(Base):
         TEACHER = "teacher"
         ADMIN = "admin"
 
+    def working_hours(self) -> tuple[time, time]:
+        """Return the working hours of the teacher."""
+        if self.role == User.Roles.TEACHER and self.teacher_settings:
+            start = self.teacher_settings.work_start
+            end = self.teacher_settings.work_end
+        elif self.role == self.Roles.STUDENT and self.teacher and self.teacher.teacher_settings:
+            start = self.teacher.teacher_settings.work_start
+            end = self.teacher.teacher_settings.work_end
+        else:
+            start = time(9, 0)
+            end = time(17, 0)
+        return start, end
+
 
 class UserToken(Base):
     """User token model."""
