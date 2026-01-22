@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models import Event, RecurrentEvent, User
 
@@ -40,7 +40,7 @@ class EventCreate(BaseModel):
     title: str
     date: str
     startTime: str
-    duration: int
+    duration: int = Field(ge=5)
     isRecurring: bool = False
 
     def to_dict(self, user: User) -> dict[str, datetime | str | int | None]:

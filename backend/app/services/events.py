@@ -1,4 +1,3 @@
-from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,9 +80,10 @@ class EventService:
         recurrent_cancels = await self.cancels_repo.get_cancels_by_recurrent_events(
             [event.id for event in recurrent_events]
         )
-        schedule: dict[str, list[Event | RecurrentEvent]] = defaultdict(list)
+        schedule: dict[str, list[Event | RecurrentEvent]] = {}
         current_date = start_date
         while current_date <= end_date:
+            schedule[current_date.isoformat()] = []  # We need empty dates also
             for event in events:
                 if event.start.date() == current_date:
                     schedule[current_date.isoformat()].append(event)
@@ -121,6 +121,7 @@ class EventService:
 
     async def get_free_slots(self, user: User, day: date) -> list[tuple[time, time]]:
         """Get free time slots for a specific day."""
+        # TODO time ranges only work in 60 minute duration and 0 minute start times
         events = await self.get_schedule(user, day)
         start, end = user.working_hours()
         return self._filter_out_occupied_slots(events, start, end)

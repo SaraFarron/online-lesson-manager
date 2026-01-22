@@ -56,5 +56,11 @@ async def create_event(
 ):
     """Create a new event."""
     service = EventService(db)
-    created_event = await service.create_event(event, user)
+    try:
+        created_event = await service.create_event(event, user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     return [EventResponse.from_models(created_event)]

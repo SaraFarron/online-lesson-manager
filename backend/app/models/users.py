@@ -91,9 +91,9 @@ class User(Base):
     )
 
     class Roles:
-        STUDENT = "student"
-        TEACHER = "teacher"
-        ADMIN = "admin"
+        STUDENT: str = "student"
+        TEACHER: str = "teacher"
+        ADMIN: str = "admin"
 
     def working_hours(self) -> tuple[time, time]:
         """Return the working hours of the teacher."""

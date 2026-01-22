@@ -1,5 +1,6 @@
 from app.schemas.events import EventCreate, EventResponse, EventsTotalResponse
 from app.schemas.lesson import LessonCreate, LessonMove, LessonResponse
+from app.schemas.schedule import TimeRangeResponse
 from app.schemas.user import AuthorizedUserResponse
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "EventResponse",
     "EventsTotalResponse",
     "EventCreate",
+    "TimeRangeResponse",
 ]

@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +34,7 @@ class BaseRepository(Generic[ModelType]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def create(self, obj_data: dict) -> ModelType:
+    async def create(self, obj_data: dict[str, Any]) -> ModelType:
         """Create a new record."""
         db_obj = self.model(**obj_data)
         self.session.add(db_obj)
@@ -43,7 +43,7 @@ class BaseRepository(Generic[ModelType]):
         return db_obj
 
     async def update(
-        self, db_obj: ModelType, update_data: dict
+        self, db_obj: ModelType, update_data: dict[str, Any]
     ) -> ModelType:
         """Update an existing record."""
         for field, value in update_data.items():
