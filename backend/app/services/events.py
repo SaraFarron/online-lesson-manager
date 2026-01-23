@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,15 +43,24 @@ class EventService:
 
     async def create_event(self, event: EventCreate, user: User) -> Event | RecurrentEvent:
         """Create a new event."""
+        def is_overlapping(free_slots: list[tuple[time, time]], candidate: tuple[time, time]):
+            for start, end in free_slots:
+                if candidate[0] >= start and candidate[1] <= end:
+                    return False
+            return True
+
         event_dict = event.to_dict(user)
         if event.isRecurring:
             # TODO check for overlapping with other events
             created_event = await self.recurrent_repo.create(event_dict)
         else:
-            event_start = datetime.strptime(event.date + " " + event.startTime, "%Y-%m-%d %H:%M")
+            event_start = datetime.strptime(
+                " ".join([event.date, event.startTime]),
+                "%Y-%m-%d %H:%M"
+            )
             event_end = event_start + timedelta(minutes=event.duration)
             free_slots = await self.get_free_slots(user, event_start.date())
-            if (event_start.time(), event_end.time()) not in free_slots:
+            if is_overlapping(free_slots, (event_start.time(), event_end.time())):
                 raise ValueError("The requested time slot is occupied.")
             created_event = await self.repository.create(event_dict)
         return created_event
@@ -111,17 +120,21 @@ class EventService:
         free_slots: list[tuple[time, time]] = []
         current_start = start
         while current_start < end:
-            current_end = (datetime.combine(date.min, current_start) + timedelta(hours=1)).time()
+            current_end = (datetime.combine(date.min, current_start) + timedelta(minutes=5)).time()
             if current_end > end:
                 current_end = end
             if not is_occupied(current_start, current_end):
-                free_slots.append((current_start, current_end))
+                if free_slots and free_slots[-1][1] == current_start:
+                    free_slots[-1] = (free_slots[-1][0], current_end)
+                else:
+                    free_slots.append((current_start, current_end))
             current_start = current_end
         return free_slots
 
     async def get_free_slots(self, user: User, day: date) -> list[tuple[time, time]]:
         """Get free time slots for a specific day."""
-        # TODO time ranges only work in 60 minute duration and 0 minute start times
+        if day < datetime.now(UTC).date():
+            return []
         events = await self.get_schedule(user, day)
         start, end = user.working_hours()
         return self._filter_out_occupied_slots(events, start, end)
@@ -134,7 +147,10 @@ class EventService:
         free_slots_range: dict[str, list[tuple[time, time]]] = {}
         start_work, end_work = user.working_hours()
         for day_str, events in schedule.items():
-            free_slots = self._filter_out_occupied_slots(events, start_work, end_work)
-            free_slots_range[day_str] = free_slots
+            if datetime.strptime(day_str, "%Y-%m-%d") < datetime.now():
+                free_slots_range[day_str] = []
+            else:
+                free_slots = self._filter_out_occupied_slots(events, start_work, end_work)
+                free_slots_range[day_str] = free_slots
         return free_slots_range
 

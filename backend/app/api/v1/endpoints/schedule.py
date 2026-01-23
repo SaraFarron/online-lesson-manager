@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -14,12 +14,11 @@ router = APIRouter()
 async def schedule_for_day(
     db: DatabaseSession,
     user: CurrentUser,
-    day: Annotated[str, Query(regex=r"^\d{4}-\d{2}-\d{2}$")],
+    day: Annotated[date, Query()],
 ) -> list[EventResponse]:
     """Get schedule of events for a specific day."""
     service = EventService(db)
-    day_date = datetime.strptime(day, "%Y-%m-%d").date()
-    events = await service.get_schedule(user, day_date)
+    events = await service.get_schedule(user, day)
     return [EventResponse.from_models(event) for event in events]
 
 
@@ -27,14 +26,12 @@ async def schedule_for_day(
 async def schedule_for_range(
     db: DatabaseSession,
     user: CurrentUser,
-    start_day: Annotated[str, Query(regex=r"^\d{4}-\d{2}-\d{2}$")],
-    end_day: Annotated[str, Query(regex=r"^\d{4}-\d{2}-\d{2}$")],
+    start_day: Annotated[date, Query()],
+    end_day: Annotated[date, Query()],
 ) -> dict[str, list[EventResponse]]:
     """Get schedule of events for a range of dates."""
     service = EventService(db)
-    start_date = datetime.strptime(start_day, "%Y-%m-%d").date()
-    end_date = datetime.strptime(end_day, "%Y-%m-%d").date()
-    schedule = await service.get_schedule_range(user, start_date, end_date)
+    schedule = await service.get_schedule_range(user, start_day, end_day)
     return {date: [EventResponse.from_models(event) for event in events] for date, events in schedule.items()}
 
 
@@ -42,12 +39,11 @@ async def schedule_for_range(
 async def get_free_slots(
     db: DatabaseSession,
     user: CurrentUser,
-    day: Annotated[str, Query(regex=r"^\d{4}-\d{2}-\d{2}$")],
+    day: Annotated[date, Query()],
 ) -> list[TimeRangeResponse]:
     """Get free time slots for a specific day."""
     service = EventService(db)
-    day_date = datetime.strptime(day, "%Y-%m-%d").date()
-    free_slots = await service.get_free_slots(user, day_date)
+    free_slots = await service.get_free_slots(user, day)
     return [
         TimeRangeResponse(
             start=slot_start.isoformat(), end=slot_end.isoformat()
@@ -59,14 +55,12 @@ async def get_free_slots(
 async def get_free_slots_range(
     db: DatabaseSession,
     user: CurrentUser,
-    start_day: Annotated[str, Query(regex=r"^\d{4}-\d{2}-\d{2}$")],
-    end_day: Annotated[str, Query(regex=r"^\d{4}-\d{2}-\d{2}$")],
+    start_day: Annotated[date, Query()],
+    end_day: Annotated[date, Query()],
 ) -> dict[str, list[TimeRangeResponse]]:
     """Get free time slots for a range of dates."""
     service = EventService(db)
-    start_date = datetime.strptime(start_day, "%Y-%m-%d").date()
-    end_date = datetime.strptime(end_day, "%Y-%m-%d").date()
-    free_slots = await service.get_free_slots_range(user, start_date, end_date)
+    free_slots = await service.get_free_slots_range(user, start_day, end_day)
     return {
         date: [
             TimeRangeResponse(start=slot_start.isoformat(), end=slot_end.isoformat()) for slot_start, slot_end in slots
