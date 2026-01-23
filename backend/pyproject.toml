@@ -22,6 +22,7 @@ pytest = "^7.4.4"
 pytest-asyncio = "^0.23.3"
 httpx = "^0.26.0"
 ruff = "^0.1.13"
+psycopg2-binary = "^2.9.11"
 
 [build-system]
 requires = ["poetry-core"]
@@ -34,4 +35,5 @@ select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
 testpaths = ["tests"]
