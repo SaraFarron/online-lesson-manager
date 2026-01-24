@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import CurrentUser, DatabaseSession
-from app.schemas import EventCreate, EventResponse, EventsTotalResponse
+from app.schemas import EventCreate, EventResponse, EventsTotalResponse, EventUpdate
 from app.services import EventService
 
 router = APIRouter()
@@ -64,3 +64,24 @@ async def create_event(
             detail=str(e),
         )
     return [EventResponse.from_models(created_event)]
+
+
+@router.put("{event_id}", response_model=EventResponse)
+async def update_event(
+    db: DatabaseSession,
+    user: CurrentUser,
+    event: EventUpdate,
+    event_id: int,
+) -> EventResponse:
+    """Update an existing event."""
+    service = EventService(db)
+    if event_id % 2 == 1:  # Odd ID = regular event
+        updated_event = await service.update_event(event, user, event_id)
+    else:  # Even ID = recurrent event
+        updated_event = await service.update_recurrent_event(event, user, event_id)
+    if updated_event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event with id {event_id} does not exist",
+        )
+    return EventResponse.from_models(updated_event)

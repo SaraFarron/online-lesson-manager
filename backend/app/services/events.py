@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Event, RecurrentEvent, User
 from app.repositories import EventRepository, RecurrentCancelsRepository, RecurrentEventRepository
 from app.schemas import EventCreate
+from app.schemas.events import EventUpdate
 
 
 class EventService:
@@ -40,6 +41,20 @@ class EventService:
             if user.role == User.Roles.STUDENT and event.student_id == user.id:
                 return event
         return None
+
+    async def update_event(self, event: EventUpdate, user: User, event_id: int):
+        existing_event = await self.repository.get_by_id(event_id)
+        if not existing_event:
+            return None
+        event_dict = event.to_dict(user)
+        return await self.repository.update(existing_event, event_dict)
+
+    async def update_recurrent_event(self, event: EventUpdate, user: User, event_id: int):
+        existing_event = await self.recurrent_repo.get_by_id(event_id)
+        if not existing_event:
+            return None
+        event_dict = event.to_dict(user)
+        return await self.recurrent_repo.update(existing_event, event_dict)
 
     async def create_event(self, event: EventCreate, user: User) -> Event | RecurrentEvent:
         """Create a new event."""

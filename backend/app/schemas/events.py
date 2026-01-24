@@ -34,9 +34,7 @@ class EventsTotalResponse(BaseModel):
     total: int
 
 
-class EventCreate(BaseModel):
-    """Schema for creating a new Event."""
-
+class BaseEvent(BaseModel):
     title: str
     date: str
     startTime: str
@@ -59,3 +57,12 @@ class EventCreate(BaseModel):
             res["interval_days"] = 7
             res["interval_end"] = None
         return res
+
+
+
+class EventCreate(BaseEvent):
+    """Schema for creating a new Event."""
+
+
+class EventUpdate(BaseEvent):
+    """Schema for updating an existing Event."""
