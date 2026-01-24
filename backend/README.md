@@ -304,6 +304,6 @@ MIT
 
 # Migration shortcut
 ```sh
-docker compose run --rm --user root api alembic revision --autogenerate -m "add_tokens_and_history"
+docker compose run --rm --user root api alembic revision --autogenerate -m "add_notifications"
 docker compose run --rm api alembic upgrade head
 ```

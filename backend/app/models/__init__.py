@@ -1,4 +1,14 @@
 from app.models.events import Event, RecurrentCancels, RecurrentEvent
+from app.models.internal import Notification
 from app.models.users import TeacherSettings, User, UserHistory, UserToken
 
-__all__ = ["User", "TeacherSettings", "Event", "RecurrentEvent", "UserToken", "UserHistory", "RecurrentCancels"]
+__all__ = [
+    "User",
+    "TeacherSettings",
+    "Event",
+    "RecurrentEvent",
+    "UserToken",
+    "UserHistory",
+    "RecurrentCancels",
+    "Notification",
+]
