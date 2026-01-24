@@ -42,6 +42,20 @@ class EventService:
                 return event
         return None
 
+    async def delete_event(self, event_id: int, user: User):
+        event = await self.repository.get_by_id(event_id)
+        if event and (event.student_id == user.id or event.teacher_id == user.id):
+            await self.repository.delete(event)
+            return True
+        return False
+
+    async def delete_recurrent_event(self, event_id: int, user: User):
+        event = await self.recurrent_repo.get_by_id(event_id)
+        if event and (event.student_id == user.id or event.teacher_id == user.id):
+            await self.recurrent_repo.delete(event)
+            return True
+        return False
+
     async def update_event(self, event: EventUpdate, user: User, event_id: int):
         existing_event = await self.repository.get_by_id(event_id)
         if not existing_event:

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
+from fastapi.responses import JSONResponse
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.schemas import EventCreate, EventResponse, EventsTotalResponse, EventUpdate
@@ -85,3 +86,23 @@ async def update_event(
             detail=f"Event with id {event_id} does not exist",
         )
     return EventResponse.from_models(updated_event)
+
+
+@router.delete("{event_id}")
+async def delete_event(
+    db: DatabaseSession,
+    user: CurrentUser,
+    event_id: int,
+):
+    """Delete an existing event."""
+    service = EventService(db)
+    if event_id % 2 == 1:  # Odd ID = regular event
+        success = await service.delete_event(event_id, user)
+    else:  # Even ID = recurrent event
+        success = await service.delete_recurrent_event(event_id, user)
+    if success:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Event with id {event_id} does not exist or you don't own it"
+    )
