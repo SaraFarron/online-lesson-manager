@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Response, status
-from fastapi.responses import JSONResponse
 
 from app.api.deps import CurrentUser, DatabaseSession
 from app.schemas import EventCreate, EventResponse, EventsTotalResponse, EventUpdate
