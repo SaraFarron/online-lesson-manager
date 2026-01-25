@@ -3,8 +3,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models import UserSettings
-
 
 class UserResponse(BaseModel):
     """Schema for User response."""
@@ -39,9 +37,8 @@ class UserSettingsResponse(BaseModel):
     """Schema for UserSettings response."""
     morning_notification: time | None = None
 
-    @classmethod
-    def from_models(cls, user_settings: UserSettings):
-        return UserSettingsResponse(morning_notification=user_settings.morning_notification)
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 class UserSettingsUpdate(BaseModel):

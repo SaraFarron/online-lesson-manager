@@ -20,7 +20,7 @@ async def get_user_settings(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User has no settings yet"
         )
-    return UserSettingsResponse.from_models(user_settings)
+    return UserSettingsResponse.model_validate(user_settings)
 
 
 @router.put("/settings", response_model=UserSettingsResponse)
@@ -32,4 +32,4 @@ async def update_user_settings(
     """Endpoint for updating user settings."""
     service = UserSettingsService(db)
     updated_settings = await service.update_user_settings(user, user_settings)
-    return UserSettingsResponse.from_models(updated_settings)
+    return UserSettingsResponse.model_validate(updated_settings)
