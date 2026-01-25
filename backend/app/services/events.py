@@ -4,8 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Event, RecurrentEvent, User
 from app.repositories import EventRepository, RecurrentCancelsRepository, RecurrentEventRepository
-from app.schemas import EventCreate
-from app.schemas.events import EventUpdate
+from app.schemas import EventCreate, EventUpdate
 
 
 class EventService:

@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User, UserToken
+from app.models import User, UserSettings, UserToken
 from app.repositories.base import BaseRepository
 
 
@@ -40,3 +40,15 @@ class UserTokenRepository(BaseRepository[UserToken]):
     def generate_unique_token() -> str:
         """Generate a unique token string."""
         return str(uuid.uuid4())
+
+
+class UserSettingsRepository(BaseRepository[UserSettings]):
+    """Repository for UserSettings model."""
+    def __init__(self, session: AsyncSession):
+        super().__init__(UserSettings, session)
+
+    async def get_by_user_id(self, user_id: int):
+        """Get UserSettings by user id."""
+        query = select(UserSettings).where(UserSettings.user_id == user_id)
+        result = await self.session.execute(query)
+        return result.scalars().first()

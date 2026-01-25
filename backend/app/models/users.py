@@ -147,6 +147,20 @@ class TeacherSettings(Base):
     )
 
 
+class UserSettings(Base):
+    """User settings model."""
+
+    __tablename__ = "user_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    morning_notification: Mapped[time] = mapped_column(Time, nullable=True)
+
+
 class UserHistory(Base):
     """User history model."""
 

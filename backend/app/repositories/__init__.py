@@ -1,7 +1,7 @@
 from app.repositories.base import BaseRepository
 from app.repositories.events import EventRepository, RecurrentCancelsRepository, RecurrentEventRepository
 from app.repositories.internal import NotificationRepository
-from app.repositories.user import UserRepository, UserTokenRepository
+from app.repositories.user import UserRepository, UserTokenRepository, UserSettingsRepository
 
 __all__ = [
     "BaseRepository",
@@ -11,4 +11,5 @@ __all__ = [
     "RecurrentEventRepository",
     "RecurrentCancelsRepository",
     "NotificationRepository",
+    "UserSettingsRepository",
 ]
