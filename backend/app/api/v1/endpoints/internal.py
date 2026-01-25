@@ -1,7 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import DatabaseSession, ServiceKey
-from app.schemas import NotificationResponse
+from app.schemas import NotificationResponse, NotificationUpdate
 from app.services import NotificationService
 
 router = APIRouter()
@@ -16,3 +16,21 @@ async def get_pending_notifications(
     service = NotificationService(db)
     notifications = await service.get_all_pending_notifications()
     return [NotificationResponse.model_validate(n) for n in notifications]
+
+
+@router.patch("/notifications/{notification_id}", response_model=NotificationResponse)
+async def update_notification_status(
+    db: DatabaseSession,
+    x_service_key: ServiceKey,
+    notification_id: int,
+    notification: NotificationUpdate,
+):
+    """Update notification status."""
+    service = NotificationService(db)
+    updated_notification = await service.update_status(notification_id, notification)
+    if updated_notification is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Notification with id {notification_id} does not exist."
+        )
+    return NotificationResponse.model_validate(updated_notification)

@@ -2,8 +2,9 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Notification
+from app.models import Notification, NotificationStatus
 from app.repositories import NotificationRepository
+from app.schemas import NotificationUpdate
 from app.services.users import UserSettingsService
 
 
@@ -16,6 +17,12 @@ class NotificationService:
 
     async def get_all_pending_notifications_day(self, day: date):
         return await self.repository.get_pending_day(day)
+
+    async def update_status(self, instance_id: int, instance_data: NotificationUpdate):
+        instance = await self.repository.get_by_id(instance_id)
+        if not instance:
+            return None
+        return await self.repository.update(instance, instance_data.model_dump())
 
 
 async def create_notifications_task(session: AsyncSession):
@@ -32,7 +39,7 @@ async def create_notifications_task(session: AsyncSession):
             telegram_user_id=user_settings.user.telegram_id,
             message="Сегодня уроки",
             scheduled_at=schedule_time,
-            status=Notification.Statuses.PENDING,
+            status=NotificationStatus.PENDING.value,
         ))
     session.add_all(new_notifications)
     await session.commit()
