@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +14,14 @@ class NotificationRepository(BaseRepository[Notification]):
     async def get_pending(self):
         query = select(Notification).where(
             Notification.status == Notification.Statuses.PENDING,
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def get_pending_day(self, day: date):
+        query = select(Notification).where(
+            Notification.status == Notification.Statuses.PENDING,
+            Notification.scheduled_at == day
         )
         result = await self.session.execute(query)
         return list(result.scalars().all())

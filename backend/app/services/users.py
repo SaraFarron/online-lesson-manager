@@ -18,3 +18,6 @@ class UserSettingsService:
         if existing_settings:
             return await self.repository.update(existing_settings, user_settings_dict)
         return await self.repository.create(user_settings_dict)
+
+    async def get_all_active_user_settings(self):
+        return await self.repository.get_all_active()

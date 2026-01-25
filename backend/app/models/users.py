@@ -90,6 +90,14 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
+    # User settings
+    settings: Mapped["UserSettings"] = relationship(
+        "UserSettings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
     class Roles:
         STUDENT: str = "student"
         TEACHER: str = "teacher"
@@ -159,6 +167,7 @@ class UserSettings(Base):
         nullable=False,
     )
     morning_notification: Mapped[time] = mapped_column(Time, nullable=True)
+    user: Mapped["User"] = relationship("User", back_populates="settings")
 
 
 class UserHistory(Base):

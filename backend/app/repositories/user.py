@@ -52,3 +52,11 @@ class UserSettingsRepository(BaseRepository[UserSettings]):
         query = select(UserSettings).where(UserSettings.user_id == user_id)
         result = await self.session.execute(query)
         return result.scalars().first()
+
+    async def get_all_active(self):
+        query = select(UserSettings).join(User).where(
+            UserSettings.morning_notification.is_not(None),
+            User.telegram_id.is_not(None),
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())

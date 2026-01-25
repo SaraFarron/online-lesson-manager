@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.middleware import ResponseWrapperMiddleware
 from app.db.session import async_session_factory
 from app.services.cleanup import cleanup_expired_tokens
+from app.services.internal import create_notifications_task
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,21 @@ async def periodic_cleanup(interval_seconds: int = 3600):
                     logger.info(f"Cleaned up {deleted} expired tokens")
         except Exception as e:
             logger.error(f"Error during token cleanup: {e}")
+
+
+async def create_notifications(interval_seconds: int = 3600):
+    """Run Create Notifications task periodically."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        if datetime.now(UTC).hour != 1:
+            continue
+        try:
+            async with async_session_factory() as session:
+                created = await create_notifications_task(session)
+                if created > 0:
+                    logger.info(f"Created {created} new notifications")
+        except Exception as e:
+            logger.error(f"Error during notifications creation: {e}")
 
 
 @asynccontextmanager
