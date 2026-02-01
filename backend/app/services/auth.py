@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User, UserToken
 from app.repositories import UserRepository, UserTokenRepository
+from app.schemas import UserCreate
 
 
 class AuthService:
@@ -12,7 +14,7 @@ class AuthService:
     def __init__(self, session: AsyncSession):
         self.repository = UserRepository(session)
 
-    async def authenticate_user(self, invite_code: str) -> dict | None:
+    async def authenticate_user(self, invite_code: str) -> dict[str, Any] | None:
         """Authenticate a user by their invite code."""
         user = await self.repository.get_by_invite_code(invite_code)
         if not user:
@@ -20,7 +22,7 @@ class AuthService:
         token = await self.generate_token(user.id)
         return self.form_response(token, user)
 
-    def form_response(self, token: UserToken, user: User) -> dict:
+    def form_response(self, token: UserToken, user: User) -> dict[str, Any]:
         """Form the authorized user response dictionary."""
         expires_in = round((token.expires_at - datetime.now(UTC)).total_seconds())
         return {
@@ -39,3 +41,17 @@ class AuthService:
             "token": UserTokenRepository.generate_unique_token(),
             "expires_at": datetime.now(UTC) + timedelta(hours=1),
         })
+
+    async def register_user(self, user_data: UserCreate) -> User:
+        """Register a new user."""
+        if not user_data.telegram_id and not user_data.code:
+            raise ValueError("Either telegram_id or code must be provided for registration.")
+        new_user = await self.repository.create({
+            "telegram_id": user_data.telegram_id,
+            "telegram_username": user_data.telegram_username,
+            "telegram_full_name": user_data.telegram_full_name,
+            "teacher_id": user_data.teacher_id,
+            "code": user_data.code,
+            "role": user_data.role,
+        })
+        return new_user

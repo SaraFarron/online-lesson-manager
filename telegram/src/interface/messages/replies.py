@@ -30,6 +30,7 @@ BOT_DESCRIPTION = """
 """
 CANCELED = "Операция отменена"
 CANCEL = CANCELED
+REGISTRATION_FAILED = "Регистрация не удалась, проверьте правильность кода приглашения или обратитесь к учителю."
 
 # General
 WRONG_DATE_FMT = f"Неверный формат даты, допустимые: {html.code('ДД ММ')} или {html.code('ГГГГ ММ ДД')}"

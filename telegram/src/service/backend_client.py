@@ -5,7 +5,7 @@ from circuitbreaker import CircuitBreakerError
 from pydantic import BaseModel
 
 from src.core.logger import logger
-from src.service.cache import cache, UserCacheData, Event, Slot
+from src.service.cache import cache, UserCacheData, Event, Slot, UserSettings
 
 """
 Planned cache structure WIP
@@ -28,23 +28,29 @@ Planned cache structure WIP
 
 
 class BackendClient:
-    async def update_cache(self, teacher_id: int):
+    async def update_cache(self, user_id: int):
+        """Updates cache from backend."""
         try:
             async with ClientSession() as session:
-                schedule = await session.get(f"/teachers/{teacher_id}/schedule")
+                schedule = await session.get(f"/teachers/{user_id}/schedule")
                 # 3. Сохраняем в кэш
-                cache.set_schedule(teacher_id, schedule)
-                return ScheduleData(**schedule.json())
+                cache.set_schedule(schedule)
+                return UserCacheData(**schedule.json())
         except CircuitBreakerError:
             return None
         except ClientError:
             return None
     
-    async def get_cache(self, teacher_id: int):
-        cached = cache.get_schedule(teacher_id)
+    async def get_cache(self):
+        """
+        Get schedule from cache.
+        Update cache if needed.
+        Returns stale if cannot update.
+        """
+        cached = cache.get_cache()
         if cached is not None:
             return cached
-        cached = await self.update_cache(teacher_id)
+        cached = await self.update_cache()
         if cached is not None:
             return cached
         stale = cache.schedule_cache  # Даже если TTL истёк
@@ -52,43 +58,50 @@ class BackendClient:
             logger.warning("Returning stale schedule data")
             return stale
         return None
-    
-    async def set_cache(self, teacher_id: int, data: UserCacheData):
+
+    # def get_user_schedule_week(self, user_id: int, start: date):
+        # cached = self.get_user_schedule(user_id)
+        # if cached is None:
+        #     return None
+        # schedule = {}
+        # end = start + timedelta(days=7)
+        # while start <= end:
+        #     schedule[start] = self.get_user_schedule_day(start)
+        #     start += timedelta(days=1)
+        # return schedule
+
+    async def set_cache(self, user_id: int, data: UserCacheData):
         # Request on backend api
         # Update cache
-        cache[teacher_id] = data
+        cache[user_id] = data
+       
+    async def get_user_schedule(self, telegram_id: int):
+        cached = await self.get_cache()
+        if cached is not None and telegram_id in cached:
+            return UserCacheData(**cached[telegram_id]).schedule
+        return None
+
+    async def get_teacher(self, code: str):
+        return cache.get_teacher(code)
+
+    async def get_user(self, telegram_id: int):
+        cached = await self.get_cache()
+        if cached is not None and telegram_id in cached:
+            return UserCacheData(**cached[telegram_id]).user_settings
+        return None
     
-    async def create_event(self, teacher_id: int, event: Event):
-        cached = await self.get_cache(teacher_id)
-        cached.events.append(CacheEvent(
-            type=event.type,
-            user=event.user_id,
-            start=event.start.isoformat(),
-            end=event.end.isoformat(),
-        ))
-        await self.set_cache(teacher_id, cached)
-    
-    async def update_event(self, teacher_id: int, event_id: int, event: Event):
-        cached = await self.get_cache(teacher_id)
-        old_event = next([e for e in cached.events if e.id == event_id])
-        cached.events.remove(old_event)
-        cached.events.append(CacheEvent(
-            type=event.type,
-            user=event.user_id,
-            start=event.start.isoformat(),
-            end=event.end.isoformat(),
-        ))
-        await self.set_cache(teacher_id, cached)
-    
-    async def delete_event(self, teacher_id: int, event_id: int):
-        cached = await self.get_cache(teacher_id)
-        event = next([e for e in cached.events if e.id == event_id])
-        cached.events.remove(event)
-        await self.set_cache(teacher_id, cached)
-    
-    async def create_cancellation(self, teacher_id: int, cancel: Event):
-        pass
-    
-    async def get_schedule(self, teacher_id: int):
-        return await self.get_cache(teacher_id)
+    async def create_user(
+        self, telegram_id: int, full_name: str, username: str, role: str,
+    ) -> UserSettings | None:
+        async with ClientSession() as session:
+            response = await session.post("/users/create", json={
+                "telegram_id": telegram_id,
+                "telegram_username": username,
+                "telegram_full_name": full_name,
+                "role": role,
+            })
+            if response.status == 201:
+                user_data = await response.json()
+                return UserSettings(**user_data)
+            return None
 

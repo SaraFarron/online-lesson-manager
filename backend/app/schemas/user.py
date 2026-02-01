@@ -40,8 +40,16 @@ class UserSettingsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-
 class UserSettingsUpdate(BaseModel):
     """Schema for UserSettings update object."""
     morning_notification: time | None = None
 
+
+class UserCreate(BaseModel):
+    """Schema for User creation object."""
+    telegram_id: int | None = None
+    telegram_username: str | None = None
+    telegram_full_name: str | None = None
+    teacher_id: int
+    code: str | None = None
+    role: str
