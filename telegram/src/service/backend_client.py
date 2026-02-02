@@ -1,38 +1,19 @@
-from datetime import datetime, time
-
 from aiohttp import ClientError, ClientSession
 from circuitbreaker import CircuitBreakerError
-from pydantic import BaseModel
 
 from src.core.logger import logger
-from src.service.cache import cache, UserCacheData, Event, Slot, UserSettings
-
-"""
-Planned cache structure WIP
-{
-    "user_id": {
-        "free_slots": {
-            "01.01.2000": [["10:00", "14:00"], ["15:00", "17:00"]]  // all on month forward
-        },
-        "recurrent_free_slots": {
-            "0": [["10:00", "14:00"], ["15:00", "17:00"]],
-            "1": []
-        },
-        "schedule": {
-            "01.01.2000": [{"type": "lesson", "start": "13:00"}]  // all on week forward
-        },
-        "user_settings": {}
-    }
-}
-"""
+from src.service.cache import UserCacheData, UserSettings, cache
 
 
 class BackendClient:
+    api_url = "http://0.0.0.0:8000/api/v1"
+    
+    
     async def update_cache(self, user_id: int):
         """Updates cache from backend."""
         try:
             async with ClientSession() as session:
-                schedule = await session.get(f"/teachers/{user_id}/schedule")
+                schedule = await session.get(f"/internal/schedule/{user_id}/schedule")
                 # 3. Сохраняем в кэш
                 cache.set_schedule(schedule)
                 return UserCacheData(**schedule.json())

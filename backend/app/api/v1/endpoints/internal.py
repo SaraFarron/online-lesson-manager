@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import DatabaseSession, ServiceKey
-from app.schemas import NotificationResponse, NotificationUpdate
-from app.services import NotificationService
+from app.schemas import NotificationResponse, NotificationUpdate, TelegramCacheResponse
+from app.services import BotCacheService, NotificationService
 
 router = APIRouter()
 
@@ -34,3 +34,14 @@ async def update_notification_status(
             detail=f"Notification with id {notification_id} does not exist."
         )
     return NotificationResponse.model_validate(updated_notification)
+
+
+@router.get("/schedule/{teacher_id}", response_model=dict[int, TelegramCacheResponse])
+async def get_user_schedule(
+    db: DatabaseSession,
+    x_service_key: ServiceKey,
+    user_id: int,
+):
+    """Get schedule for a specific teacher."""
+    service = BotCacheService(db)
+    return await service.get_user_schedule(user_id)

@@ -1,7 +1,26 @@
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time
 
 from cachetools import TTLCache
 from pydantic import BaseModel
+
+"""
+Planned cache structure WIP
+{
+    "user_id": {
+        "free_slots": {
+            "01.01.2000": [["10:00", "14:00"], ["15:00", "17:00"]]  // all on month forward
+        },
+        "recurrent_free_slots": {
+            "0": [["10:00", "14:00"], ["15:00", "17:00"]],
+            "1": []
+        },
+        "schedule": {
+            "01.01.2000": [{"type": "lesson", "start": "13:00"}]  // all on week forward
+        },
+        "user_settings": {}
+    }
+}
+"""
 
 
 class Event(BaseModel):

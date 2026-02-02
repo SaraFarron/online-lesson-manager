@@ -1,7 +1,7 @@
 from app.schemas.events import EventCreate, EventResponse, EventsTotalResponse, EventUpdate
-from app.schemas.internal import NotificationResponse, NotificationUpdate
+from app.schemas.internal import NotificationResponse, NotificationUpdate, TelegramCacheResponse
 from app.schemas.schedule import TimeRangeResponse
-from app.schemas.user import AuthorizedUserResponse, UserCreate, UserSettingsResponse, UserSettingsUpdate, UserResponse
+from app.schemas.user import AuthorizedUserResponse, UserCreate, UserResponse, UserSettingsResponse, UserSettingsUpdate
 
 __all__ = [
     "AuthorizedUserResponse",
@@ -16,4 +16,5 @@ __all__ = [
     "NotificationUpdate",
     "UserCreate",
     "UserResponse",
+    "TelegramCacheResponse",
 ]

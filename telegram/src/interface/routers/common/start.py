@@ -3,7 +3,6 @@ from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
 
 from src.core.middlewares import DatabaseMiddleware
-from src.db.models import User
 from src.interface.messages import replies
 from src.service import StartService
 from src.service.utils import telegram_checks
@@ -20,7 +19,8 @@ async def start_handler(message: Message, command: CommandObject) -> None:
     service = StartService(message)
     user = await service.get_user()
     if user is None:
-        code = command.args
+        # code = command.args
+        code = "test"
         user = await service.register(code)
 
     if user is None:

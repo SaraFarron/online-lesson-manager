@@ -182,3 +182,9 @@ class EventService:
                 free_slots_range[day_str] = free_slots
         return free_slots_range
 
+    async def get_recurrent_free_slots(self, user: User, weekday: int) -> list[tuple[time, time]]:
+        """Get free time slots for a specific weekday (0=Monday, 6=Sunday)."""
+        user_events = await self.recurrent_repo.get_by_user(user)
+        recurrent_events = [event for event in user_events if event.start.weekday() == weekday]
+        start, end = user.working_hours()
+        return self._filter_out_occupied_slots(recurrent_events, start, end)
