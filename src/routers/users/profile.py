@@ -123,4 +123,4 @@ async def confirm(callback: CallbackQuery, state: FSMContext, db: Session) -> No
     UserRepo(db).delete(student_id)
     await message.answer(replies.USER_DELETED)
     await state.clear()
-    EventHistoryRepo(db).create(user.usernmae, Profile.scene, "deleted_user", str(student_id))
+    EventHistoryRepo(db).create(user.username, Profile.scene, "deleted_user", str(student_id))
