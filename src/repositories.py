@@ -12,7 +12,14 @@ from src.core.config import (
     TIME_FMT,
     WEEKDAY_MAP,
 )
-from src.models import CancelledRecurrentEvent, Event, EventHistory, Executor, RecurrentEvent, User
+from src.models import (
+    CancelledRecurrentEvent,
+    Event,
+    EventHistory,
+    Executor,
+    RecurrentEvent,
+    User,
+)
 
 HISTORY_MAP = {
     "help": "запросил помощь",
@@ -308,9 +315,39 @@ class EventRepo(Repo):
             result.append(slot[0])
         return result
 
+    def recurrent_events_for_weekday_without_cancels(self, executor_id: int, weekday: int, reference_date: date):
+        """Get all recurrent events for a specific weekday, ignoring cancellations.
+        
+        This is used when checking if a NEW recurrent event can be added, because
+        even if a recurrent event is cancelled for one specific date, it still exists
+        for all other occurrences on that weekday.
+        """
+        events = self._recurrent_events_executor(executor_id)
+        result = []
+        for event in events:
+            start_dt, end_dt, user_id, event_type, interval, interval_end, event_id = event
+            start_dt = datetime.strptime(start_dt, DB_DATETIME)
+            end_dt = datetime.strptime(end_dt, DB_DATETIME)
+
+            # Skip if event recurrence has ended before our reference date
+            if interval_end and interval_end.date() < reference_date:
+                continue
+
+            # Check if this event occurs on the target weekday
+            if start_dt.weekday() == weekday and interval > 0:
+                # Create an occurrence on the reference date to represent this event
+                event_time = start_dt.time()
+                event_start = datetime.combine(reference_date, event_time)
+                event_end = event_start + (end_dt - start_dt)
+                result.append((event_start, event_end, user_id, event_type, False))
+        
+        return result
+
     def available_time_weekday(self, executor_id: int, weekday: int):
         start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
         current_day = start_of_week + timedelta(days=weekday)
+
+        # mb use recurrent_events_for_weekday_without_cancels here
         events = self.recurrent_events_for_day(executor_id, current_day)
 
         start, end = self.get_work_start(executor_id)[0], self.get_work_end(executor_id)[0]
