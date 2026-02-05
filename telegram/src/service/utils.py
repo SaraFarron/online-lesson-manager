@@ -4,9 +4,7 @@ from os import getenv
 import aiohttp
 from aiogram.types import CallbackQuery, Message
 
-from src.core.config import SHORT_DATE_FMT, TIME_FMT
-from src.db.models import Event, RecurrentEvent, User
-from src.db.schemas import RecurrentEventSchema
+from src.core.config import SHORT_DATE_FMT
 
 MAX_HOUR = 23
 
@@ -26,14 +24,14 @@ def telegram_checks(event: Message | CallbackQuery):
     return event.message
 
 
-def parse_date(text: str, in_future: bool=False):
+def parse_date(text: str, in_future: bool = False):
     for fmt in (
-            SHORT_DATE_FMT,
-            SHORT_DATE_FMT.replace(".", " "),
-            SHORT_DATE_FMT.replace(".", "-"),
-            "%Y-%m-%d",
-            "%Y %m %d",
-            "%Y.%m.%d",
+        SHORT_DATE_FMT,
+        SHORT_DATE_FMT.replace(".", " "),
+        SHORT_DATE_FMT.replace(".", "-"),
+        "%Y-%m-%d",
+        "%Y %m %d",
+        "%Y.%m.%d",
     ):
         try:
             date = datetime.strptime(text, fmt).date()
@@ -76,22 +74,3 @@ async def send_message(telegram_id: int, message: str) -> None:
         response = await resp.text()
     if '"ok":false' in response:
         print(f"tg_id:{telegram_id}\nmessage:{message}\nresponse:{response}")
-
-
-def day_schedule_text(lessons: list, users_map: dict, user: User):
-    result = []
-    event_type_lessons = (Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON)
-    for lesson in lessons:
-        if lesson.event_type in event_type_lessons or lesson.event_type == RecurrentEvent.EventTypes.LESSON:
-            if not isinstance(lesson, RecurrentEventSchema) and lesson.event_type == Event.EventTypes.LESSON:
-                lesson_str = f"Разовый урок в {datetime.strftime(lesson.start, TIME_FMT)}"
-            else:
-                lesson_str = f"{lesson.event_type} в {datetime.strftime(lesson.start, TIME_FMT)}"
-        elif lesson.event_type == RecurrentEvent.EventTypes.WORK_BREAK:
-            lesson_str = f"{lesson.event_type} в {datetime.strftime(lesson.start, TIME_FMT)}"
-        else:
-            continue
-        if user.role == User.Roles.TEACHER:
-            lesson_str += f" у {users_map[lesson.user_id]}"
-        result.append(lesson_str)
-    return result

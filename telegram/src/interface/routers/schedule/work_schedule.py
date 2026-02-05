@@ -18,7 +18,8 @@ from src.service.services import EventService, UserService
 from src.service.utils import get_callback_arg, parse_time
 
 router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 router.callback_query.middleware(DatabaseMiddleware())
 
 class WorkSchedule(StatesGroup):

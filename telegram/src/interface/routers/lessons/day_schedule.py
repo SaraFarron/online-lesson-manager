@@ -6,13 +6,14 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
-from core.middlewares import DatabaseMiddleware
-from interface.keyboards import Commands
 from service.schedule import ScheduleService
 from service.services import UserService
+from src.core.middlewares import DatabaseMiddleware
+from src.interface.keyboards import Commands
 
 router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 router.callback_query.middleware(DatabaseMiddleware())
 
 class DaySchedule(StatesGroup):

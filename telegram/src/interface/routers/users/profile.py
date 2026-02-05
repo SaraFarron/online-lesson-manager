@@ -19,7 +19,8 @@ from src.service.services import HISTORY_MAP, UserService
 from src.service.utils import get_callback_arg
 
 router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 router.callback_query.middleware(DatabaseMiddleware())
 
 

@@ -17,7 +17,8 @@ from src.interface.messages import replies
 from src.service.services import UserService
 
 router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 router.callback_query.middleware(DatabaseMiddleware())
 # Temporary storage for media groups
 media_group_storage = {}

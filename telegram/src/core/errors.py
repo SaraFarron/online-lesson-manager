@@ -3,8 +3,8 @@ from aiogram.filters.exception import ExceptionTypeFilter
 from aiogram.types.error_event import ErrorEvent
 from aiogram.types.message import Message
 
-from core.logger import logger
-from interface.messages import errors as err_msgs
+from src.core.logger import logger
+from src.interface.messages import errors as err_msgs
 
 
 def add_errors(dp: Dispatcher):

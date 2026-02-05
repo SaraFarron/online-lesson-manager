@@ -13,7 +13,8 @@ from src.service.services import UserService
 
 COMMAND = "help"
 router: Router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 
 
 @router.message(Command(COMMAND))

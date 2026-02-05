@@ -16,7 +16,8 @@ from src.service.services import EventService, UserRepo
 from src.service.utils import day_schedule_text, get_callback_arg, telegram_checks
 
 router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 router.callback_query.middleware(DatabaseMiddleware())
 
 class WeekSchedule(StatesGroup):

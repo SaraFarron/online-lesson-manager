@@ -5,19 +5,20 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup
 from aiogram.types import CallbackQuery, Message
+from db.repositories import EventHistoryRepo, UserRepo
 from sqlalchemy.orm import Session
 
-from core.middlewares import DatabaseMiddleware
-from db.repositories import EventHistoryRepo, UserRepo
-from interface.keyboards import Commands, Keyboards
-from interface.messages import replies
-from interface.utils import auto_place_work_breaks
 from service.lessons import LessonsService
 from service.services import EventService, UserService
 from service.utils import get_callback_arg, send_message
+from src.core.middlewares import DatabaseMiddleware
+from src.interface.keyboards import Commands, Keyboards
+from src.interface.messages import replies
+from src.interface.utils import auto_place_work_breaks
 
 router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 router.callback_query.middleware(DatabaseMiddleware())
 
 class AddRecurrentLesson(StatesGroup):

@@ -2,13 +2,13 @@ from aiogram import Router, html
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
 
-from src.core.middlewares import DatabaseMiddleware
 from src.interface.messages import replies
 from src.service import StartService
 from src.service.utils import telegram_checks
 
 router: Router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 
 
 @router.message(CommandStart(deep_link=True))

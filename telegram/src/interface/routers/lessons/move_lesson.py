@@ -5,23 +5,24 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy.orm import Session
-
-from core import config
-from core.config import DATE_FMT, DATETIME_FMT, LESSON_SIZE, TIME_FMT, WEEKDAY_MAP
-from core.middlewares import DatabaseMiddleware
 from db.getters import cancel_for_event
 from db.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from db.repositories import EventHistoryRepo, UserRepo
-from interface.keyboards import Commands, Keyboards
-from interface.messages import replies
-from interface.utils import auto_place_work_breaks
+from sqlalchemy.orm import Session
+
 from service.lessons import LessonsService
 from service.services import EventService, UserService
 from service.utils import get_callback_arg, parse_date, send_message
+from src.core import config
+from src.core.config import DATE_FMT, DATETIME_FMT, LESSON_SIZE, TIME_FMT, WEEKDAY_MAP
+from src.core.middlewares import DatabaseMiddleware
+from src.interface.keyboards import Commands, Keyboards
+from src.interface.messages import replies
+from src.interface.utils import auto_place_work_breaks
 
 router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 router.callback_query.middleware(DatabaseMiddleware())
 
 class MoveLesson(StatesGroup):

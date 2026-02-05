@@ -13,7 +13,8 @@ from src.service.services import EventService, UserService
 from src.service.utils import send_message
 
 router = Router()
-router.message.middleware(DatabaseMiddleware())
+
+
 router.callback_query.middleware(DatabaseMiddleware())
 
 class CheckOverlaps(StatesGroup):
