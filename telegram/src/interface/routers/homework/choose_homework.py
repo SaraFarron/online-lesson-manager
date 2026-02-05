@@ -6,7 +6,6 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.core.middlewares import DatabaseMiddleware
 from src.interface.keyboards import Commands, Keyboards
 from src.interface.messages import replies
 from src.service.services import HomeWorkService, UserService

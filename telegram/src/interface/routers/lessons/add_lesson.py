@@ -12,7 +12,6 @@ from service.lessons import LessonsService
 from service.services import EventService, UserService
 from service.utils import get_callback_arg, parse_date, send_message
 from src.core.config import DATE_FMT
-from src.core.middlewares import DatabaseMiddleware
 from src.interface.keyboards import Commands, Keyboards
 from src.interface.messages import replies
 from src.interface.utils import auto_place_work_breaks

@@ -8,7 +8,6 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core.config import WEEKDAY_MAP
-from src.core.middlewares import DatabaseMiddleware
 from src.db.models import RecurrentEvent
 from src.db.repositories import EventHistoryRepo
 from src.db.schemas import RolesSchema

@@ -9,7 +9,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.core.config import DATE_FMT, DB_DATETIME, SHORT_DATE_FMT
-from src.core.middlewares import DatabaseMiddleware
 from src.db.models import Event, User
 from src.db.repositories import EventHistoryRepo
 from src.db.schemas import RolesSchema

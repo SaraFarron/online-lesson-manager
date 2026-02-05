@@ -8,15 +8,15 @@ from src.service.cache import UserCacheData, UserSettings, cache
 class BackendClient:
     api_url = "http://0.0.0.0:8000/api/v1"
     
-    
     async def update_cache(self, user_id: int):
         """Updates cache from backend."""
         try:
             async with ClientSession() as session:
-                schedule = await session.get(f"/internal/schedule/{user_id}/schedule")
+                response = await session.get(self.api_url + f"/internal/schedule/{user_id}/schedule")
                 # 3. Сохраняем в кэш
-                cache.set_schedule(schedule)
-                return UserCacheData(**schedule.json())
+                schedule = await response.json()
+                cache.set_schedule_cache(schedule)
+                return UserCacheData(**schedule)
         except CircuitBreakerError:
             return None
         except ClientError:
@@ -29,27 +29,16 @@ class BackendClient:
         Returns stale if cannot update.
         """
         cached = cache.get_cache()
-        if cached is not None:
+        if cached:
             return cached
         cached = await self.update_cache()
-        if cached is not None:
+        if cached:
             return cached
         stale = cache.schedule_cache  # Даже если TTL истёк
         if stale:
             logger.warning("Returning stale schedule data")
             return stale
         return None
-
-    # def get_user_schedule_week(self, user_id: int, start: date):
-        # cached = self.get_user_schedule(user_id)
-        # if cached is None:
-        #     return None
-        # schedule = {}
-        # end = start + timedelta(days=7)
-        # while start <= end:
-        #     schedule[start] = self.get_user_schedule_day(start)
-        #     start += timedelta(days=1)
-        # return schedule
 
     async def set_cache(self, user_id: int, data: UserCacheData):
         # Request on backend api
@@ -66,7 +55,7 @@ class BackendClient:
         return cache.get_teacher(code)
 
     async def get_user(self, telegram_id: int):
-        cached = await self.get_cache()
+        cached = await self.get_user_cache(telegram_id)
         if cached is not None and telegram_id in cached:
             return UserCacheData(**cached[telegram_id]).user_settings
         return None

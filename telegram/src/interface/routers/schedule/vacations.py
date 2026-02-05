@@ -7,7 +7,6 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.core.middlewares import DatabaseMiddleware
 from src.db.models import Event
 from src.db.repositories import EventHistoryRepo, UserRepo
 from src.interface.keyboards import Commands, Keyboards

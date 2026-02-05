@@ -9,8 +9,6 @@ from src.service.utils import telegram_checks
 router: Router = Router()
 
 
-
-
 @router.message(CommandStart(deep_link=True))
 @router.message(CommandStart())
 async def start_handler(message: Message, command: CommandObject) -> None:

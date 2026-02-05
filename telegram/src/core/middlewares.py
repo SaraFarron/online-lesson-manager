@@ -5,25 +5,8 @@ from typing import Any
 
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message
-from db.database import engine
-from sqlalchemy.orm import Session
 
 from src.core.logger import logger
-
-
-class DatabaseMiddleware(BaseMiddleware):
-    """Throws a session class to handler."""
-
-    async def __call__(
-        self,
-        handler: Callable[[Message | CallbackQuery, dict[str, Any]], Awaitable[Any]],
-        event: Message | CallbackQuery,
-        data: dict[str, Any],
-    ) -> Any:  # noqa: ANN401
-        """Calls every update."""
-        with Session(bind=engine) as session:
-            data["db"] = session
-            return await handler(event, data)
 
 
 class LoggingMiddleware(BaseMiddleware):

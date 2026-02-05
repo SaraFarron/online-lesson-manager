@@ -5,16 +5,11 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.orm import Session
 
-from src.core.middlewares import DatabaseMiddleware
-from src.db.repositories import EventHistoryRepo
 from src.interface.keyboards import Keyboards
 from src.interface.messages import replies
-from src.service.services import UserService
 
 COMMAND = "help"
 router: Router = Router()
-
-
 
 
 @router.message(Command(COMMAND))
