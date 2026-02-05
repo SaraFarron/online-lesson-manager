@@ -15,11 +15,12 @@ from src.middlewares import DatabaseMiddleware
 from src.models import Event
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
 from src.utils import (
+    find_before_block_slot,
+    find_lesson_blocks,
     get_callback_arg,
     parse_date,
     send_message,
     telegram_checks,
-    find_lesson_blocks,
 )
 
 router = Router()
@@ -108,18 +109,35 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         date.date(),
     )
     block = find_lesson_blocks(schedule)
-    if isinstance(block, datetime):
+    if isinstance(block, tuple):
+        block_start, block_end = block
+        # Create break after block
         event_break = Event(
             user_id=exec_user.id,
             executor_id=executor.id,
             event_type=Event.EventTypes.WORK_BREAK,
-            start=block,
-            end=block + timedelta(minutes=15)
+            start=block_end,
+            end=block_end + timedelta(minutes=15)
         )
         db.add(event_break)
         db.commit()
         break_time = datetime.strftime(event_break.start, TIME_FMT)
         await send_message(executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}")
+        
+        # Create break before block if possible
+        before_break_time = find_before_block_slot(schedule, block_start)
+        if isinstance(before_break_time, datetime):
+            event_before_break = Event(
+                user_id=exec_user.id,
+                executor_id=executor.id,
+                event_type=Event.EventTypes.WORK_BREAK,
+                start=before_break_time,
+                end=before_break_time + timedelta(minutes=15)
+            )
+            db.add(event_before_break)
+            db.commit()
+            before_break_time_str = datetime.strftime(event_before_break.start, TIME_FMT)
+            await send_message(executor.telegram_id, f"Автоматически добавлен перерыв перед блоком на {before_break_time_str}")
     elif isinstance(block, str):
         await send_message(executor.telegram_id, block)
     await state.clear()

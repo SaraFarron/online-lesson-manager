@@ -8,18 +8,19 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.core import config
-from src.core.config import DATE_FMT, LESSON_SIZE, TIME_FMT, WEEKDAY_MAP, DATETIME_FMT
+from src.core.config import DATE_FMT, DATETIME_FMT, LESSON_SIZE, TIME_FMT, WEEKDAY_MAP
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
 from src.middlewares import DatabaseMiddleware
 from src.models import CancelledRecurrentEvent, Event, RecurrentEvent
 from src.repositories import EventHistoryRepo, EventRepo, UserRepo
 from src.utils import (
+    find_before_block_slot,
+    find_lesson_blocks,
     get_callback_arg,
     parse_date,
     send_message,
     telegram_checks,
-    find_lesson_blocks,
 )
 
 router = Router()
@@ -165,13 +166,15 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         day,
     )
     block = find_lesson_blocks(schedule)
-    if isinstance(block, datetime):
+    if isinstance(block, tuple):
+        block_start, block_end = block
+        # Create break after block
         event_break = Event(
             user_id=exec_user.id,
             executor_id=executor.id,
             event_type=Event.EventTypes.WORK_BREAK,
-            start=block,
-            end=block + timedelta(minutes=15),
+            start=block_end,
+            end=block_end + timedelta(minutes=15),
         )
         db.add(event_break)
         db.commit()
@@ -179,6 +182,21 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         await send_message(
             executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}"
         )
+        
+        # Create break before block if possible
+        before_break_time = find_before_block_slot(schedule, block_start)
+        if isinstance(before_break_time, datetime):
+            event_before_break = Event(
+                user_id=exec_user.id,
+                executor_id=executor.id,
+                event_type=Event.EventTypes.WORK_BREAK,
+                start=before_break_time,
+                end=before_break_time + timedelta(minutes=15),
+            )
+            db.add(event_before_break)
+            db.commit()
+            before_break_time_str = datetime.strftime(event_before_break.start, TIME_FMT)
+            await send_message(executor.telegram_id, f"Автоматически добавлен перерыв перед блоком на {before_break_time_str}")
     elif isinstance(block, str):
         await send_message(executor.telegram_id, block)
     await state.clear()
@@ -269,13 +287,15 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
     await send_message(executor.telegram_id, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
     schedule = EventRepo(db).day_schedule(user.executor_id, start.date())
     block = find_lesson_blocks(schedule)
-    if isinstance(block, datetime):
+    if isinstance(block, tuple):
+        block_start, block_end = block
+        # Create break after block
         event_break = RecurrentEvent(
             user_id=exec_user.id,
             executor_id=executor.id,
             event_type=Event.EventTypes.WORK_BREAK,
-            start=block,
-            end=block + timedelta(minutes=15),
+            start=block_end,
+            end=block_end + timedelta(minutes=15),
             interval=7,
         )
         db.add(event_break)
@@ -284,6 +304,22 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext, db: Sess
         await send_message(
             executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}"
         )
+        
+        # Create break before block if possible
+        before_break_time = find_before_block_slot(schedule, block_start)
+        if isinstance(before_break_time, datetime):
+            event_before_break = RecurrentEvent(
+                user_id=exec_user.id,
+                executor_id=executor.id,
+                event_type=Event.EventTypes.WORK_BREAK,
+                start=before_break_time,
+                end=before_break_time + timedelta(minutes=15),
+                interval=7,
+            )
+            db.add(event_before_break)
+            db.commit()
+            before_break_time_str = datetime.strftime(event_before_break.start, TIME_FMT)
+            await send_message(executor.telegram_id, f"Автоматически добавлен перерыв перед блоком на {before_break_time_str}")
     elif isinstance(block, str):
         await send_message(executor.telegram_id, block)
     await state.clear()
@@ -407,13 +443,15 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
     await send_message(executor.telegram_id, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
     schedule = EventRepo(db).day_schedule(user.executor_id, start.date())
     block = find_lesson_blocks(schedule)
-    if isinstance(block, datetime):
+    if isinstance(block, tuple):
+        block_start, block_end = block
+        # Create break after block
         event_break = Event(
             user_id=exec_user.id,
             executor_id=executor.id,
             event_type=Event.EventTypes.WORK_BREAK,
-            start=block,
-            end=block + timedelta(minutes=15),
+            start=block_end,
+            end=block_end + timedelta(minutes=15),
         )
         db.add(event_break)
         db.commit()
@@ -421,6 +459,21 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext, db: 
         await send_message(
             executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}"
         )
+        
+        # Create break before block if possible
+        before_break_time = find_before_block_slot(schedule, block_start)
+        if isinstance(before_break_time, datetime):
+            event_before_break = Event(
+                user_id=exec_user.id,
+                executor_id=executor.id,
+                event_type=Event.EventTypes.WORK_BREAK,
+                start=before_break_time,
+                end=before_break_time + timedelta(minutes=15),
+            )
+            db.add(event_before_break)
+            db.commit()
+            before_break_time_str = datetime.strftime(event_before_break.start, TIME_FMT)
+            await send_message(executor.telegram_id, f"Автоматически добавлен перерыв перед блоком на {before_break_time_str}")
     elif isinstance(block, str):
         await send_message(executor.telegram_id, block)
     await state.clear()

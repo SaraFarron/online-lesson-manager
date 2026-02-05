@@ -98,8 +98,16 @@ def day_schedule_text(lessons: list, users_map: dict, user: User):
 
 
 def find_lesson_blocks(events):
+    """
+    Find lesson blocks and return info about break placement.
+    Returns: (block_start, block_end), False, or error message
+    - (block_start, block_end): tuple of datetimes for after-block break at block_end
+    - False: no action needed
+    - str: error message
+    """
     events = sorted(events, key=lambda x: x[0])
     consecutive = 0
+    block_start_time = None
     block_end_time = None
     found_no_slot = False
 
@@ -109,12 +117,14 @@ def find_lesson_blocks(events):
         if event_type in ("Урок", "Перенос"):
             if consecutive == 0:
                 consecutive = 1
+                block_start_time = start
             else:
                 prev_start, prev_end, _, prev_type, *_ = events[i - 1]
                 if prev_type in ("Урок", "Перенос") and prev_end == start:
                     consecutive += 1
                 else:
                     consecutive = 1
+                    block_start_time = start
             block_end_time = end
         else:
             consecutive = 0
@@ -134,10 +144,39 @@ def find_lesson_blocks(events):
 
             # Если есть слот в 15 минут
             if next_start - block_end_time >= timedelta(minutes=15):
-                return block_end_time
+                return (block_start_time, block_end_time)
             else:
                 found_no_slot = True
 
     if found_no_slot:
         return "Перерыв не был поставлен автоматически, т.к. слот после уроков меньше 15 минут"
+    return False
+
+
+def find_before_block_slot(events, block_start):
+    """
+    Check if a 15-minute break can be placed before the lesson block.
+    Returns: block_start - 15 minutes if possible, False otherwise.
+    """
+    events = sorted(events, key=lambda x: x[0])
+    
+    # Find the previous event before block_start
+    prev_event = None
+    for event in events:
+        start = event[0]
+        if start < block_start:
+            prev_event = event
+        else:
+            break
+    
+    # If no previous event, we can place break at block_start - 15min
+    if prev_event is None:
+        return block_start - timedelta(minutes=15)
+    
+    prev_end = prev_event[1]
+    
+    # Check if there's a 15-minute gap between prev_event.end and block_start
+    if block_start - prev_end >= timedelta(minutes=15):
+        return block_start - timedelta(minutes=15)
+    
     return False
