@@ -354,27 +354,39 @@ class EventRepo(Repo):
         start = datetime.combine(current_day, start)
         end = datetime.combine(current_day, end)
         now = datetime.now()
+        
+        # Collect one-time lessons with their full time range (start, end) per weekday
         simple_lessons = {}
         for s in self._events_executor(executor_id):
             start_t = datetime.strptime(s[0], DB_DATETIME)
+            end_t = datetime.strptime(s[1], DB_DATETIME)
             weekday_t = start_t.weekday()
             if s[3] in self.LESSON_TYPES and start_t > now:
                 if weekday_t not in simple_lessons:
                     simple_lessons[weekday_t] = []
-                times = (
-                    start_t,
-                    start_t + timedelta(minutes=15),
-                    start_t + timedelta(minutes=30),
-                    start_t + timedelta(minutes=45),
-                )
-                for t in times:
-                    simple_lessons[weekday_t].append(t.time())
+                # Store the time ranges of one-time lessons
+                simple_lessons[weekday_t].append((start_t.time(), end_t.time()))
 
         result = []
         for s in self._get_available_slots(start, end, SLOT_SIZE, events):
-            if s[0].weekday() in simple_lessons and s[0].time() in simple_lessons[s[0].weekday()]:
-                continue
-            result.append(s[0])
+            slot_start = s[0]
+            slot_end = s[1]
+            slot_weekday = slot_start.weekday()
+            
+            # Check if this 1-hour slot overlaps with any one-time lesson on this weekday
+            is_blocked = False
+            if slot_weekday in simple_lessons:
+                for lesson_start, lesson_end in simple_lessons[slot_weekday]:
+                    # Convert slot datetime to time for comparison
+                    slot_start_time = slot_start.time()
+                    slot_end_time = slot_end.time()
+                    # Check for overlap: slot overlaps if slot_start < lesson_end AND slot_end > lesson_start
+                    if slot_start_time < lesson_end and slot_end_time > lesson_start:
+                        is_blocked = True
+                        break
+            
+            if not is_blocked:
+                result.append(slot_start)
         return result
 
     @staticmethod
