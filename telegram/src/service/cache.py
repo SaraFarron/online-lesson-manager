@@ -3,25 +3,6 @@ from datetime import datetime, time
 from cachetools import TTLCache
 from pydantic import BaseModel
 
-"""
-Planned cache structure WIP
-{
-    "user_id": {
-        "free_slots": {
-            "01.01.2000": [["10:00", "14:00"], ["15:00", "17:00"]]  // all on month forward
-        },
-        "recurrent_free_slots": {
-            "0": [["10:00", "14:00"], ["15:00", "17:00"]],
-            "1": []
-        },
-        "schedule": {
-            "01.01.2000": [{"type": "lesson", "start": "13:00"}]  // all on week forward
-        },
-        "user_settings": {}
-    }
-}
-"""
-
 
 class Event(BaseModel):
     type: str
@@ -35,37 +16,48 @@ class Slot(BaseModel):
 
 class UserSettings(BaseModel):
     telegram_id: int
-    morning_notification: time | None
     role: str
     teacher_id: int
-    code: str | None = None
 
 
 class UserCacheData(BaseModel):
-    free_slots: dict[str, list[Slot]]
-    recurrent_free_slots: dict[int, list[Slot]]
-    schedule: dict[str, list[Event]]
+    free_slots: dict[str, list[Slot]]  # date -> list of free slots
+    recurrent_free_slots: dict[int, list[Slot]]  # weekday (0-6) -> list of free slots
+    schedule: dict[str, list[Event]]  # date -> list of events (lessons, vacations, breaks)
     user_settings: UserSettings
 
 
+class CacheData(BaseModel):
+    users: dict[int, UserCacheData]  # telegram_id -> UserCacheData
+    teachers: dict[str, int]  # code -> teacher_id
+
+
 class BotCache:
-    def __init__(self):
-        # Разные кэши для разных типов данных
-        self.schedule_cache = TTLCache(maxsize=100, ttl=300)  # 5 минут
-        self.teachers_cache = TTLCache(maxsize=100, ttl=3600)  # 1 час
+    """Pure storage layer - no business logic."""
 
-    def get_cache(self):
-        return self.schedule_cache
-    
-    def set_cache(self, cache_data: dict):
-        self.schedule_cache.update(cache_data)
+    def __init__(self, maxsize: int = 100, ttl: int = 300):
+        self._cache = TTLCache(maxsize=maxsize, ttl=ttl)
 
-    def invalidate_schedule(self, teacher_id: int):
-        """Вызываем когда расписание изменилось"""
-        self.schedule_cache.pop(teacher_id, None)
+    def get(self, key: str) -> dict | None:
+        """Get cached data by key."""
+        return self._cache.get(key)
 
-    def get_teacher(self, code: str):
-        return self.teachers_cache.get(code)
+    def set(self, key: str, data: dict) -> None:
+        """Store data in cache."""
+        self._cache[key] = data
 
-# Глобальный экземпляр
+    def invalidate(self, key: str) -> None:
+        """Remove specific cache entry."""
+        self._cache.pop(key, None)
+
+    def invalidate_all(self) -> None:
+        """Clear entire cache."""
+        self._cache.clear()
+
+    def exists(self, key: str) -> bool:
+        """Check if key exists and is not expired."""
+        return key in self._cache
+
+
+# Global instance
 cache = BotCache()
