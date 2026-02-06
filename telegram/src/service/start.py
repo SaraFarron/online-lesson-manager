@@ -1,6 +1,8 @@
 from aiogram.types import Message
 
+from src.schemas import UserCreate
 from src.service import BackendClient
+from src.service.cache import UserSettings
 
 
 class StartService:
@@ -10,20 +12,19 @@ class StartService:
         self.username = message.from_user.username
         self.backend = BackendClient()
     
-    async def get_user(self):
+    async def get_user(self) -> UserSettings | None:
         return await self.backend.get_user(self.telegram_id)
     
-    async def register(self, code: str | None = None):
-        teacher_id = await self.backend.get_teacher(code) if code else None
+    async def register(self, code: str):
+        teachers = await self.backend.get_teachers()
+        teacher_id = teachers.get(code) if teachers else None
         if teacher_id is None:
             return None
-        return await self.backend.create_user(
+        user = UserCreate(
             telegram_id=self.telegram_id,
             full_name=self.full_name,
             username=self.username,
-            teacher_id=teacher_id,
+            code=code,
             role="student",  # Currently only student registration is supported
         )
-        
-
-
+        return await self.backend.create_user(user)

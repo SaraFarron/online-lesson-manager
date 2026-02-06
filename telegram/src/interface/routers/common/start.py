@@ -18,11 +18,11 @@ async def start_handler(message: Message, command: CommandObject) -> None:
     user = await service.get_user()
     if user is None:
         # code = command.args
-        code = "test"
+        code = "abc"
         user = await service.register(code)
 
     if user is None:
         await message.answer(replies.REGISTRATION_FAILED)
         return
-    await message.answer(replies.GREETINGS % html.bold(service.full_name))
+    await message.answer(replies.GREETINGS % html.bold(user.full_name))
     await message.answer(replies.BOT_DESCRIPTION)

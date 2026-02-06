@@ -1,77 +1,162 @@
+from src.schemas import UserCreate
 from aiohttp import ClientError, ClientSession
 from circuitbreaker import CircuitBreakerError
 
 from src.core.logger import logger
-from src.service.cache import UserCacheData, UserSettings, cache
+from src.service.cache import Event, Slot, UserCacheData, UserSettings, cache
 
 
 class BackendClient:
-    api_url = "http://0.0.0.0:8000/api/v1"
-    
-    async def update_cache(self, user_id: int):
-        """Updates cache from backend."""
+    """Orchestrator - handles cache strategy and backend communication."""
+
+    API_URL = "http://localhost:8000/api/v1"
+    CACHE_KEY_TEMPLATE = "schedule:{user_id}"
+
+    def __init__(self):
+        self.session: ClientSession | None = None
+
+    async def _get_session(self) -> ClientSession:
+        """Lazy session initialization."""
+        if self.session is None:
+            self.session = ClientSession()
+        return self.session
+
+    async def _request(self, method: str, url: str, **kwargs) -> dict | None:
+        """Generic request with x service key."""
+        headers = {
+            "X-Service-Key": "your-secret-service-key-here",
+        } | kwargs.pop("headers", {})
         try:
-            async with ClientSession() as session:
-                response = await session.get(self.api_url + f"/internal/schedule/{user_id}/schedule")
-                # 3. Сохраняем в кэш
-                schedule = await response.json()
-                cache.set_schedule_cache(schedule)
-                return UserCacheData(**schedule)
+            session = await self._get_session()
+            async with session.request(method, url, headers=headers, **kwargs) as response:
+                if response.status in (200, 201):
+                    return (await response.json())["data"]
+                logger.warning(f"Backend returned status {response.status} for {method} {url}")
+                return None
+        except ClientError as e:
+            logger.error(f"Network error during {method} {url}: {e}")
+            return None
         except CircuitBreakerError:
+            logger.warning(f"Circuit breaker open for {method} {url}")
             return None
-        except ClientError:
-            return None
-    
-    async def get_cache(self):
+
+    async def _fetch_from_backend(self, telegram_id: int) -> UserCacheData | None:
+        """Fetch schedule from backend API."""
+        response = await self._request(
+            "GET",
+            f"{self.API_URL}/users/{telegram_id}/schedule",
+        )
+        if response is not None:
+            try:
+                return UserCacheData(**response)
+            except Exception as e:
+                logger.error(f"Error parsing backend response for user {telegram_id}: {e}")
+                return None
+        return None
+
+    async def get_teachers(self) -> dict[str, int]:
+        """Fetch teacher codes from backend."""
+        response = await self._request("GET", f"{self.API_URL}/users/teachers")
+        return response if response else {}
+
+    async def get_user_cache_data(self, telegram_id: int) -> UserCacheData | None:
         """
-        Get schedule from cache.
-        Update cache if needed.
-        Returns stale if cannot update.
+        Read flow: Check cache → Fetch backend → Cache result → Fallback to stale.
+
+        Args:
+            telegram_id: Unique user identifier
+
+        Returns:
+            UserCacheData if found (fresh or stale), None if completely unavailable
+
         """
-        cached = cache.get_cache()
-        if cached:
-            return cached
-        cached = await self.update_cache()
-        if cached:
-            return cached
-        stale = cache.schedule_cache  # Даже если TTL истёк
-        if stale:
-            logger.warning("Returning stale schedule data")
-            return stale
+        cache_key = self.CACHE_KEY_TEMPLATE.format(user_id=telegram_id)
+
+        # Step 1: Check if fresh cached data exists
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            logger.debug(f"Cache hit for user {telegram_id}")
+            return UserCacheData(**cached_data)
+
+        # Step 2: Fetch from backend
+        logger.debug(f"Cache miss for user {telegram_id}, fetching from backend")
+        fresh_data = await self._fetch_from_backend(telegram_id)
+
+        if fresh_data is not None:
+            # Step 3: Cache the fresh data
+            cache.set(cache_key, dict(fresh_data))
+            logger.info(f"Updated cache for user {telegram_id}")
+            return fresh_data
+
+        # Step 4: Fallback to stale cache if backend unavailable
+        # Note: TTLCache automatically handles expiration,
+        # so we need a separate "stale cache" if you want to serve expired data
+        logger.warning(f"Backend unavailable for user {telegram_id}, no cache available")
         return None
 
-    async def set_cache(self, user_id: int, data: UserCacheData):
-        # Request on backend api
-        # Update cache
-        cache[user_id] = data
-       
-    async def get_user_schedule(self, telegram_id: int):
-        cached = await self.get_cache()
-        if cached is not None and telegram_id in cached:
-            return UserCacheData(**cached[telegram_id]).schedule
-        return None
+    async def user_exists(self, telegram_id: int) -> bool:
+        """Check if user exists in cache or backend."""
+        return bool(await self.get_user_cache_data(telegram_id))
 
-    async def get_teacher(self, code: str):
-        return cache.get_teacher(code)
+    async def get_user(self, telegram_id: int) -> UserSettings | None:
+        """Get user data."""
+        data = await self.get_user_cache_data(telegram_id)
+        return data.user_settings if data else None
 
-    async def get_user(self, telegram_id: int):
-        cached = await self.get_user_cache(telegram_id)
-        if cached is not None and telegram_id in cached:
-            return UserCacheData(**cached[telegram_id]).user_settings
-        return None
-    
-    async def create_user(
-        self, telegram_id: int, full_name: str, username: str, role: str,
-    ) -> UserSettings | None:
-        async with ClientSession() as session:
-            response = await session.post("/users/create", json={
-                "telegram_id": telegram_id,
-                "telegram_username": username,
-                "telegram_full_name": full_name,
-                "role": role,
-            })
-            if response.status == 201:
-                user_data = await response.json()
-                return UserSettings(**user_data)
-            return None
+    async def get_user_schedule(self, telegram_id: int) -> dict[str, list[Event]] | None:
+        """Get user schedule."""
+        data = await self.get_user_cache_data(telegram_id)
+        return data.schedule if data else None
 
+    async def get_user_free_slots(self, telegram_id: int) -> dict[str, list[Slot]] | None:
+        """Get user free slots."""
+        data = await self.get_user_cache_data(telegram_id)
+        return data.free_slots if data else None
+
+    async def get_user_recurrent_free_slots(self, telegram_id: int) -> dict[int, list[Slot]] | None:
+        """Get user recurrent free slots."""
+        data = await self.get_user_cache_data(telegram_id)
+        return data.recurrent_free_slots if data else None
+
+    async def invalidate_user(self, telegram_id: int) -> None:
+        """Invalidate cache after write operations."""
+        cache_key = self.CACHE_KEY_TEMPLATE.format(user_id=telegram_id)
+        cache.invalidate(cache_key)
+        logger.info(f"Invalidated cache for user {telegram_id}")
+
+    async def create_user(self, user: UserCreate) -> UserSettings | None:
+        """Create a new user in the backend."""
+        response = await self._request(
+            "POST",
+            f"{self.API_URL}/auth/register",
+            json={
+                "telegram_id": user.telegram_id,
+                "telegram_username": user.username,
+                "telegram_full_name": user.full_name,
+                "code": user.code,
+                "role": user.role,
+            },
+        )
+        if response is not None:
+            logger.info(f"Created user {user.telegram_id} in backend")
+        return UserSettings(**response) if response else None
+
+    async def create_event(self, event: dict):
+        pass
+
+    async def update_event(self, event_id: int, event: dict):
+        pass
+
+    async def delete_event(self, event_id: int):
+        pass
+
+    async def create_recurrent_event(self, event: dict):
+        pass
+
+    async def update_recurrent_event(self, event_id: int, event: dict):
+        pass
+
+    async def close(self) -> None:
+        """Clean up session."""
+        if self.session:
+            await self.session.close()
