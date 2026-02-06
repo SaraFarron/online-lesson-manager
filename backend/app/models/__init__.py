@@ -1,6 +1,6 @@
 from app.models.events import Event, RecurrentCancels, RecurrentEvent
 from app.models.internal import Notification, NotificationStatus
-from app.models.users import TeacherSettings, User, UserHistory, UserSettings, UserToken
+from app.models.users import TeacherSettings, User, UserHistory, UserRoles, UserSettings, UserToken
 
 __all__ = [
     "User",
@@ -13,4 +13,5 @@ __all__ = [
     "Notification",
     "UserSettings",
     "NotificationStatus",
+    "UserRoles",
 ]

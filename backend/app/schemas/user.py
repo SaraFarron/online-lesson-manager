@@ -10,7 +10,7 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    name: str
+    full_name: str
 
 
 class AuthorizedUserResponse(BaseModel):
@@ -50,6 +50,5 @@ class UserCreate(BaseModel):
     telegram_id: int | None = None
     telegram_username: str | None = None
     telegram_full_name: str | None = None
-    teacher_id: int
     code: str | None = None
     role: str

@@ -36,7 +36,7 @@ async def update_notification_status(
     return NotificationResponse.model_validate(updated_notification)
 
 
-@router.get("/schedule/{teacher_id}", response_model=dict[int, TelegramCacheResponse])
+@router.get("/schedule/{user_id}", response_model=dict[int, TelegramCacheResponse])
 async def get_user_schedule(
     db: DatabaseSession,
     x_service_key: ServiceKey,

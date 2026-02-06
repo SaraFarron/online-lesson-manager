@@ -1,4 +1,5 @@
 from datetime import datetime, time
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, Time
@@ -10,8 +11,14 @@ if TYPE_CHECKING:
     from app.models import Event, RecurrentEvent
 
 
+class UserRoles(str, Enum):
+    STUDENT = "student"
+    TEACHER = "teacher"
+    ADMIN = "admin"
+
+
 class User(Base):
-    """"User model."""
+    """User model."""
 
     __tablename__ = "users"
 
@@ -146,7 +153,7 @@ class TeacherSettings(Base):
         nullable=False,
     )
     work_start: Mapped[time] = mapped_column(Time, nullable=False)  # e.g., time(9, 0)
-    work_end: Mapped[time] = mapped_column(Time, nullable=False)    # e.g., time(17, 0)
+    work_end: Mapped[time] = mapped_column(Time, nullable=False)  # e.g., time(17, 0)
 
     # One-to-one relationship back to User
     teacher: Mapped["User"] = relationship(
