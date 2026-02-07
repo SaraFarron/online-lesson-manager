@@ -4,7 +4,7 @@ from aiogram.types.error_event import ErrorEvent
 from aiogram.types.message import Message
 
 from src.core.logger import logger
-from src.interface.messages import errors as err_msgs
+from src.messages import errors as err_msgs
 
 
 def add_errors(dp: Dispatcher):

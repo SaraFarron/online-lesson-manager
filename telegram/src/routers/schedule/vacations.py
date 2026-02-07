@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from src.db.models import Event
 from src.db.repositories import EventHistoryRepo, UserRepo
-from src.interface.keyboards import Commands, Keyboards
-from src.interface.messages import replies
+from src.keyboards import Commands, Keyboards
+from src.messages import replies
 from src.service.services import EventService, UserService
 from src.service.utils import get_callback_arg, parse_date, send_message
 

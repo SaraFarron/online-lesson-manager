@@ -9,7 +9,7 @@ from src.core.errors import add_errors
 from src.core.logger import logger
 from src.core.menu import ALL_COMMANDS
 from src.core.middlewares import LoggingMiddleware
-from src.interface.routers import all_routers
+from src.routers import all_routers
 
 
 async def main():

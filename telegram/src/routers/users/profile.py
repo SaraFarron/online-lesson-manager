@@ -12,8 +12,8 @@ from src.core.config import DATE_FMT, DB_DATETIME, SHORT_DATE_FMT
 from src.db.models import Event, User
 from src.db.repositories import EventHistoryRepo
 from src.db.schemas import RolesSchema
-from src.interface.keyboards import AdminCommands, Keyboards
-from src.interface.messages import replies
+from src.keyboards import AdminCommands, Keyboards
+from src.messages import replies
 from src.service.services import HISTORY_MAP, UserService
 from src.service.utils import get_callback_arg
 

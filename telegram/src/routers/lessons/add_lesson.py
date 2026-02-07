@@ -3,37 +3,30 @@ from datetime import datetime
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
-from db.repositories import EventHistoryRepo, UserRepo
 from sqlalchemy.orm import Session
 
-from service.lessons import LessonsService
-from service.services import EventService, UserService
 from service.utils import get_callback_arg, parse_date, send_message
 from src.core.config import DATE_FMT
-from src.interface.keyboards import Commands, Keyboards
-from src.interface.messages import replies
-from src.interface.utils import auto_place_work_breaks
+from src.keyboards import Commands, Keyboards
+from src.messages import replies
+from src.service import UserService
+from src.service.utils import telegram_checks
+from src.states import AddLesson
+from src.utils import auto_place_work_breaks
 
 router = Router()
 
 
-router.callback_query.middleware(DatabaseMiddleware())
-
-class AddLesson(StatesGroup):
-    scene = "add_lesson"
-    command = "/" + scene
-    base_callback = scene + "/"
-    choose_date = State()
-    choose_time = f"{base_callback}choose_time/"
-    finish = f"{base_callback}finish/"
-
-
 @router.message(Command(AddLesson.command))
 @router.message(F.text == Commands.ADD_LESSON.value)
-async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message, user = UserService(db).check_user(message)
+async def add_lesson_handler(message: Message, state: FSMContext) -> None:
+    message = telegram_checks(message)
+    service = UserService(message)
+    user = await service.get_user()
+    if user is None:
+        await message.answer(replies.PERMISSION_DENIED)
+        return
 
     await state.update_data(user_id=user.telegram_id)
     await message.answer(replies.CHOOSE_LESSON_DATE)
@@ -62,7 +55,8 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     available_time, _ = EventService(db).available_time(user.executor_id, day)
     if available_time:
         await message.answer(
-            replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time),
+            replies.CHOOSE_TIME,
+            reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time),
         )
     else:
         await message.answer(replies.NO_TIME)

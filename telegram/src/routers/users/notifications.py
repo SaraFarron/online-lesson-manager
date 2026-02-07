@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from src.core.config import BOT_TOKEN
 from src.db.models import User
 from src.db.schemas import RolesSchema
-from src.interface.keyboards import AdminCommands
-from src.interface.messages import replies
+from src.keyboards import AdminCommands
+from src.messages import replies
 from src.service.services import UserService
 
 router = Router()

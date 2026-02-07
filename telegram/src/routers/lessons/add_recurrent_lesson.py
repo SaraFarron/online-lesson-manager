@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 from service.lessons import LessonsService
 from service.services import EventService, UserService
 from service.utils import get_callback_arg, send_message
-from src.interface.keyboards import Commands, Keyboards
-from src.interface.messages import replies
-from src.interface.utils import auto_place_work_breaks
+from src.keyboards import Commands, Keyboards
+from src.messages import replies
+from src.utils import auto_place_work_breaks
 
 router = Router()
 

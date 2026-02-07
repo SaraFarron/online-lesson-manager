@@ -6,8 +6,8 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
 from src.db.schemas import RolesSchema
-from src.interface.keyboards import AdminCommands, Keyboards
-from src.interface.messages import replies
+from src.keyboards import AdminCommands, Keyboards
+from src.messages import replies
 from src.service.services import EventService, UserService
 from src.service.utils import send_message
 

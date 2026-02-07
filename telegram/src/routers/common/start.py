@@ -2,8 +2,8 @@ from aiogram import Router, html
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
 
-from src.interface.messages import replies
 from src.keyboards import all_commands
+from src.messages import replies
 from src.service import UserService
 from src.service.utils import telegram_checks
 

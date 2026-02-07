@@ -3,7 +3,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from src.interface.messages import replies
+from src.messages import replies
 
 router: Router = Router()
 

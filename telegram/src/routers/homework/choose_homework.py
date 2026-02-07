@@ -6,8 +6,8 @@ from aiogram.fsm.state import StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.orm import Session
 
-from src.interface.keyboards import Commands, Keyboards
-from src.interface.messages import replies
+from src.keyboards import Commands, Keyboards
+from src.messages import replies
 from src.service.services import HomeWorkService, UserService
 from src.service.utils import get_callback_arg
 

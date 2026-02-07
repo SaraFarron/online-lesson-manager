@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from service.schedule import ScheduleService
 from service.services import UserService
-from src.interface.keyboards import Commands
+from src.keyboards import Commands
 
 router = Router()
 
