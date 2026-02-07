@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Event, RecurrentEvent, User
-from app.repositories import EventRepository, RecurrentCancelsRepository, RecurrentEventRepository
+from app.repositories import EventRepository, RecurrentCancelsRepository, RecurrentEventRepository, TeacherSettingsRepository
 from app.schemas import EventCreate, EventUpdate
 
 
@@ -14,6 +14,7 @@ class EventService:
         self.repository = EventRepository(session)
         self.recurrent_repo = RecurrentEventRepository(session)
         self.cancels_repo = RecurrentCancelsRepository(session)
+        self.teacher_settings_repo = TeacherSettingsRepository(session)
 
     async def get_events_by_user(self, user: User) -> list[Event | RecurrentEvent]:
         """Get events for a specific user."""
@@ -167,24 +168,32 @@ class EventService:
         start, end = user.working_hours()
         return self._filter_out_occupied_slots(events, start, end)
 
+    async def _get_working_hours(self, user: User) -> tuple[time, time]:
+        """Get working hours for a user."""
+        teacher_settings = await self.teacher_settings_repo.get_by_user(user)
+        if teacher_settings:
+            return teacher_settings.work_start, teacher_settings.work_end
+        return time(9, 0), time(17, 0)
+
     async def get_free_slots_range(
         self, user: User, start_date: date, end_date: date
-    ) -> dict[str, list[tuple[time, time]]]:
+    ) -> dict[str, list[dict[str, time]]]:
         """Get free time slots for a date range."""
         schedule = await self.get_schedule_range(user, start_date, end_date)
-        free_slots_range: dict[str, list[tuple[time, time]]] = {}
-        start_work, end_work = user.working_hours()
+        free_slots_range: dict[str, list[dict[str, time]]] = {}
+        start_work, end_work = await self._get_working_hours(user)
         for day_str, events in schedule.items():
-            if datetime.strptime(day_str, "%Y-%m-%d") < datetime.now():
+            if datetime.fromisoformat(day_str) < datetime.now():
                 free_slots_range[day_str] = []
             else:
                 free_slots = self._filter_out_occupied_slots(events, start_work, end_work)
-                free_slots_range[day_str] = free_slots
+                free_slots_range[day_str] = [{"start": time_slot[0], "end": time_slot[1]} for time_slot in free_slots]
         return free_slots_range
 
-    async def get_recurrent_free_slots(self, user: User, weekday: int) -> list[tuple[time, time]]:
+    async def get_recurrent_free_slots(self, user: User, weekday: int) -> list[dict[str, time]]:
         """Get free time slots for a specific weekday (0=Monday, 6=Sunday)."""
         user_events = await self.recurrent_repo.get_by_user(user)
         recurrent_events = [event for event in user_events if event.start.weekday() == weekday]
-        start, end = user.working_hours()
-        return self._filter_out_occupied_slots(recurrent_events, start, end)
+        start, end = await self._get_working_hours(user)
+        free_slots = self._filter_out_occupied_slots(recurrent_events, start, end)
+        return [{"start": time_slot[0], "end": time_slot[1]} for time_slot in free_slots]

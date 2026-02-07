@@ -35,12 +35,12 @@ class BotCacheService:
         schedules[user.id] = await self.get_student_schedule(user)
         return schedules
 
-    async def get_user_schedule(self, user_id: int) -> dict[int, TelegramCacheResponse]:
-        user = await UserRepository(self.session).get_by_id(user_id)
+    async def get_user_schedule(self, telegram_id: int) -> dict[int, TelegramCacheResponse]:
+        user = await UserRepository(self.session).get_by_telegram_id(telegram_id)
         if not user:
             return {}
         if user.role == User.Roles.STUDENT:
-            return {user_id: await self.get_student_schedule(user)}
+            return {telegram_id: await self.get_student_schedule(user)}
         elif user.role == User.Roles.TEACHER:
             return await self.get_teacher_schedule(user)
         else:

@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User, UserRoles, UserSettings, UserToken
+from app.models import TeacherSettings, User, UserRoles, UserSettings, UserToken
 from app.repositories.base import BaseRepository
 
 
@@ -30,6 +30,28 @@ class UserRepository(BaseRepository[User]):
         query = select(User).where(User.role == role.value, User.telegram_id.is_not(None))
         result = await self.session.execute(query)
         return list(result.scalars().all())
+
+    async def get_by_telegram_id(self, telegram_id: int) -> User | None:
+        """Get a user by their Telegram ID."""
+        query = select(User).where(User.telegram_id == telegram_id)
+        result = await self.session.execute(query)
+        return result.scalars().first()
+
+
+class TeacherSettingsRepository(BaseRepository[TeacherSettings]):
+    """Repository for TeacherSettings model."""
+
+    def __init__(self, session: AsyncSession):
+        super().__init__(TeacherSettings, session)
+
+    async def get_by_user(self, user: User) -> TeacherSettings | None:
+        """Get TeacherSettings for a specific user."""
+        if user.role == UserRoles.TEACHER.value:
+            query = select(TeacherSettings).where(TeacherSettings.teacher_id == user.id)
+        else:
+            query = select(TeacherSettings).join(User).where(User.id == user.teacher_id)
+        result = await self.session.execute(query)
+        return result.scalars().first()
 
 
 class UserTokenRepository(BaseRepository[UserToken]):

@@ -44,11 +44,11 @@ class BackendClient:
         """Fetch schedule from backend API."""
         response = await self._request(
             "GET",
-            f"{self.API_URL}/users/{telegram_id}/schedule",
+            f"{self.API_URL}/internal/schedule/{telegram_id}",
         )
         if response is not None:
             try:
-                return UserCacheData(**response)
+                return UserCacheData(**response[str(telegram_id)])
             except Exception as e:
                 logger.error(f"Error parsing backend response for user {telegram_id}: {e}")
                 return None
