@@ -6,8 +6,8 @@ from aiogram.types import Message
 
 from src.keyboards import all_commands
 from src.messages import replies
+from src.routers.utils import telegram_checks
 from src.service import UserService
-from src.utils import telegram_checks
 
 router: Router = Router()
 

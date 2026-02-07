@@ -11,13 +11,15 @@ from src.core.config import DATE_FMT, SHORT_DATE_FMT, WEEKDAY_MAP
 from src.db.models import User
 from src.keyboards import Commands, Keyboards
 from src.messages import replies
+from src.routers.utils import telegram_checks
 from src.service.services import EventService, UserRepo
-from src.service.utils import day_schedule_text, get_callback_arg, telegram_checks
+from src.utils import day_schedule_text, get_callback_arg
 
 router = Router()
 
 
 router.callback_query.middleware(DatabaseMiddleware())
+
 
 class WeekSchedule(StatesGroup):
     scene = "week_schedule"

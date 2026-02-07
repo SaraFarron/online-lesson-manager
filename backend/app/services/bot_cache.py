@@ -25,7 +25,9 @@ class BotCacheService:
             free_slots=free_slots,
             recurrent_free_slots=recurrent_free_slots,
             schedule=schedule,
-            user_settings={},  # Placeholder for user settings
+            user_settings={
+                "teacher_telegram_id": user.teacher.telegram_id if user.teacher else None,
+            },  # Placeholder for user settings
         )
 
     async def get_teacher_schedule(self, user: User) -> dict[int, TelegramCacheResponse]:

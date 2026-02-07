@@ -4,9 +4,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from src.messages import replies
+from src.routers.utils import student_permission
 from src.service import AddLessonService
 from src.states import AddLesson
-from src.utils import student_permission
 
 router = Router()
 

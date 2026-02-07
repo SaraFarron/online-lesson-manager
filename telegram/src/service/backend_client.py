@@ -13,9 +13,20 @@ class BackendClient:
 
     API_URL = "http://localhost:8000/api/v1"
     CACHE_KEY_TEMPLATE = "schedule:{user_id}"
+    _instance: "BackendClient | None" = None
+
+    def __new__(cls) -> "BackendClient":
+        """Singleton pattern: ensure only one instance exists."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self) -> None:
+        if self._initialized:
+            return
         self.session: ClientSession | None = None
+        self._initialized = True
 
     async def _get_session(self) -> ClientSession:
         """Lazy session initialization."""
@@ -170,3 +181,13 @@ class BackendClient:
         """Clean up session."""
         if self.session:
             await self.session.close()
+            self.session = None
+            logger.info("BackendClient session closed")
+
+    async def __aenter__(self) -> "BackendClient":
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit - ensures session cleanup."""
+        await self.close()

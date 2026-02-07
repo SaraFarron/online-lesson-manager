@@ -1,4 +1,5 @@
 from datetime import datetime, time
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -38,9 +39,10 @@ class TelegramCacheResponse(BaseModel):
         "user_settings": {}
     }
     """
+
     free_slots: dict[str, list[dict[str, time]]]
     recurrent_free_slots: dict[str, list[dict[str, time]]]
     schedule: dict[str, list[dict[str, str]]]
-    user_settings: dict[str, str]  # Placeholder for user settings
+    user_settings: dict[str, Any]  # Placeholder for user settings
 
     model_config = ConfigDict(from_attributes=True)

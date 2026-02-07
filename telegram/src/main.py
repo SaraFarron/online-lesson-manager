@@ -10,6 +10,7 @@ from src.core.logger import logger
 from src.core.menu import ALL_COMMANDS
 from src.core.middlewares import LoggingMiddleware
 from src.routers import all_routers
+from src.service import BackendClient
 
 
 async def main():
@@ -29,7 +30,13 @@ async def main():
     await bot.set_my_commands(ALL_COMMANDS)
 
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        # Cleanup BackendClient session on bot shutdown
+        backend_client = BackendClient()
+        await backend_client.close()
+        await bot.session.close()
 
 
 if __name__ == "__main__":

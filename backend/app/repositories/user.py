@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models import TeacherSettings, User, UserRoles, UserSettings, UserToken
 from app.repositories.base import BaseRepository
@@ -33,7 +34,11 @@ class UserRepository(BaseRepository[User]):
 
     async def get_by_telegram_id(self, telegram_id: int) -> User | None:
         """Get a user by their Telegram ID."""
-        query = select(User).where(User.telegram_id == telegram_id)
+        query = (
+            select(User)
+            .where(User.telegram_id == telegram_id)
+            .options(selectinload(User.teacher), selectinload(User.students))
+        )
         result = await self.session.execute(query)
         return result.scalars().first()
 
