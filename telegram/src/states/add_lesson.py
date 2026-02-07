@@ -3,6 +3,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class AddLesson(StatesGroup):
     scene = "add_lesson"
+    text = "Добавить разовый урок"
     command = "/" + scene
     base_callback = scene + "/"
     choose_date = State()

@@ -7,6 +7,8 @@ from src.service.cache import UserSettings
 
 class UserService:
     def __init__(self, message: Message) -> None:
+        if not message.from_user:
+            raise ValueError("Message must have a from_user attribute")
         self.telegram_id = message.from_user.id
         self.full_name = message.from_user.full_name
         self.username = message.from_user.username

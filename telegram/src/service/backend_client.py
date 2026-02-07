@@ -1,8 +1,10 @@
-from src.schemas import UserCreate
+from typing import Any
+
 from aiohttp import ClientError, ClientSession
 from circuitbreaker import CircuitBreakerError
 
 from src.core.logger import logger
+from src.schemas import UserCreate
 from src.service.cache import Event, Slot, UserCacheData, UserSettings, cache
 
 
@@ -12,7 +14,7 @@ class BackendClient:
     API_URL = "http://localhost:8000/api/v1"
     CACHE_KEY_TEMPLATE = "schedule:{user_id}"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.session: ClientSession | None = None
 
     async def _get_session(self) -> ClientSession:
@@ -21,7 +23,7 @@ class BackendClient:
             self.session = ClientSession()
         return self.session
 
-    async def _request(self, method: str, url: str, **kwargs) -> dict | None:
+    async def _request(self, method: str, url: str, **kwargs: dict[str, Any]) -> dict | None:
         """Generic request with x service key."""
         headers = {
             "X-Service-Key": "your-secret-service-key-here",
@@ -140,6 +142,14 @@ class BackendClient:
         if response is not None:
             logger.info(f"Created user {user.telegram_id} in backend")
         return UserSettings(**response) if response else None
+
+    async def get_teacher_id(self, student_telegram_id: int) -> int | None:
+        """Get teacher ID for a given student."""
+        user_data = await self.get_user_cache_data(student_telegram_id)
+        if user_data is None:
+            logger.warning(f"Cannot get teacher ID for user {student_telegram_id}: no cache data")
+            return None
+        return user_data.user_settings.teacher_telegram_id
 
     async def create_event(self, event: dict):
         pass

@@ -16,6 +16,7 @@ class Slot(BaseModel):
 
 class UserSettings(BaseModel):
     telegram_id: int = 0
+    teacher_telegram_id: int
     full_name: str = ""
     username: str | None = None
     role: str = "student"
@@ -36,7 +37,7 @@ class CacheData(BaseModel):
 class BotCache:
     """Pure storage layer - no business logic."""
 
-    def __init__(self, maxsize: int = 100, ttl: int = 300):
+    def __init__(self, maxsize: int = 100, ttl: int = 300) -> None:
         self._cache = TTLCache(maxsize=maxsize, ttl=ttl)
 
     def get(self, key: str) -> dict | None:
