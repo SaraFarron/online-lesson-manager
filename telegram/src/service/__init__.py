@@ -1,4 +1,4 @@
 from src.service.backend_client import BackendClient
-from src.service.start import StartService
+from src.service.start import UserService
 
 __all__ = ["BackendClient", "StartService"]

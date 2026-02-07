@@ -5,7 +5,7 @@ from src.service import BackendClient
 from src.service.cache import UserSettings
 
 
-class StartService:
+class UserService:
     def __init__(self, message: Message) -> None:
         self.telegram_id = message.from_user.id
         self.full_name = message.from_user.full_name

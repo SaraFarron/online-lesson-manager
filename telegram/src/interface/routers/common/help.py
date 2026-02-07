@@ -3,19 +3,22 @@ from __future__ import annotations
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
-from sqlalchemy.orm import Session
 
-from src.interface.keyboards import Keyboards
 from src.interface.messages import replies
+from src.keyboards import all_commands
+from src.service import UserService
+from src.service.utils import telegram_checks
 
-COMMAND = "help"
 router: Router = Router()
 
 
-@router.message(Command(COMMAND))
-async def help_handler(message: Message, db: Session) -> None:
+@router.message(Command("help"))
+async def help_handler(message: Message) -> None:
     """Handler receives messages with `/help` command."""
-    message, user = UserService(db).check_user(message)
-    await message.answer(replies.HELP_MESSAGE, reply_markup=Keyboards.all_commands(user.role))
-    username = user.username if user.username else user.full_name
-    EventHistoryRepo(db).create(username, "help", "help", "")
+    message = telegram_checks(message)
+    service = UserService(message)
+    user = await service.get_user()
+    if user is None:
+        await message.answer(replies.HELP_MESSAGE, reply_markup=all_commands("guest"))
+        return
+    await message.answer(replies.HELP_MESSAGE, reply_markup=all_commands(user.role))

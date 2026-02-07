@@ -3,7 +3,8 @@ from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
 
 from src.interface.messages import replies
-from src.service import StartService
+from src.keyboards import all_commands
+from src.service import UserService
 from src.service.utils import telegram_checks
 
 router: Router = Router()
@@ -14,10 +15,10 @@ router: Router = Router()
 async def start_handler(message: Message, command: CommandObject) -> None:
     """Handler receives messages with `/start` command."""
     message = telegram_checks(message)
-    service = StartService(message)
+    service = UserService(message)
     user = await service.get_user()
     if user is None:
-        # code = command.args
+        # code = command.args  # TODO
         code = "abc"
         user = await service.register(code)
 
@@ -25,4 +26,4 @@ async def start_handler(message: Message, command: CommandObject) -> None:
         await message.answer(replies.REGISTRATION_FAILED)
         return
     await message.answer(replies.GREETINGS % html.bold(user.full_name))
-    await message.answer(replies.BOT_DESCRIPTION)
+    await message.answer(replies.BOT_DESCRIPTION, reply_markup=all_commands(user.role))

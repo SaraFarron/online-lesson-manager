@@ -1,6 +1,6 @@
 # Common, always first
 # from src.interface.routers.common.cancel import router as cancel_router
-# from src.interface.routers.common.help import router as help_router
+from src.interface.routers.common.help import router as help_router
 from src.interface.routers.common.start import router as start_router
 
 # Lessons
@@ -23,7 +23,7 @@ from src.interface.routers.common.start import router as start_router
 all_routers = [
     # cancel_router,
     start_router,
-    # help_router,
+    help_router,
     # add_lesson_router,
     # add_rec_lesson_router,
     # move_lesson_router,
