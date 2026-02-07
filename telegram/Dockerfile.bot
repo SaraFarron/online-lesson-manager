@@ -11,4 +11,4 @@ COPY . .
 RUN python validate_imports.py
 
 # Fixed CMD - adds /app to Python path explicitly
-CMD ["sh", "-c", "PYTHONPATH=/app alembic upgrade head && PYTHONPATH=/app python src/main.py"]
+CMD ["sh", "-c", "PYTHONPATH=/app python src/main.py"]

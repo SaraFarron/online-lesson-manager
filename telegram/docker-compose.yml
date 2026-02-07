@@ -5,16 +5,4 @@ services:
       dockerfile: Dockerfile.bot
     env_file:
       - .env
-    volumes:
-      - ./db:/app/db
-    restart: unless-stopped
-
-  scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile.scheduler
-    env_file:
-      - .env
-    volumes:
-      - ./db:/app/db
     restart: unless-stopped
