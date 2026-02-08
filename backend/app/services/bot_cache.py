@@ -16,6 +16,7 @@ class BotCacheService:
     async def get_student_schedule(self, user: User) -> TelegramCacheResponse:
         start = datetime.now()
         end = start + timedelta(days=14)
+        start, end = start.date(), end.date()
         schedule = await self.event_service.get_schedule_range(user, start, end)
         free_slots = await self.event_service.get_free_slots_range(user, start, end)
         recurrent_free_slots = {}
