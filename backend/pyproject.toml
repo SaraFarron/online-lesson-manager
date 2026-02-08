@@ -32,6 +32,7 @@ build-backend = "poetry.core.masonry.api"
 target-version = "py311"
 line-length = 120
 select = ["E", "F", "I", "N", "W", "UP"]
+exclude = ["alembic/versions"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
