@@ -4,7 +4,7 @@ from aiohttp import ClientError, ClientSession
 from circuitbreaker import CircuitBreakerError
 
 from src.core.logger import logger
-from src.schemas import UserCreate
+from src.schemas import EventCreate, UserCreate
 from src.service.cache import Event, Slot, UserCacheData, UserSettings, cache
 
 
@@ -162,8 +162,18 @@ class BackendClient:
             return None
         return user_data.user_settings.teacher_telegram_id
 
-    async def create_event(self, event: dict):
-        pass
+    async def create_event(self, event: EventCreate):
+        response = await self._request(
+            "POST",
+            f"{self.API_URL}/events",
+            json={
+                "title": event.title,
+                "date": event.day.isoformat(),
+                "startTime": event.start.isoformat(),
+                "duration": event.duration,
+                "isRecurring": event.is_recurrent,
+            },
+        )
 
     async def update_event(self, event_id: int, event: dict):
         pass

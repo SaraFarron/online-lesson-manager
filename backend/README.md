@@ -304,6 +304,6 @@ MIT
 
 # Migration shortcut
 ```sh
-docker compose run --rm --user root api alembic revision --autogenerate -m "add_user_settings"
+docker compose run --rm --user root api alembic revision --autogenerate -m "big_integer"
 docker compose run --rm api alembic upgrade head
 ```

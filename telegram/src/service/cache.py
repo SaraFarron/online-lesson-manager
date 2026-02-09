@@ -16,10 +16,11 @@ class Slot(BaseModel):
 
 class UserSettings(BaseModel):
     telegram_id: int = 0
-    teacher_telegram_id: int
+    teacher_telegram_id: int | None = None
     full_name: str = ""
     username: str | None = None
     role: str = "student"
+    token: str | None = None
 
 
 class UserCacheData(BaseModel):

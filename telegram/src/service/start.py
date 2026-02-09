@@ -6,10 +6,10 @@ from src.service.cache import UserSettings
 
 
 class UserService:
-    def __init__(self, message: Message) -> None:
+    def __init__(self, message: Message, telegram_id: int | None = None) -> None:
         if not message.from_user:
             raise ValueError("Message must have a from_user attribute")
-        self.telegram_id = message.from_user.id
+        self.telegram_id = telegram_id if telegram_id is not None else message.from_user.id
         self.full_name = message.from_user.full_name
         self.username = message.from_user.username
         self.backend = BackendClient()

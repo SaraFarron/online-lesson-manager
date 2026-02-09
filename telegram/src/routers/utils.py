@@ -21,7 +21,7 @@ async def student_permission(event: Message | CallbackQuery):
     If the user is not registered, sends a permission denied message and returns None.
     """
     message = telegram_checks(event)
-    service = UserService(message)
+    service = UserService(message, event.from_user.id)  # ty:ignore[possibly-missing-attribute]
     user = await service.get_user()
     if user is None:
         await message.answer(replies.PERMISSION_DENIED)
