@@ -1,7 +1,7 @@
 from datetime import datetime, time
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.models import NotificationStatus
 

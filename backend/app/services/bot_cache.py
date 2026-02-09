@@ -2,9 +2,10 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User
+from app.models import Event, RecurrentEvent, User
 from app.repositories import UserRepository
 from app.schemas import TelegramCacheResponse
+from app.services import AuthService
 from app.services.events import EventService
 
 
@@ -12,6 +13,22 @@ class BotCacheService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.event_service = EventService(session)
+        self.auth_service = AuthService(session)
+
+    def _convert_schedule_to_cache_response(
+        self, schedule: dict[str, list[Event | RecurrentEvent]]
+    ) -> dict[str, list[dict[str, str]]]:
+        cache_schedule: dict[str, list[dict[str, str]]] = {}
+        for date, events in schedule.items():
+            cache_schedule[date] = []
+            for event in events:
+                cache_schedule[date].append(
+                    {
+                        "type": event.title,
+                        "start": event.start.time().isoformat(),
+                    }
+                )
+        return cache_schedule
 
     async def get_student_schedule(self, user: User) -> TelegramCacheResponse:
         start = datetime.now()
@@ -22,12 +39,14 @@ class BotCacheService:
         recurrent_free_slots = {}
         for weekday in range(7):
             recurrent_free_slots[str(weekday)] = await self.event_service.get_recurrent_free_slots(user, weekday)
+        new_token = await self.auth_service.generate_token(user.id)
         return TelegramCacheResponse(
             free_slots=free_slots,
             recurrent_free_slots=recurrent_free_slots,
-            schedule=schedule,
+            schedule=self._convert_schedule_to_cache_response(schedule),
             user_settings={
                 "teacher_telegram_id": user.teacher.telegram_id if user.teacher else None,
+                "token": new_token.token,
             },  # Placeholder for user settings
         )
 

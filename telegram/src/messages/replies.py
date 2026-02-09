@@ -37,6 +37,7 @@ WRONG_DATE_FMT = f"Неверный формат даты, допустимые:
 UNKNOWN_ACTION_ERR = "Произошла ошибка: неизвестное действие"
 LESSON_NOT_FOUND_ERR = "Произошла ошибка: урок не найден"
 PERMISSION_DENIED = "У вас нет доступа к этой команде"
+SOMETHING_WENT_WRONG = "Что-то пошло не так, попробуйте еще раз позже"
 
 # Lessons
 CHOOSE_CURRENT_LESSON_DATE = f"Введите дату занятия, формат {html.code('ДД ММ')} или {html.code('ГГГГ ММ ДД')}"

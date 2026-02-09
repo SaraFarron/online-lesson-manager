@@ -45,5 +45,5 @@ async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
     if user is None:
         return
 
-    service = AddLessonService(message, state)
+    service = AddLessonService(message, state, callback)
     await service.create()

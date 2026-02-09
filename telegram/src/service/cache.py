@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 class Event(BaseModel):
     type: str
-    start: datetime
+    start: datetime | time
 
 
 class Slot(BaseModel):

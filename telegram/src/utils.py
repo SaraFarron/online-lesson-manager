@@ -40,7 +40,7 @@ def parse_time(text: str):
     return None
 
 
-def get_callback_arg(callback_data: str, callback: str):
+def get_callback_arg(callback_data: str, callback: str) -> str:
     return callback_data.replace(callback, "")
 
 

@@ -53,6 +53,13 @@ class BackendClient:
             logger.warning(f"Circuit breaker open for {method} {url}")
             return None
 
+    async def _user_request(self, method: str, url: str, token: str, **kwargs: dict[str, Any]) -> dict | None:
+        """User-authenticated request."""
+        headers = {
+            "Authorization": f"Bearer {token}",
+        } | kwargs.pop("headers", {})
+        return await self._request(method, url, headers=headers, **kwargs)
+
     async def _fetch_from_backend(self, telegram_id: int) -> UserCacheData | None:
         """Fetch schedule from backend API."""
         response = await self._request(
@@ -162,10 +169,11 @@ class BackendClient:
             return None
         return user_data.user_settings.teacher_telegram_id
 
-    async def create_event(self, event: EventCreate):
-        response = await self._request(
+    async def create_event(self, event: EventCreate, token: str):
+        response = await self._user_request(
             "POST",
             f"{self.API_URL}/events",
+            token=token,
             json={
                 "title": event.title,
                 "date": event.day.isoformat(),
@@ -174,17 +182,20 @@ class BackendClient:
                 "isRecurring": event.is_recurrent,
             },
         )
+        if not response:
+            raise Exception("Failed to create event")
+        return response
 
-    async def update_event(self, event_id: int, event: dict):
+    async def update_event(self, event_id: int, event: dict, token: str):
         pass
 
-    async def delete_event(self, event_id: int):
+    async def delete_event(self, event_id: int, token: str):
         pass
 
-    async def create_recurrent_event(self, event: dict):
+    async def create_recurrent_event(self, event: dict, token: str):
         pass
 
-    async def update_recurrent_event(self, event_id: int, event: dict):
+    async def update_recurrent_event(self, event_id: int, event: dict, token: str):
         pass
 
     async def close(self) -> None:

@@ -43,7 +43,7 @@ class BaseEvent(BaseModel):
 
     def to_dict(self, user: User) -> dict[str, datetime | str | int | None]:
         """Convert EventCreate to dictionary."""
-        start = datetime.strptime(self.date + " " + self.startTime, "%Y-%m-%d %H:%M")
+        start = datetime.strptime(self.date + " " + self.startTime, "%Y-%m-%d %H:%M:%S")
         end = start + timedelta(minutes=self.duration)
         teacher_id = user.teacher_id if user.role == User.Roles.STUDENT else user.id
         res = {

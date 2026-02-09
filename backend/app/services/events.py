@@ -85,7 +85,7 @@ class EventService:
         else:
             event_start = datetime.strptime(
                 " ".join([event.date, event.startTime]),
-                "%Y-%m-%d %H:%M"
+                "%Y-%m-%d %H:%M:%S"
             )
             event_end = event_start + timedelta(minutes=event.duration)
             free_slots = await self.get_free_slots(user, event_start.date())
