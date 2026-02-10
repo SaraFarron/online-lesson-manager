@@ -77,6 +77,7 @@ class EventService:
 
     async def create_event(self, event: EventCreate, user: User) -> Event | RecurrentEvent:
         """Create a new event."""
+
         def is_overlapping(free_slots: list[tuple[time, time]], candidate: tuple[time, time]):
             for start, end in free_slots:
                 if candidate[0] >= start and candidate[1] <= end:
@@ -95,52 +96,52 @@ class EventService:
             created_event = await self.repository.create(event_dict)
         return created_event
 
-    async def get_schedule(self, user: User, day: date) -> list[Event | RecurrentEvent]:
-        """Get schedule for a specific day."""
+    async def _get_occupied_slots_for_day(self, user: User, day: date) -> list[Event | RecurrentEvent]:
+        """Get all events (regular + recurrent) that occupy time slots on a specific day.
+
+        This is the single source of truth for determining what events occur on a given day.
+        Used by both get_schedule() and get_free_slots() to ensure consistency.
+
+        Args:
+            user: The user to fetch events for
+            day: The date to get events for
+
+        Returns:
+            List of Event and RecurrentEvent objects that occur on the specified date
+        """
         events: list[Event | RecurrentEvent] = []
+
+        # Get regular events for this day
         for event in await self.repository.get_by_user(user):
             if event.start.date() == day:
                 events.append(event)
-        recurrent_events = await self.recurrent_repo.get_by_user(user)
-        recurrent_cancels = await self.cancels_repo.get_cancels_by_recurrent_events(
-            [event.id for event in recurrent_events]
-        )
-        day_cancels = {cancel.recurrent_event_id for cancel in recurrent_cancels if cancel.cancel_date.date() == day}
-        recurrent_events = [event for event in recurrent_events if event.id not in day_cancels]
-        for event in recurrent_events:
-            # Check if event started on or before the target day and weekdays match
-            if event.start.date() <= day and event.start.weekday() == day.weekday():
-                events.append(event)
+
+        # Get recurrent events for this day (with cancellation logic)
+        recurrent_events = await self.recurrent_repo.get_for_date(user, day)
+        events.extend(recurrent_events)
+
         return events
+
+    async def get_schedule(self, user: User, day: date) -> list[Event | RecurrentEvent]:
+        """Get schedule for a specific day."""
+        return await self._get_occupied_slots_for_day(user, day)
 
     async def get_schedule_range(self, user: User, start_date: date, end_date: date):
         """Get schedule for a date range."""
-        events = await self.repository.get_by_user(user)
-        recurrent_events = await self.recurrent_repo.get_by_user(user)
-        recurrent_cancels = await self.cancels_repo.get_cancels_by_recurrent_events(
-            [event.id for event in recurrent_events]
-        )
         schedule: dict[str, list[Event | RecurrentEvent]] = {}
         current_date = start_date
         while current_date <= end_date:
-            schedule[current_date.isoformat()] = []  # We need empty dates also
-            for event in events:
-                if event.start.date() == current_date:
-                    schedule[current_date.isoformat()].append(event)
-            day_cancels = {
-                cancel.recurrent_event_id for cancel in recurrent_cancels if cancel.cancel_date.date() == current_date
-            }
-            recurrent_events_day = [event for event in recurrent_events if event.id not in day_cancels]
-            for event in recurrent_events_day:
-                # Check if event started on or before the current date and weekdays match
-                if event.start.date() <= current_date and event.start.weekday() == current_date.weekday():
-                    schedule[current_date.isoformat()].append(event)
+            # Use centralized logic for getting events for each day
+            schedule[current_date.isoformat()] = await self._get_occupied_slots_for_day(user, current_date)
             current_date += timedelta(days=1)
         return schedule
 
     @staticmethod
-    def _filter_out_occupied_slots(events: list[Event | RecurrentEvent], start: time, end: time) -> list[tuple[time, time]]:
+    def _filter_out_occupied_slots(
+        events: list[Event | RecurrentEvent], start: time, end: time
+    ) -> list[tuple[time, time]]:
         """Filter out occupied time slots from a list of events."""
+
         def is_occupied(slot_start: time, slot_end: time) -> bool:
             for event in events:
                 event_start = event.start.time()
@@ -167,8 +168,8 @@ class EventService:
         """Get free time slots for a specific day."""
         if day < datetime.now(UTC).date():
             return []
-        events = await self.get_schedule(user, day)
-        start, end = user.working_hours()
+        events = await self._get_occupied_slots_for_day(user, day)
+        start, end = await self._get_working_hours(user)
         return self._filter_out_occupied_slots(events, start, end)
 
     async def _get_working_hours(self, user: User) -> tuple[time, time]:
@@ -186,7 +187,7 @@ class EventService:
         free_slots_range: dict[str, list[dict[str, time]]] = {}
         start_work, end_work = await self._get_working_hours(user)
         for day_str, events in schedule.items():
-            if datetime.fromisoformat(day_str) < datetime.now():
+            if date.fromisoformat(day_str) < datetime.now(UTC).date():
                 free_slots_range[day_str] = []
             else:
                 free_slots = self._filter_out_occupied_slots(events, start_work, end_work)

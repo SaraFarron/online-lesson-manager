@@ -37,6 +37,182 @@
 
 ---
 
+## Backend Architecture: Event Scheduling
+
+### Single Source of Truth Pattern
+
+**Цель:** Гарантировать, что все эндпоинты (публичные и внутренние) используют одинаковую логику для расчёта расписания и свободных слотов.
+
+#### Архитектура слоёв
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│        _get_occupied_slots_for_day(user, day)                   │
+│     ЕДИНЫЙ ИСТОЧНИК ИСТИНЫ ДЛЯ РАСЧЁТА ЗАНЯТЫХ СЛОТОВ           │
+│                                                                 │
+│  1. Получить регулярные события (EventRepository.get_by_user)   │
+│     - Фильтрует по event.start.date() == day                    │
+│                                                                 │
+│  2. Получить рекуррентные события на эту дату                   │
+│     (RecurrentEventRepository.get_for_date)                     │
+│     - Фильтрует по weekday                                      │
+│     - Применяет логику отмен (RecurrentCancels)                 │
+│     - Проверяет interval_end (дата окончания повторений)        │
+│                                                                 │
+│  3. Возвращает объединённый список Event | RecurrentEvent       │
+└──────────────────┬──────────────────────────────────────────────┘
+                   │
+         ┌─────────┴─────────┐
+         │                   │
+         ▼                   ▼
+   get_schedule       get_free_slots
+   (возвращает        (вычисляет свободные
+    события)           слоты из событий)
+         │                   │
+         ▼                   ▼
+get_schedule_range   get_free_slots_range
+(вызывает SSOT       (использует
+ для каждого дня)     get_schedule_range)
+         │                   │
+         ▼                   ▼
+┌────────────────────────────────────────┐
+│     Все публичные эндпоинты:           │
+│  - GET /schedule/day                   │
+│  - GET /schedule/range                 │
+│  - GET /schedule/free-slots/day        │
+│  - GET /schedule/free-slots/range      │
+└────────────────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────────────────┐
+│     Внутренние эндпоинты (для бота):   │
+│  - GET /internal/schedule/{telegram_id}│
+│    (через BotCacheService →            │
+│     EventService.get_schedule_range &  │
+│     get_free_slots_range)              │
+└────────────────────────────────────────┘
+```
+
+#### Ключевые принципы
+
+**1. Централизация логики фильтрации**
+- Метод `_get_occupied_slots_for_day()` — **единственное** место, где определяется, какие события происходят в конкретный день
+- Все остальные методы используют его напрямую или косвенно
+
+**2. Рекуррентные события — в репозитории**
+- Логика фильтрации рекуррентных событий (по weekday, с отменами) инкапсулирована в `RecurrentEventRepository.get_for_date()`
+- Сервисный слой не дублирует эту логику
+
+**3. Консистентность между эндпоинтами**
+- `/schedule/free-slots/day` и `/internal/schedule/{telegram_id}` используют **одну и ту же** логику
+- Исключена возможность расхождений в данных
+
+#### Реализация
+
+**Файл:** `app/services/events.py`
+
+```python
+async def _get_occupied_slots_for_day(
+    self, user: User, day: date
+) -> list[Event | RecurrentEvent]:
+    """Единый источник истины для определения занятых слотов."""
+    events: list[Event | RecurrentEvent] = []
+    
+    # Регулярные события
+    for event in await self.repository.get_by_user(user):
+        if event.start.date() == day:
+            events.append(event)
+    
+    # Рекуррентные события (с учётом отмен)
+    recurrent_events = await self.recurrent_repo.get_for_date(user, day)
+    events.extend(recurrent_events)
+    
+    return events
+
+async def get_schedule(self, user: User, day: date):
+    """Расписание на день — прямо из SSOT."""
+    return await self._get_occupied_slots_for_day(user, day)
+
+async def get_free_slots(self, user: User, day: date):
+    """Свободные слоты — вычисляем из SSOT."""
+    events = await self._get_occupied_slots_for_day(user, day)
+    start, end = await self._get_working_hours(user)
+    return self._filter_out_occupied_slots(events, start, end)
+```
+
+**Файл:** `app/repositories/events.py`
+
+```python
+async def get_for_date(
+    self, user: User, target_date: date
+) -> list[RecurrentEvent]:
+    """Фильтрация рекуррентных событий с учётом отмен."""
+    recurrent_events = await self.get_by_user(user)
+    
+    # Получить отмены
+    recurrent_cancels = await self.cancels_repo.get_cancels_by_recurrent_events(
+        [event.id for event in recurrent_events]
+    )
+    
+    # Фильтровать по дате отмены
+    day_cancels = {
+        cancel.recurrent_event_id
+        for cancel in recurrent_cancels
+        if cancel.canceled_date.date() == target_date
+    }
+    
+    # Фильтровать по weekday и отменам
+    matching_events = []
+    for event in recurrent_events:
+        if event.id in day_cancels:
+            continue
+        if event.start.date() > target_date:
+            continue
+        if event.start.weekday() != target_date.weekday():
+            continue
+        if event.interval_end and event.interval_end.date() < target_date:
+            continue
+        matching_events.append(event)
+    
+    return matching_events
+```
+
+#### Тестирование
+
+**Файл:** `tests/test_schedule.py`
+
+Класс `TestConsistencyBetweenEndpoints` гарантирует:
+- ✅ `/schedule/free-slots/day` ≡ `/schedule/free-slots/range` (для одной даты)
+- ✅ `/schedule/day` ≡ `/schedule/range` (для одной даты)
+- ✅ Свободные слоты учитывают **все** события (регулярные + рекуррентные)
+- ✅ Расписание показывает **все** события (регулярные + рекуррентные)
+
+#### Критические баги, исправленные при рефакторинге
+
+**Bug #1:** Некорректное сравнение дат в `get_free_slots_range()`
+```python
+# ❌ Было (naive datetime vs aware datetime)
+if datetime.fromisoformat(day_str) < datetime.now():
+
+# ✅ Стало (date vs date)
+if date.fromisoformat(day_str) < datetime.now(UTC).date():
+```
+
+**Bug #2:** Дублирование логики фильтрации рекуррентных событий
+- До рефакторинга: логика повторялась в `get_schedule()` и `get_schedule_range()`
+- После: вся логика в `RecurrentEventRepository.get_for_date()`
+
+**Bug #3:** Неправильный фильтр отмен в `RecurrentCancelsRepository`
+```python
+# ❌ Было
+RecurrentCancels.id.in_(recurrent_event_ids)
+
+# ✅ Стало
+RecurrentCancels.recurrent_event_id.in_(recurrent_event_ids)
+```
+
+---
+
 ## Часть 1: Аутентификация между сервисами
 
 **Цель:** Защитить API от несанкционированного доступа. Бот должен подтверждать свою личность.

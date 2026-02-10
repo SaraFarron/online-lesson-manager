@@ -70,9 +70,7 @@ class TestFreeSlotsDay:
     """Tests for GET /api/v1/schedule/free-slots/day endpoint."""
 
     @pytest.mark.asyncio
-    async def test_no_events_whole_day_free(
-        self, client: AsyncClient, auth_token: str
-    ):
+    async def test_no_events_whole_day_free(self, client: AsyncClient, auth_token: str):
         """When there are no events, the whole day should be free (9:00-17:00 UTC)."""
         # Use a future date to ensure free slots are returned
         future_date = (datetime.now(UTC) + timedelta(days=7)).date()
@@ -183,9 +181,7 @@ class TestFreeSlotsRange:
     """Tests for GET /api/v1/schedule/free-slots/range endpoint."""
 
     @pytest.mark.asyncio
-    async def test_no_events_range_all_days_free(
-        self, client: AsyncClient, auth_token: str
-    ):
+    async def test_no_events_range_all_days_free(self, client: AsyncClient, auth_token: str):
         """When there are no events, all days in range should be fully free."""
         start_date = (datetime.now(UTC) + timedelta(days=7)).date()
         end_date = (datetime.now(UTC) + timedelta(days=9)).date()
@@ -284,9 +280,7 @@ class TestScheduleDay:
     """Tests for GET /api/v1/schedule/day endpoint."""
 
     @pytest.mark.asyncio
-    async def test_no_events_empty_schedule(
-        self, client: AsyncClient, auth_token: str
-    ):
+    async def test_no_events_empty_schedule(self, client: AsyncClient, auth_token: str):
         """When there are no events, schedule should be empty."""
         future_date = (datetime.now(UTC) + timedelta(days=7)).date()
 
@@ -414,9 +408,7 @@ class TestScheduleRange:
     """Tests for GET /api/v1/schedule/range endpoint."""
 
     @pytest.mark.asyncio
-    async def test_no_events_empty_schedule_range(
-        self, client: AsyncClient, auth_token: str
-    ):
+    async def test_no_events_empty_schedule_range(self, client: AsyncClient, auth_token: str):
         """When there are no events, all days should have empty schedules."""
         start_date = (datetime.now(UTC) + timedelta(days=7)).date()
         end_date = (datetime.now(UTC) + timedelta(days=9)).date()
@@ -662,3 +654,226 @@ class TestUTCTimeHandling:
             # Should be parseable as ISO date
             parsed_date = datetime.strptime(day_str, "%Y-%m-%d").date()
             assert start_date <= parsed_date <= end_date
+
+
+class TestConsistencyBetweenEndpoints:
+    """Tests to ensure consistency between different schedule endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_free_slots_day_matches_range(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        test_student: User,
+        auth_token: str,
+    ):
+        """Free slots for a single day should match the same day in range."""
+        future_date = (datetime.now(UTC) + timedelta(days=7)).date()
+
+        # Create an event from 10:00 to 11:00 UTC
+        event = Event(
+            title="Test Lesson",
+            start=datetime(future_date.year, future_date.month, future_date.day, 10, 0, tzinfo=UTC),
+            end=datetime(future_date.year, future_date.month, future_date.day, 11, 0, tzinfo=UTC),
+            teacher_id=test_user.id,
+            student_id=test_student.id,
+        )
+        db_session.add(event)
+        await db_session.flush()
+
+        # Get single day free slots
+        day_response = await client.get(
+            "/api/v1/schedule/free-slots/day",
+            params={"day": future_date.isoformat()},
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+        # Get range free slots
+        range_response = await client.get(
+            "/api/v1/schedule/free-slots/range",
+            params={
+                "start_day": future_date.isoformat(),
+                "end_day": future_date.isoformat(),
+            },
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+        assert day_response.status_code == 200
+        assert range_response.status_code == 200
+
+        day_data = day_response.json()["data"]
+        range_data = range_response.json()["data"][future_date.isoformat()]
+
+        # Should be identical
+        assert len(day_data) == len(range_data)
+        for day_slot, range_slot in zip(day_data, range_data):
+            assert day_slot["start"] == range_slot["start"]
+            assert day_slot["end"] == range_slot["end"]
+
+    @pytest.mark.asyncio
+    async def test_schedule_day_matches_range(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        test_student: User,
+        auth_token: str,
+    ):
+        """Schedule for a single day should match the same day in range."""
+        future_date = (datetime.now(UTC) + timedelta(days=7)).date()
+
+        # Create multiple events
+        event1 = Event(
+            title="Morning Lesson",
+            start=datetime(future_date.year, future_date.month, future_date.day, 10, 0, tzinfo=UTC),
+            end=datetime(future_date.year, future_date.month, future_date.day, 11, 0, tzinfo=UTC),
+            teacher_id=test_user.id,
+            student_id=test_student.id,
+        )
+        event2 = Event(
+            title="Afternoon Lesson",
+            start=datetime(future_date.year, future_date.month, future_date.day, 14, 0, tzinfo=UTC),
+            end=datetime(future_date.year, future_date.month, future_date.day, 15, 0, tzinfo=UTC),
+            teacher_id=test_user.id,
+            student_id=test_student.id,
+        )
+        db_session.add_all([event1, event2])
+        await db_session.flush()
+
+        # Get single day schedule
+        day_response = await client.get(
+            "/api/v1/schedule/day",
+            params={"day": future_date.isoformat()},
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+        # Get range schedule
+        range_response = await client.get(
+            "/api/v1/schedule/range",
+            params={
+                "start_day": future_date.isoformat(),
+                "end_day": future_date.isoformat(),
+            },
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+        assert day_response.status_code == 200
+        assert range_response.status_code == 200
+
+        day_data = day_response.json()["data"]
+        range_data = range_response.json()["data"][future_date.isoformat()]
+
+        # Should have same number of events
+        assert len(day_data) == len(range_data) == 2
+
+        # Events should be the same
+        day_ids = sorted([e["id"] for e in day_data])
+        range_ids = sorted([e["id"] for e in range_data])
+        assert day_ids == range_ids
+
+    @pytest.mark.asyncio
+    async def test_free_slots_calculated_from_all_events(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        test_student: User,
+        auth_token: str,
+    ):
+        """Free slots should account for all events (regular + recurrent)."""
+        future_date = (datetime.now(UTC) + timedelta(days=7)).date()
+
+        # Create a regular event
+        regular_event = Event(
+            title="Regular Lesson",
+            start=datetime(future_date.year, future_date.month, future_date.day, 10, 0, tzinfo=UTC),
+            end=datetime(future_date.year, future_date.month, future_date.day, 11, 0, tzinfo=UTC),
+            teacher_id=test_user.id,
+            student_id=test_student.id,
+        )
+
+        # Create a recurrent event on the same weekday
+        recurrent_start = datetime(future_date.year, future_date.month, future_date.day, 14, 0, tzinfo=UTC)
+        recurrent_event = RecurrentEvent(
+            title="Weekly Lesson",
+            start=recurrent_start,
+            end=recurrent_start + timedelta(hours=1),
+            interval_days=7,
+            teacher_id=test_user.id,
+            student_id=test_student.id,
+        )
+
+        db_session.add_all([regular_event, recurrent_event])
+        await db_session.flush()
+
+        # Get free slots for the day
+        response = await client.get(
+            "/api/v1/schedule/free-slots/day",
+            params={"day": future_date.isoformat()},
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+
+        # Should have three free slots: 9-10, 11-14, 15-17
+        assert len(data) == 3
+        assert data[0]["start"] == "09:00:00"
+        assert data[0]["end"] == "10:00:00"
+        assert data[1]["start"] == "11:00:00"
+        assert data[1]["end"] == "14:00:00"
+        assert data[2]["start"] == "15:00:00"
+        assert data[2]["end"] == "17:00:00"
+
+    @pytest.mark.asyncio
+    async def test_schedule_shows_all_events(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        test_student: User,
+        auth_token: str,
+    ):
+        """Schedule should show all events (regular + recurrent)."""
+        future_date = (datetime.now(UTC) + timedelta(days=7)).date()
+
+        # Create a regular event
+        regular_event = Event(
+            title="Regular Lesson",
+            start=datetime(future_date.year, future_date.month, future_date.day, 10, 0, tzinfo=UTC),
+            end=datetime(future_date.year, future_date.month, future_date.day, 11, 0, tzinfo=UTC),
+            teacher_id=test_user.id,
+            student_id=test_student.id,
+        )
+
+        # Create a recurrent event on the same weekday
+        recurrent_start = datetime(future_date.year, future_date.month, future_date.day, 14, 0, tzinfo=UTC)
+        recurrent_event = RecurrentEvent(
+            title="Weekly Lesson",
+            start=recurrent_start,
+            end=recurrent_start + timedelta(hours=1),
+            interval_days=7,
+            teacher_id=test_user.id,
+            student_id=test_student.id,
+        )
+
+        db_session.add_all([regular_event, recurrent_event])
+        await db_session.flush()
+
+        # Get schedule for the day
+        response = await client.get(
+            "/api/v1/schedule/day",
+            params={"day": future_date.isoformat()},
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+
+        # Should show both events
+        assert len(data) == 2
+
+        # Verify both events are present
+        titles = sorted([e["title"] for e in data])
+        assert titles == ["Regular Lesson", "Weekly Lesson"]
