@@ -18,26 +18,40 @@ class BackendClient:
     API_URL = "http://localhost:8000/api/v1"
     CACHE_KEY_TEMPLATE = "schedule:{user_id}"
     _instance: "BackendClient | None" = None
-    
+
     @staticmethod
     def moscow_to_utc(dt: datetime) -> datetime:
         """Convert Moscow datetime to UTC."""
         if dt.tzinfo is None:
             dt = TIMEZONE.localize(dt)
         return dt.astimezone(pytz.utc)
-    
+
     @staticmethod
     def utc_to_moscow(dt: datetime) -> datetime:
         """Convert UTC datetime to Moscow timezone."""
         if dt.tzinfo is None:
             dt = pytz.utc.localize(dt)
         return dt.astimezone(TIMEZONE)
-    
+
     @staticmethod
     def combine_date_time_moscow(day: date_type, start_time: time) -> datetime:
         """Combine date and time in Moscow timezone."""
         dt = datetime.combine(day, start_time)
         return TIMEZONE.localize(dt)
+
+    @staticmethod
+    def convert_time_utc_to_moscow(utc_time: time) -> time:
+        """
+        Convert a time object from UTC to Moscow timezone.
+
+        Uses a reference date to handle timezone conversion properly.
+        Note: This may shift to previous/next day for times near midnight.
+        """
+        reference_date = date_type(2026, 1, 1)  # Arbitrary reference date
+        utc_dt = datetime.combine(reference_date, utc_time)
+        utc_dt = pytz.utc.localize(utc_dt)
+        moscow_dt = utc_dt.astimezone(TIMEZONE)
+        return moscow_dt.time()
 
     def __new__(cls) -> "BackendClient":
         """Singleton pattern: ensure only one instance exists."""
@@ -84,6 +98,46 @@ class BackendClient:
         } | kwargs.pop("headers", {})
         return await self._request(method, url, headers=headers, **kwargs)
 
+    def _convert_user_data_event_times(self, user_data: dict) -> dict:
+        # Convert UTC times in free_slots to Moscow timezone
+        if "free_slots" in user_data:
+            for slots in user_data["free_slots"].values():
+                for slot in slots:
+                    if "start" in slot and isinstance(slot["start"], str):
+                        utc_time = time.fromisoformat(slot["start"])
+                        slot["start"] = self.convert_time_utc_to_moscow(utc_time)
+                    if "end" in slot and isinstance(slot["end"], str):
+                        utc_time = time.fromisoformat(slot["end"])
+                        slot["end"] = self.convert_time_utc_to_moscow(utc_time)
+
+        # Convert UTC times in recurrent_free_slots to Moscow timezone
+        if "recurrent_free_slots" in user_data:
+            for slots in user_data["recurrent_free_slots"].values():
+                for slot in slots:
+                    if "start" in slot and isinstance(slot["start"], str):
+                        utc_time = time.fromisoformat(slot["start"])
+                        slot["start"] = self.convert_time_utc_to_moscow(utc_time)
+                    if "end" in slot and isinstance(slot["end"], str):
+                        utc_time = time.fromisoformat(slot["end"])
+                        slot["end"] = self.convert_time_utc_to_moscow(utc_time)
+
+        # Convert UTC datetimes in schedule to Moscow timezone
+        if "schedule" in user_data:
+            for events in user_data["schedule"].values():
+                for event in events:
+                    if "start" in event and isinstance(event["start"], str):
+                        # Check if it's a full datetime or just a time
+                        if "T" in event["start"] or " " in event["start"]:
+                            # Parse UTC datetime and convert to Moscow
+                            utc_dt = datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
+                            moscow_dt = self.utc_to_moscow(utc_dt)
+                            event["start"] = moscow_dt
+                        else:
+                            # It's just a time string, convert to Moscow time
+                            utc_time = time.fromisoformat(event["start"])
+                            event["start"] = self.convert_time_utc_to_moscow(utc_time)
+        return user_data
+
     async def _fetch_from_backend(self, telegram_id: int) -> UserCacheData | None:
         """Fetch schedule from backend API and convert UTC times to Moscow timezone."""
         response = await self._request(
@@ -93,22 +147,7 @@ class BackendClient:
         if response is not None:
             try:
                 user_data = response[str(telegram_id)]
-                
-                # Convert UTC datetimes in schedule to Moscow timezone
-                if "schedule" in user_data:
-                    for events in user_data["schedule"].values():
-                        for event in events:
-                            if "start" in event and isinstance(event["start"], str):
-                                # Check if it's a full datetime or just a time
-                                if "T" in event["start"] or " " in event["start"]:
-                                    # Parse UTC datetime and convert to Moscow
-                                    utc_dt = datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
-                                    moscow_dt = self.utc_to_moscow(utc_dt)
-                                    event["start"] = moscow_dt
-                                else:
-                                    # It's just a time string, parse as time object (no timezone conversion needed)
-                                    event["start"] = time.fromisoformat(event["start"])
-                
+                user_data = self._convert_user_data_event_times(user_data)
                 return UserCacheData(**user_data)
             except Exception as e:
                 logger.error(f"Error parsing backend response for user {telegram_id}: {e}")
@@ -214,7 +253,7 @@ class BackendClient:
         # Combine date and time in Moscow timezone, then convert to UTC
         moscow_dt = self.combine_date_time_moscow(event.day, event.start)
         utc_dt = self.moscow_to_utc(moscow_dt)
-        
+
         response = await self._user_request(
             "POST",
             f"{self.API_URL}/events",
