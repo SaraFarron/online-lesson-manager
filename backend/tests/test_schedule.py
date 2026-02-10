@@ -334,8 +334,9 @@ class TestScheduleDay:
 
         assert len(data) == 1
         assert data[0]["title"] == "Test Lesson"
-        assert data[0]["date"] == future_date.isoformat()
-        assert data[0]["startTime"] == "10:00:00"
+        # Check that start contains the date and time
+        assert data[0]["start"].startswith(future_date.isoformat())
+        assert "10:00:00" in data[0]["start"]
         assert data[0]["duration"] == 60
         assert data[0]["isRecurring"] is False
 
@@ -574,7 +575,7 @@ class TestUTCTimeHandling:
         data = response.json()["data"]
 
         # Verify time is returned correctly (10:30 UTC)
-        assert data[0]["startTime"] == "10:30:00"
+        assert "10:30:00" in data[0]["start"]
         assert data[0]["duration"] == 60
 
     @pytest.mark.asyncio

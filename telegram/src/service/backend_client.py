@@ -1,8 +1,12 @@
+from datetime import date as date_type
+from datetime import datetime, time
 from typing import Any
 
+import pytz
 from aiohttp import ClientError, ClientSession
 from circuitbreaker import CircuitBreakerError
 
+from src.core.config import TIMEZONE
 from src.core.logger import logger
 from src.schemas import EventCreate, UserCreate
 from src.service.cache import Event, Slot, UserCacheData, UserSettings, cache
@@ -14,6 +18,26 @@ class BackendClient:
     API_URL = "http://localhost:8000/api/v1"
     CACHE_KEY_TEMPLATE = "schedule:{user_id}"
     _instance: "BackendClient | None" = None
+    
+    @staticmethod
+    def moscow_to_utc(dt: datetime) -> datetime:
+        """Convert Moscow datetime to UTC."""
+        if dt.tzinfo is None:
+            dt = TIMEZONE.localize(dt)
+        return dt.astimezone(pytz.utc)
+    
+    @staticmethod
+    def utc_to_moscow(dt: datetime) -> datetime:
+        """Convert UTC datetime to Moscow timezone."""
+        if dt.tzinfo is None:
+            dt = pytz.utc.localize(dt)
+        return dt.astimezone(TIMEZONE)
+    
+    @staticmethod
+    def combine_date_time_moscow(day: date_type, start_time: time) -> datetime:
+        """Combine date and time in Moscow timezone."""
+        dt = datetime.combine(day, start_time)
+        return TIMEZONE.localize(dt)
 
     def __new__(cls) -> "BackendClient":
         """Singleton pattern: ensure only one instance exists."""
@@ -61,14 +85,31 @@ class BackendClient:
         return await self._request(method, url, headers=headers, **kwargs)
 
     async def _fetch_from_backend(self, telegram_id: int) -> UserCacheData | None:
-        """Fetch schedule from backend API."""
+        """Fetch schedule from backend API and convert UTC times to Moscow timezone."""
         response = await self._request(
             "GET",
             f"{self.API_URL}/internal/schedule/{telegram_id}",
         )
         if response is not None:
             try:
-                return UserCacheData(**response[str(telegram_id)])
+                user_data = response[str(telegram_id)]
+                
+                # Convert UTC datetimes in schedule to Moscow timezone
+                if "schedule" in user_data:
+                    for events in user_data["schedule"].values():
+                        for event in events:
+                            if "start" in event and isinstance(event["start"], str):
+                                # Check if it's a full datetime or just a time
+                                if "T" in event["start"] or " " in event["start"]:
+                                    # Parse UTC datetime and convert to Moscow
+                                    utc_dt = datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
+                                    moscow_dt = self.utc_to_moscow(utc_dt)
+                                    event["start"] = moscow_dt
+                                else:
+                                    # It's just a time string, parse as time object (no timezone conversion needed)
+                                    event["start"] = time.fromisoformat(event["start"])
+                
+                return UserCacheData(**user_data)
             except Exception as e:
                 logger.error(f"Error parsing backend response for user {telegram_id}: {e}")
                 return None
@@ -170,16 +211,18 @@ class BackendClient:
         return user_data.user_settings.teacher_telegram_id
 
     async def create_event(self, event: EventCreate, token: str):
+        # Combine date and time in Moscow timezone, then convert to UTC
+        moscow_dt = self.combine_date_time_moscow(event.day, event.start)
+        utc_dt = self.moscow_to_utc(moscow_dt)
+        
         response = await self._user_request(
             "POST",
             f"{self.API_URL}/events",
             token=token,
             json={
                 "title": event.title,
-                "date": event.day.isoformat(),
-                "startTime": event.start.isoformat(),
+                "start": utc_dt.isoformat().replace("+00:00", "Z"),  # Format as "2026-02-10T06:00:00Z"
                 "duration": event.duration,
-                "isRecurring": event.is_recurrent,
             },
         )
         if not response:
@@ -187,15 +230,21 @@ class BackendClient:
         return response
 
     async def update_event(self, event_id: int, event: dict, token: str):
+        # TODO: When implementing, ensure datetime fields are converted to UTC using moscow_to_utc()
+        # and formatted as ISO 8601 with 'Z' suffix: utc_dt.isoformat().replace('+00:00', 'Z')
         pass
 
     async def delete_event(self, event_id: int, token: str):
         pass
 
     async def create_recurrent_event(self, event: dict, token: str):
+        # TODO: When implementing, ensure datetime fields are converted to UTC using moscow_to_utc()
+        # and formatted as ISO 8601 with 'Z' suffix: utc_dt.isoformat().replace('+00:00', 'Z')
         pass
 
     async def update_recurrent_event(self, event_id: int, event: dict, token: str):
+        # TODO: When implementing, ensure datetime fields are converted to UTC using moscow_to_utc()
+        # and formatted as ISO 8601 with 'Z' suffix: utc_dt.isoformat().replace('+00:00', 'Z')
         pass
 
     async def close(self) -> None:

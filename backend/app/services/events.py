@@ -3,7 +3,12 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Event, RecurrentEvent, User
-from app.repositories import EventRepository, RecurrentCancelsRepository, RecurrentEventRepository, TeacherSettingsRepository
+from app.repositories import (
+    EventRepository,
+    RecurrentCancelsRepository,
+    RecurrentEventRepository,
+    TeacherSettingsRepository,
+)
 from app.schemas import EventCreate, EventUpdate
 
 
@@ -83,13 +88,9 @@ class EventService:
             # TODO check for overlapping with other events
             created_event = await self.recurrent_repo.create(event_dict)
         else:
-            event_start = datetime.strptime(
-                " ".join([event.date, event.startTime]),
-                "%Y-%m-%d %H:%M:%S"
-            )
-            event_end = event_start + timedelta(minutes=event.duration)
-            free_slots = await self.get_free_slots(user, event_start.date())
-            if is_overlapping(free_slots, (event_start.time(), event_end.time())):
+            event_end = event.start + timedelta(minutes=event.duration)
+            free_slots = await self.get_free_slots(user, event.start.date())
+            if is_overlapping(free_slots, (event.start.time(), event_end.time())):
                 raise ValueError("The requested time slot is occupied.")
             created_event = await self.repository.create(event_dict)
         return created_event
@@ -107,7 +108,8 @@ class EventService:
         day_cancels = {cancel.recurrent_event_id for cancel in recurrent_cancels if cancel.cancel_date.date() == day}
         recurrent_events = [event for event in recurrent_events if event.id not in day_cancels]
         for event in recurrent_events:
-            if event.start.date() >= day and event.start.weekday() == day.weekday():
+            # Check if event started on or before the target day and weekdays match
+            if event.start.date() <= day and event.start.weekday() == day.weekday():
                 events.append(event)
         return events
 
@@ -130,7 +132,8 @@ class EventService:
             }
             recurrent_events_day = [event for event in recurrent_events if event.id not in day_cancels]
             for event in recurrent_events_day:
-                if event.start.date() >= current_date and event.start.weekday() == current_date.weekday():
+                # Check if event started on or before the current date and weekdays match
+                if event.start.date() <= current_date and event.start.weekday() == current_date.weekday():
                     schedule[current_date.isoformat()].append(event)
             current_date += timedelta(days=1)
         return schedule

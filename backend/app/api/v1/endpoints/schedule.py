@@ -63,7 +63,7 @@ async def get_free_slots_range(
     free_slots = await service.get_free_slots_range(user, start_day, end_day)
     return {
         date: [
-            TimeRangeResponse(start=slot_start.isoformat(), end=slot_end.isoformat()) for slot_start, slot_end in slots
+            TimeRangeResponse(start=slot["start"].isoformat(), end=slot["end"].isoformat()) for slot in slots
         ]
         for date, slots in free_slots.items()
     }

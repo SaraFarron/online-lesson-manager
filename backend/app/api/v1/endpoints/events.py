@@ -54,7 +54,12 @@ async def create_event(
     user: CurrentUser,
     event: EventCreate,
 ):
-    """Create a new event."""
+    """
+    Create a new event.
+
+    All datetime values must be in UTC timezone (ISO 8601 format with 'Z' suffix).
+    Example: "2026-02-10T09:00:00Z"
+    """
     service = EventService(db)
     try:
         created_event = await service.create_event(event, user)
@@ -102,6 +107,5 @@ async def delete_event(
     if success:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Event with id {event_id} does not exist or you don't own it"
+        status_code=status.HTTP_404_NOT_FOUND, detail=f"Event with id {event_id} does not exist or you don't own it"
     )

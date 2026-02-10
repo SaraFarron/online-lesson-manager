@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models import Event, RecurrentEvent, User
 
@@ -10,8 +10,7 @@ class EventResponse(BaseModel):
 
     id: int
     title: str
-    date: str
-    startTime: str
+    start: str
     duration: int
     isRecurring: bool
 
@@ -20,8 +19,7 @@ class EventResponse(BaseModel):
         return EventResponse(
             id=event.id,
             title=event.title,
-            date=event.start.date().isoformat(),
-            startTime=event.start.time().isoformat(),
+            start=event.start.isoformat(),
             duration=round((event.end - event.start).total_seconds() / 60),
             isRecurring=isinstance(event, RecurrentEvent),
         )
@@ -36,19 +34,31 @@ class EventsTotalResponse(BaseModel):
 
 class BaseEvent(BaseModel):
     title: str
-    date: str
-    startTime: str
+    start: datetime
     duration: int = Field(ge=5)
     isRecurring: bool = False
 
+    @field_validator("start")
+    @classmethod
+    def validate_utc_only(cls, v: datetime) -> datetime:
+        """Ensure datetime is timezone-aware and in UTC."""
+        if v.tzinfo is None:
+            raise ValueError('Datetime must include timezone information (e.g., "2026-02-10T09:00:00Z")')
+
+        # Check if timezone is UTC
+        if v.tzinfo != UTC and v.utcoffset() != timedelta(0):
+            raise ValueError("Only UTC timezone is allowed. Please convert to UTC before sending.")
+
+        # Normalize to UTC
+        return v.astimezone(UTC)
+
     def to_dict(self, user: User) -> dict[str, datetime | str | int | None]:
-        """Convert EventCreate to dictionary."""
-        start = datetime.strptime(self.date + " " + self.startTime, "%Y-%m-%d %H:%M:%S")
-        end = start + timedelta(minutes=self.duration)
+        """Convert to dictionary with timezone-aware datetime."""
+        end = self.start + timedelta(minutes=self.duration)
         teacher_id = user.teacher_id if user.role == User.Roles.STUDENT else user.id
         res = {
             "title": self.title,
-            "start": start,
+            "start": self.start,
             "end": end,
             "teacher_id": teacher_id,
             "student_id": user.id,
@@ -57,7 +67,6 @@ class BaseEvent(BaseModel):
             res["interval_days"] = 7
             res["interval_end"] = None
         return res
-
 
 
 class EventCreate(BaseEvent):
