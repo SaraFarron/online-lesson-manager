@@ -98,44 +98,42 @@ class BackendClient:
         } | kwargs.pop("headers", {})
         return await self._request(method, url, headers=headers, **kwargs)
 
+    def _convert_slot_timezone(self, slot: dict) -> dict:
+        """Convert slot times from UTC to Moscow timezone."""
+        if "start" in slot and isinstance(slot["start"], str):
+            utc_time = time.fromisoformat(slot["start"])
+            slot["start"] = self.convert_time_utc_to_moscow(utc_time)
+        if "end" in slot and isinstance(slot["end"], str):
+            utc_time = time.fromisoformat(slot["end"])
+            slot["end"] = self.convert_time_utc_to_moscow(utc_time)
+        return slot
+
     def _convert_user_data_event_times(self, user_data: dict) -> dict:
-        # Convert UTC times in free_slots to Moscow timezone
-        if "free_slots" in user_data:
-            for slots in user_data["free_slots"].values():
-                for slot in slots:
-                    if "start" in slot and isinstance(slot["start"], str):
-                        utc_time = time.fromisoformat(slot["start"])
-                        slot["start"] = self.convert_time_utc_to_moscow(utc_time)
-                    if "end" in slot and isinstance(slot["end"], str):
-                        utc_time = time.fromisoformat(slot["end"])
-                        slot["end"] = self.convert_time_utc_to_moscow(utc_time)
+        """Convert all event times in user_data from UTC to Moscow timezone."""
+        assert all(
+            key in user_data for key in ("user_settings", "free_slots", "recurrent_free_slots", "schedule")
+        ), "Invalid user_data structure"
 
-        # Convert UTC times in recurrent_free_slots to Moscow timezone
-        if "recurrent_free_slots" in user_data:
-            for slots in user_data["recurrent_free_slots"].values():
-                for slot in slots:
-                    if "start" in slot and isinstance(slot["start"], str):
-                        utc_time = time.fromisoformat(slot["start"])
-                        slot["start"] = self.convert_time_utc_to_moscow(utc_time)
-                    if "end" in slot and isinstance(slot["end"], str):
-                        utc_time = time.fromisoformat(slot["end"])
-                        slot["end"] = self.convert_time_utc_to_moscow(utc_time)
+        for key, slots in user_data["free_slots"].items():
+            user_data["free_slots"][key] = [self._convert_slot_timezone(slot) for slot in slots]
 
-        # Convert UTC datetimes in schedule to Moscow timezone
-        if "schedule" in user_data:
-            for events in user_data["schedule"].values():
-                for event in events:
-                    if "start" in event and isinstance(event["start"], str):
-                        # Check if it's a full datetime or just a time
-                        if "T" in event["start"] or " " in event["start"]:
-                            # Parse UTC datetime and convert to Moscow
-                            utc_dt = datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
-                            moscow_dt = self.utc_to_moscow(utc_dt)
-                            event["start"] = moscow_dt
-                        else:
-                            # It's just a time string, convert to Moscow time
-                            utc_time = time.fromisoformat(event["start"])
-                            event["start"] = self.convert_time_utc_to_moscow(utc_time)
+        for key, slots in user_data["recurrent_free_slots"].items():
+            user_data["recurrent_free_slots"][key] = [self._convert_slot_timezone(slot) for slot in slots]
+
+        for events in user_data["schedule"].values():
+            for event in events:
+                if not ("start" in event and isinstance(event["start"], str)):
+                    continue
+                # Check if it's a full datetime or just a time
+                if "T" in event["start"] or " " in event["start"]:
+                    # Parse UTC datetime and convert to Moscow
+                    utc_dt = datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
+                    moscow_dt = self.utc_to_moscow(utc_dt)
+                    event["start"] = moscow_dt
+                else:
+                    # It's just a time string, convert to Moscow time
+                    utc_time = time.fromisoformat(event["start"])
+                    event["start"] = self.convert_time_utc_to_moscow(utc_time)
         return user_data
 
     async def _fetch_from_backend(self, telegram_id: int) -> UserCacheData | None:
