@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta, UTC
 from os import getenv
 
 import aiohttp
@@ -30,10 +30,10 @@ def parse_date(text: str, in_future: bool = False) -> date | None:
     return None
 
 
-def parse_time(text: str):
+def parse_time(text: str) -> time | None:
     for fmt in ("%H:%M", "%H %M"):
         try:
-            time = datetime.strptime(text, fmt)
+            time = datetime.strptime(text, fmt).time()
         except ValueError:
             continue
         return time
@@ -42,6 +42,18 @@ def parse_time(text: str):
 
 def get_callback_arg(callback_data: str, callback: str) -> str:
     return callback_data.replace(callback, "")
+
+
+def get_next_weekday(target_weekday: int) -> datetime:
+    """
+    Returns the next date for the given weekday (0=Monday, 6=Sunday).
+    If today is the target weekday, returns next week's date.
+    """
+    today = datetime.now(UTC)
+    days_ahead = (target_weekday - today.weekday()) % 7
+    if days_ahead == 0:
+        days_ahead = 7
+    return today + timedelta(days=days_ahead)
 
 
 def calc_end_time(time: time):

@@ -260,6 +260,7 @@ class BackendClient:
                 "title": event.title,
                 "start": utc_dt.isoformat().replace("+00:00", "Z"),  # Format as "2026-02-10T06:00:00Z"
                 "duration": event.duration,
+                "isRecurring": event.is_recurrent,
             },
         )
         if not response:

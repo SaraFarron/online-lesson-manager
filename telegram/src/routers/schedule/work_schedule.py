@@ -77,7 +77,7 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
     message, user = UserService(db).check_user_with_id(message, state_data["user_id"], RolesSchema.TEACHER)
 
     now = datetime.now()
-    time = parse_time(message.text).time()
+    time = parse_time(message.text)
     current_day = now.date()
     start = datetime.combine(current_day, time)
     if state_data["mode"] == "start":

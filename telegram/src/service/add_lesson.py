@@ -9,7 +9,7 @@ from src.messages import replies
 from src.schemas import EventCreate
 from src.service.base import ScheduleService
 from src.states import AddLesson
-from src.utils import get_callback_arg, parse_date, send_message
+from src.utils import get_callback_arg, parse_date, parse_time
 
 
 class AddLessonService(ScheduleService):
@@ -63,30 +63,12 @@ class AddLessonService(ScheduleService):
         )
         time = get_callback_arg(self.callback.data, AddLesson.choose_time)
 
-        user_data = await self.backend_client.get_user_cache_data(self.telegram_id)
-        if not user_data or not user_data.user_settings.token:
-            await self.message.answer(replies.SOMETHING_WENT_WRONG)
-            await self.state.clear()
-            return
-        response = await self.backend_client.create_event(
+        await self._create_event(
             EventCreate(
                 title="Урок",
                 day=date,
-                start=datetime.strptime(time, "%H:%M").time(),
+                start=parse_time(time),
                 duration=60,  # TODO make it configurable
                 is_recurrent=False,
             ),
-            token=user_data.user_settings.token,
         )
-        if not response:
-            await self.message.answer(replies.SOMETHING_WENT_WRONG)
-            await self.state.clear()
-            return
-
-        await self.message.answer(replies.LESSON_ADDED)
-        teacher_id = await self.backend_client.get_teacher_id(self.telegram_id)
-        if not teacher_id:  # TODO notify admin about this error
-            return
-        message = f"{self.username} добавил(а) занятие на {date} в {time}"
-        await send_message(teacher_id, message)
-        await self.state.clear()
