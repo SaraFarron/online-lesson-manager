@@ -42,7 +42,7 @@ class TelegramCacheResponse(BaseModel):
 
     free_slots: dict[str, list[dict[str, time]]]
     recurrent_free_slots: dict[str, list[dict[str, time]]]
-    schedule: dict[str, list[dict[str, str]]]
+    schedule: dict[str, list[dict[str, Any]]]
     user_settings: dict[str, Any]  # Placeholder for user settings
 
     model_config = ConfigDict(from_attributes=True)

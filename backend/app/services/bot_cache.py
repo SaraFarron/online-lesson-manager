@@ -24,8 +24,10 @@ class BotCacheService:
             for event in events:
                 cache_schedule[date].append(
                     {
+                        "id": event.id,
                         "type": event.title,
                         "start": event.start.time().isoformat(),
+                        "is_recurrent": isinstance(event, RecurrentEvent),
                     }
                 )
         return cache_schedule

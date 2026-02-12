@@ -4,17 +4,20 @@ from datetime import datetime, timedelta
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.core.config import TIME_FMT
+from src.core.config import CHANGE_DELTA, TIME_FMT, WEEKDAY_MAP, SHORT_DATE_FMT
 from src.messages import replies
 from src.schemas import EventCreate
 from src.service.backend_client import BackendClient
-from src.service.cache import Slot
+from src.service.cache import Event, Slot
 from src.utils import send_message
 
 
 class ScheduleService:
     def __init__(
-        self, message: Message | CallbackQuery, state: FSMContext, callback: CallbackQuery | None = None,
+        self,
+        message: Message | CallbackQuery,
+        state: FSMContext,
+        callback: CallbackQuery | None = None,
     ) -> None:
         self.message = message
         self.callback = callback
@@ -44,6 +47,25 @@ class ScheduleService:
 
     def convert_weekdays(self, weekdays: dict[int, list[Slot]]) -> list[int]:
         return [wd for wd, slots in weekdays.items() if slots]
+
+    def convert_lessons_to_buttons(self, data: dict[str, list[Event]]) -> dict[int, str]:
+        buttons = {}
+        today, now = datetime.now().date(), (datetime.now() + CHANGE_DELTA).time()
+        for day, lessons in data.items():
+            current_day = datetime.strptime(day, "%Y-%m-%d").date()
+            if current_day < today:
+                continue
+            for lesson in lessons:
+                if current_day == today and lesson.start < now:
+                    continue
+                weekday = WEEKDAY_MAP[current_day.weekday()]["short"]
+                lesson_time = lesson.start.strftime(TIME_FMT)
+                if lesson.is_recurrent:
+                    button_text = f"{lesson.type} {weekday} в {lesson_time}"
+                else:
+                    button_text = f"{lesson.type} {current_day.strftime(SHORT_DATE_FMT)} в {lesson_time}"
+                buttons[lesson.id] = button_text
+        return buttons
 
     async def _create_event(self, event: EventCreate):
         user_data = await self.backend_client.get_user_cache_data(self.telegram_id)

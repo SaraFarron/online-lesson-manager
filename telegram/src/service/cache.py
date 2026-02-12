@@ -5,8 +5,10 @@ from pydantic import BaseModel
 
 
 class Event(BaseModel):
+    id: int
     type: str
     start: datetime | time
+    is_recurrent: bool
 
 
 class Slot(BaseModel):

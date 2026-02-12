@@ -25,3 +25,16 @@ def choose_weekday(data: list[int], callback: str):
             case 6:
                 buttons[callback + str(weekday)] = "Воскресенье"
     return inline_keyboard(buttons)
+
+
+def choose_lesson(data: dict[int, str], callback: str):
+    buttons = {callback + str(lesson_id): title for lesson_id, title in data.items()}
+    return inline_keyboard(buttons)
+
+
+def choose_move_or_delete(callback: str):
+    buttons = {
+        callback + "move": "Перенести",
+        callback + "delete": "Отменить",
+    }
+    return inline_keyboard(buttons)
