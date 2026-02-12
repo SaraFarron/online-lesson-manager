@@ -65,7 +65,7 @@ class AddLessonService(ScheduleService):
 
         await self._create_event(
             EventCreate(
-                title="Урок",
+                title="Разовый урок",
                 day=date,
                 start=parse_time(time),
                 duration=60,  # TODO make it configurable

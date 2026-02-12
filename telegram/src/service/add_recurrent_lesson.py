@@ -54,7 +54,7 @@ class AddRecurrentLessonService(ScheduleService):
         day = get_next_weekday(weekday)
         await self._create_event(
             EventCreate(
-                title="Урок",
+                title="Еженедельный урок",
                 day=day.date(),
                 start=time,
                 duration=60,  # TODO make it configurable
