@@ -17,8 +17,8 @@ class BotCacheService:
 
     def _convert_schedule_to_cache_response(
         self, schedule: dict[str, list[Event | RecurrentEvent]]
-    ) -> dict[str, list[dict[str, str]]]:
-        cache_schedule: dict[str, list[dict[str, str]]] = {}
+    ) -> dict[str, list[dict[str, str | int]]]:
+        cache_schedule: dict[str, list[dict[str, str | int]]] = {}
         for date, events in schedule.items():
             cache_schedule[date] = []
             for event in events:
