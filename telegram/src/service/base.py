@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.core.config import CHANGE_DELTA, TIME_FMT, WEEKDAY_MAP, SHORT_DATE_FMT
+from src.core.config import CHANGE_DELTA, SHORT_DATE_FMT, TIME_FMT, WEEKDAY_MAP
 from src.messages import replies
 from src.schemas import EventCreate
 from src.service.backend_client import BackendClient
@@ -94,3 +94,20 @@ class ScheduleService:
         else:
             message = f"{self.username} добавил(а) занятие на {event.day} в {lesson_time}"
         await send_message(teacher_id, message)
+
+    async def _delete_event(self, event_id: int):
+        user_data = await self.backend_client.get_user_cache_data(self.telegram_id)
+        if not user_data or not user_data.user_settings.token:
+            await self.message.answer(replies.SOMETHING_WENT_WRONG)
+            await self.state.clear()
+            return
+
+        response = await self.backend_client.delete_event(event_id, user_data.user_settings.token)
+        if not response:
+            await self.message.answer(replies.SOMETHING_WENT_WRONG)
+            await self.state.clear()
+            return
+
+        await self.message.answer(replies.LESSON_DELETED)
+        await self.state.clear()
+        return

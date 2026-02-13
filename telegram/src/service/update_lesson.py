@@ -38,7 +38,7 @@ class UpdateLessonService(ScheduleService):
             await self.state.set_state(UpdateLesson.choose_lesson)
             await self.message.answer(replies.CHOOSE_LESSON)
             return
-        await self.state.update_data(lesson=int(lesson_id))
+        await self.state.update_data(lesson_id=int(lesson_id))
         await self.message.answer(
             replies.MOVE_OR_DELETE, reply_markup=choose_move_or_delete(UpdateLesson.move_or_delete),
         )
@@ -49,17 +49,17 @@ class MoveLessonService(ScheduleService):
         super().__init__(message, state, callback)
     
     async def perform_action(self):
+        state_data = await self.state.get_data()
         # Move one event
-        if action == "move" and state_data["lesson"].startswith("e"):
-            await state.set_state(MoveLesson.type_date)
-            await message.answer(replies.CHOOSE_LESSON_DATE)
+        if state_data["lesson_id"] % 2:
+            await self.state.set_state(UpdateLesson.type_date)
+            await self.message.answer(replies.CHOOSE_LESSON_DATE)
 
         # Move recurrent event
-        elif action == "move" and state_data["lesson"].startswith("re"):
-            await state.update_data(action=action)
-            await message.answer(
+        else:
+            await self.message.answer(
                 replies.MOVE_ONCE_OR_FOREVER,
-                reply_markup=Keyboards.once_or_forever(MoveLesson.once_or_forever),
+                reply_markup=Keyboards.once_or_forever(UpdateLesson.once_or_forever),
             )
 
 
@@ -68,21 +68,14 @@ class DeleteLessonService(ScheduleService):
         super().__init__(message, state, callback)
 
     async def perform_action(self):
+        state_data = await self.state.get_data()
         # Delete one event
-        if action == "delete" and state_data["lesson"].startswith("e"):
-            lesson = EventService(db).cancel_event(int(state_data["lesson"].replace("e", "")))
-            EventHistoryRepo(db).create(user.get_username(), MoveLesson.scene, "deleted_one_lesson", str(lesson))
-            await message.answer(replies.LESSON_DELETED)
-            executor_tg = UserRepo(db).executor_telegram_id(user)
-            await send_message(executor_tg, f"{user.get_username()} отменил(а) {lesson}")
-            await state.clear()
-            return
+        if state_data["lesson_id"] % 2:
+            await self._delete_event(state_data["lesson_id"])
 
         # Delete recurrent event
-        if action == "delete" and state_data["lesson"].startswith("re"):
-            await state.update_data(action=action)
-            await message.answer(
-                replies.DELETE_ONCE_OR_FOREVER,
-                reply_markup=Keyboards.once_or_forever(MoveLesson.once_or_forever),
-            )
+        await self.message.answer(
+            replies.DELETE_ONCE_OR_FOREVER,
+            reply_markup=Keyboards.once_or_forever(UpdateLesson.once_or_forever),
+        )
 

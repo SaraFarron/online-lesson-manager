@@ -273,7 +273,14 @@ class BackendClient:
         pass
 
     async def delete_event(self, event_id: int, token: str):
-        pass
+        response = await self._user_request(
+            "DELETE",
+            f"{self.API_URL}/events{event_id}",
+            token=token,
+        )
+        if not response:
+            raise Exception("Failed to delete event")
+        return response
 
     async def create_recurrent_event(self, event: dict, token: str):
         # TODO: When implementing, ensure datetime fields are converted to UTC using moscow_to_utc()

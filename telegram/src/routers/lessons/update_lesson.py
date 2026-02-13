@@ -44,7 +44,6 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext) -> None:
     if user is None:
         return
 
-    await state.update_data(lesson=get_callback_arg(callback.data, UpdateLesson.choose_lesson))
     action = get_callback_arg(callback.data, UpdateLesson.move_or_delete)
 
     match action:
