@@ -4,6 +4,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.api.deps import get_db
 from app.db.base import Base
@@ -19,8 +20,12 @@ Base.metadata.drop_all(bind=sync_engine)
 Base.metadata.create_all(bind=sync_engine)
 sync_engine.dispose()
 
-# Async engine for tests
-test_engine = create_async_engine(TEST_DATABASE_URL_ASYNC, echo=False)
+# Async engine for tests - use NullPool to avoid connection reuse issues
+test_engine = create_async_engine(
+    TEST_DATABASE_URL_ASYNC,
+    echo=False,
+    poolclass=NullPool,
+)
 TestSessionFactory = async_sessionmaker(
     bind=test_engine,
     class_=AsyncSession,
@@ -34,8 +39,11 @@ TestSessionFactory = async_sessionmaker(
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Provide a transactional database session for tests."""
     async with TestSessionFactory() as session:
-        yield session
-        await session.rollback()
+        try:
+            yield session
+        finally:
+            await session.rollback()
+
 
 
 @pytest.fixture
