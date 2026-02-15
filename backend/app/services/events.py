@@ -75,25 +75,58 @@ class EventService:
         event_dict = event.to_dict(user)
         return await self.recurrent_repo.update(existing_event, event_dict)
 
+    async def check_slot_availability(
+        self, user: User, check_date: date, start_time: time, end_time: time
+    ) -> bool:
+        """Check if a time slot is available on a specific date.
+        
+        This is the single source of truth for slot availability checking.
+        Returns True if slot is free, False if occupied.
+        Uses get_free_slots() to ensure consistency with schedule retrieval.
+        """
+        free_slots = await self.get_free_slots(user, check_date)
+        for slot_start, slot_end in free_slots:
+            if start_time >= slot_start and end_time <= slot_end:
+                return True
+        return False
+
     async def create_event(self, event: EventCreate, user: User) -> Event | RecurrentEvent:
         """Create a new event."""
-
-        def is_overlapping(free_slots: list[tuple[time, time]], candidate: tuple[time, time]):
-            for start, end in free_slots:
-                if candidate[0] >= start and candidate[1] <= end:
-                    return False
-            return True
-
         event_dict = event.to_dict(user)
+        
         if event.isRecurring:
-            # TODO check for overlapping with other events
+            # Check for overlapping with other events for next 2 months
+            event_end = event.start + timedelta(minutes=event.duration)
+            event_start_time = event.start.time()
+            event_end_time = event_end.time()
+            interval_end = event_dict.get("interval_end")
+            
+            # Generate occurrences for next 2 months or until interval_end, whichever is earlier
+            two_months_from_start = event.start + timedelta(days=60)
+            check_until = interval_end if interval_end and interval_end < two_months_from_start else two_months_from_start
+            
+            current_occurrence = event.start
+            while current_occurrence < check_until:
+                occurrence_date = current_occurrence.date()
+                is_available = await self.check_slot_availability(
+                    user, occurrence_date, event_start_time, event_end_time
+                )
+                if not is_available:
+                    raise ValueError(f"The requested time slot is occupied on {occurrence_date.isoformat()}.")
+                
+                # Move to next occurrence
+                current_occurrence += timedelta(days=event_dict.get("interval_days", 7))
+            
             created_event = await self.recurrent_repo.create(event_dict)
         else:
             event_end = event.start + timedelta(minutes=event.duration)
-            free_slots = await self.get_free_slots(user, event.start.date())
-            if is_overlapping(free_slots, (event.start.time(), event_end.time())):
+            is_available = await self.check_slot_availability(
+                user, event.start.date(), event.start.time(), event_end.time()
+            )
+            if not is_available:
                 raise ValueError("The requested time slot is occupied.")
             created_event = await self.repository.create(event_dict)
+        
         return created_event
 
     async def _get_occupied_slots_for_day(self, user: User, day: date) -> list[Event | RecurrentEvent]:

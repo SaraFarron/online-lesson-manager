@@ -33,6 +33,7 @@ target-version = "py311"
 line-length = 120
 select = ["E", "F", "I", "N", "W", "UP"]
 exclude = ["alembic/versions"]
+ignore = ["W293"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

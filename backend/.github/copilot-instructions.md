@@ -1,5 +1,9 @@
 # Online Lesson Manager - Backend Development Guide
 
+## Dependencies
+
+If not loaded already, look for python's, libraries' versions and other dependencies in pyproject.toml
+
 ## Architecture Overview
 
 This is a **FastAPI async backend** using a strict 4-layer architecture with PostgreSQL and SQLAlchemy:
