@@ -1,4 +1,3 @@
-from calendar import weekday
 from datetime import datetime, timedelta
 
 from aiogram.fsm.context import FSMContext
@@ -74,12 +73,13 @@ class ScheduleService:
             await self.message.answer(e.detail)
             await self.state.clear()
             return
+
         if not user_data or not user_data.user_settings.token:
             await self.message.answer(replies.SOMETHING_WENT_WRONG)
             await self.state.clear()
             return
         try:
-            response = await self.backend_client.create_event(
+            await self.backend_client.create_event(
                 event,
                 token=user_data.user_settings.token,
             )
@@ -87,22 +87,23 @@ class ScheduleService:
             await self.message.answer(e.detail)
             await self.state.clear()
             return
-        if not response:
-            await self.message.answer(replies.SOMETHING_WENT_WRONG)
-            await self.state.clear()
-            return
+
         await self.message.answer(replies.LESSON_ADDED)
         await self.state.clear()
 
         teacher_id = await self.backend_client.get_teacher_id(self.telegram_id)
         if not teacher_id:  # TODO notify admin about this error
+            await self.message.answer(replies.SOMETHING_WENT_WRONG)
+            await self.state.clear()
             return
+
         lesson_time = event.start.strftime(TIME_FMT)
         if event.is_recurrent:
-            weekday_name = weekday(event.day.weekday())
+            weekday_name = WEEKDAY_MAP[event.day.weekday()]["long"]
             message = f"{self.username} добавил(а) занятие на {weekday_name} в {lesson_time}"
         else:
-            message = f"{self.username} добавил(а) занятие на {event.day} в {lesson_time}"
+            day = event.day.strftime(SHORT_DATE_FMT)
+            message = f"{self.username} добавил(а) занятие на {day} в {lesson_time}"
         await send_message(teacher_id, message)
 
     async def _delete_event(self, event_id: int):

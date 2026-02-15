@@ -7,6 +7,7 @@ from src.core.config import DATE_FMT
 from src.keyboards import choose_time
 from src.messages import replies
 from src.schemas import EventCreate
+from src.service.backend_client import BackendClientError
 from src.service.base import ScheduleService
 from src.states import AddLesson
 from src.utils import get_callback_arg, parse_date, parse_time
@@ -36,7 +37,13 @@ class AddLessonService(ScheduleService):
         return {"day": day}
 
     async def available_time(self, day: date):
-        free_slots = await self.backend_client.get_user_free_slots(self.telegram_id)
+        try:
+            free_slots = await self.backend_client.get_user_free_slots(self.telegram_id)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
         if not free_slots or str(day) not in free_slots:
             await self.message.answer(replies.NO_TIME)
             await self.state.clear()

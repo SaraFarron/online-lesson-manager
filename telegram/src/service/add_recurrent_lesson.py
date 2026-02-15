@@ -4,6 +4,7 @@ from aiogram.types import CallbackQuery, Message
 from src.keyboards import choose_time, choose_weekday
 from src.messages import replies
 from src.schemas import EventCreate
+from src.service.backend_client import BackendClientError
 from src.service.base import ScheduleService
 from src.states import AddRecurrentLesson
 from src.utils import get_callback_arg, get_next_weekday, parse_time
@@ -14,7 +15,13 @@ class AddRecurrentLessonService(ScheduleService):
         super().__init__(message, state, callback)
 
     async def get_weekday(self):
-        free_slots = await self.backend_client.get_user_recurrent_free_slots(self.telegram_id)
+        try:
+            free_slots = await self.backend_client.get_user_recurrent_free_slots(self.telegram_id)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
         if not free_slots:
             await self.message.answer(replies.NO_TIME)
             await self.state.clear()
@@ -27,7 +34,13 @@ class AddRecurrentLessonService(ScheduleService):
 
     async def available_time(self):
         weekday = int(get_callback_arg(self.callback.data, AddRecurrentLesson.choose_weekday))
-        free_slots = await self.backend_client.get_user_recurrent_free_slots(self.telegram_id)
+        try:
+            free_slots = await self.backend_client.get_user_recurrent_free_slots(self.telegram_id)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
         if not free_slots or weekday not in free_slots:
             await self.message.answer(replies.NO_TIME)
             await self.state.clear()
@@ -45,12 +58,14 @@ class AddRecurrentLessonService(ScheduleService):
             await self.state.set_state(AddRecurrentLesson.choose_time)
             await self.message.answer(replies.WRONG_TIME_FMT)
             return
+
         state_data = await self.state.get_data()
         weekday = state_data.get("weekday")
         if weekday is None:
             await self.state.set_state(AddRecurrentLesson.choose_weekday)
             await self.message.answer(replies.CHOOSE_WEEKDAY)
             return
+
         day = get_next_weekday(weekday)
         await self._create_event(
             EventCreate(
