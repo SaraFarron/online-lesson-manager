@@ -3,13 +3,20 @@ from datetime import datetime, time
 from typing import Any
 
 import pytz
-from aiohttp import ClientError, ClientSession
-from circuitbreaker import CircuitBreakerError
+from aiohttp import ClientSession
+from circuitbreaker import circuit
 
 from src.core.config import TIMEZONE
 from src.core.logger import logger
 from src.schemas import EventCreate, UserCreate
 from src.service.cache import Event, Slot, UserCacheData, UserSettings, cache
+
+
+class BackendClientError(Exception):
+    """Custom exception for BackendClient errors."""
+
+    detail: str
+    status: int
 
 
 class BackendClient:
@@ -72,26 +79,27 @@ class BackendClient:
             self.session = ClientSession()
         return self.session
 
-    async def _request(self, method: str, url: str, **kwargs: dict[str, Any]) -> dict | None:
+    async def _request(self, method: str, url: str, **kwargs: dict[str, Any]):
         """Generic request with x service key."""
         headers = {
             "X-Service-Key": "your-secret-service-key-here",
         } | kwargs.pop("headers", {})
-        try:
-            session = await self._get_session()
-            async with session.request(method, url, headers=headers, **kwargs) as response:
-                if response.status in (200, 201):
-                    return (await response.json())["data"]
-                logger.warning(f"Backend returned status {response.status} for {method} {url}")
-                return None
-        except ClientError as e:
-            logger.error(f"Network error during {method} {url}: {e}")
-            return None
-        except CircuitBreakerError:
-            logger.warning(f"Circuit breaker open for {method} {url}")
-            return None
+        session = await self._get_session()
+        async with session.request(method, url, headers=headers, **kwargs) as response:
+            data = await response.json()
+            if response.status >= 400:
+                if "error" in data:
+                    raise BackendClientError(data["error"], response.status)
+                raise BackendClientError("Произошла неизвестная ошибка", response.status)
+            if 199 < response.status < 300:
+                resp = await response.json()
+                if "data" in resp:  # TODO error handling
+                    return resp["data"]
+                return response.status
+            logger.warning(f"Backend returned status {response.status} for {method} {url}")
+            return response.status
 
-    async def _user_request(self, method: str, url: str, token: str, **kwargs: dict[str, Any]) -> dict | None:
+    async def _user_request(self, method: str, url: str, token: str, **kwargs: dict[str, Any]):
         """User-authenticated request."""
         headers = {
             "Authorization": f"Bearer {token}",
@@ -110,9 +118,9 @@ class BackendClient:
 
     def _convert_user_data_event_times(self, user_data: dict) -> dict:
         """Convert all event times in user_data from UTC to Moscow timezone."""
-        assert all(
-            key in user_data for key in ("user_settings", "free_slots", "recurrent_free_slots", "schedule")
-        ), "Invalid user_data structure"
+        assert all(key in user_data for key in ("user_settings", "free_slots", "recurrent_free_slots", "schedule")), (
+            "Invalid user_data structure"
+        )
 
         for key, slots in user_data["free_slots"].items():
             user_data["free_slots"][key] = [self._convert_slot_timezone(slot) for slot in slots]
@@ -136,6 +144,7 @@ class BackendClient:
                     event["start"] = self.convert_time_utc_to_moscow(utc_time)
         return user_data
 
+    @circuit(failure_threshold=5, recovery_timeout=60)
     async def _fetch_from_backend(self, telegram_id: int) -> UserCacheData | None:
         """Fetch schedule from backend API and convert UTC times to Moscow timezone."""
         response = await self._request(
@@ -161,6 +170,12 @@ class BackendClient:
         """
         Read flow: Check cache → Fetch backend → Cache result → Fallback to stale.
 
+        Stale fallback is automatic:
+        1. Check fresh cache (TTL 5min)
+        2. Fetch from backend on miss
+        3. Cache fresh data + maintain stale copy
+        4. If backend unavailable, cache.get() auto-serves stale data
+
         Args:
             telegram_id: Unique user identifier
 
@@ -170,26 +185,45 @@ class BackendClient:
         """
         cache_key = self.CACHE_KEY_TEMPLATE.format(user_id=telegram_id)
 
-        # Step 1: Check if fresh cached data exists
+        # Step 1: Try to get from cache (fresh or stale fallback)
         cached_data = cache.get(cache_key)
         if cached_data is not None:
-            logger.debug(f"Cache hit for user {telegram_id}")
+            # Check if this is stale data (being served as fallback)
+            if cache.is_stale(cache_key):
+                stale_age = cache.get_stale_age(cache_key)
+                logger.warning(
+                    f"Cache miss for user {telegram_id}, serving stale data (age: {stale_age}s). "
+                    f"Backend unavailable or circuit breaker open."
+                )
+            else:
+                logger.debug(f"Fresh cache hit for user {telegram_id}")
             return UserCacheData(**cached_data)
 
         # Step 2: Fetch from backend
         logger.debug(f"Cache miss for user {telegram_id}, fetching from backend")
-        fresh_data = await self._fetch_from_backend(telegram_id)
+        try:
+            fresh_data = await self._fetch_from_backend(telegram_id)
+        except Exception as e:
+            logger.error(f"Backend fetch failed for user {telegram_id}: {e}. Circuit breaker may be open.")
+            fresh_data = None
 
         if fresh_data is not None:
-            # Step 3: Cache the fresh data
+            # Step 3: Cache the fresh data (also maintains stale copy)
             cache.set(cache_key, dict(fresh_data))
             logger.info(f"Updated cache for user {telegram_id}")
             return fresh_data
 
-        # Step 4: Fallback to stale cache if backend unavailable
-        # Note: TTLCache automatically handles expiration,
-        # so we need a separate "stale cache" if you want to serve expired data
-        logger.warning(f"Backend unavailable for user {telegram_id}, no cache available")
+        # Step 4: Fallback to stale cache (automatic via cache.get())
+        stale_data = cache.get(cache_key)
+        if stale_data is not None:
+            stale_age = cache.get_stale_age(cache_key)
+            logger.warning(
+                f"Backend unavailable for user {telegram_id}, serving stale data (age: {stale_age}s). "
+                f"Circuit breaker may be protecting against cascade failures."
+            )
+            return UserCacheData(**stale_data)
+
+        logger.warning(f"Backend unavailable for user {telegram_id}, no cache available (fresh or stale)")
         return None
 
     async def user_exists(self, telegram_id: int) -> bool:
@@ -217,10 +251,10 @@ class BackendClient:
         return data.recurrent_free_slots if data else None
 
     async def invalidate_user(self, telegram_id: int) -> None:
-        """Invalidate cache after write operations."""
+        """Invalidate fresh cache after write operations. Stale copy is preserved for fallback."""
         cache_key = self.CACHE_KEY_TEMPLATE.format(user_id=telegram_id)
         cache.invalidate(cache_key)
-        logger.info(f"Invalidated cache for user {telegram_id}")
+        logger.info(f"Invalidated fresh cache for user {telegram_id}. Stale copy preserved for fallback.")
 
     async def create_user(self, user: UserCreate) -> UserSettings | None:
         """Create a new user in the backend."""
@@ -252,7 +286,7 @@ class BackendClient:
         moscow_dt = self.combine_date_time_moscow(event.day, event.start)
         utc_dt = self.moscow_to_utc(moscow_dt)
 
-        response = await self._user_request(
+        return await self._user_request(
             "POST",
             f"{self.API_URL}/events",
             token=token,
@@ -263,9 +297,6 @@ class BackendClient:
                 "isRecurring": event.is_recurrent,
             },
         )
-        if not response:
-            raise Exception("Failed to create event")
-        return response
 
     async def update_event(self, event_id: int, event: dict, token: str):
         # TODO: When implementing, ensure datetime fields are converted to UTC using moscow_to_utc()
