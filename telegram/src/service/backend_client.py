@@ -15,8 +15,10 @@ from src.service.cache import Event, Slot, UserCacheData, UserSettings, cache
 class BackendClientError(Exception):
     """Custom exception for BackendClient errors."""
 
-    detail: str
-    status: int
+    def __init__(self, detail: str, status: int) -> None:
+        self.detail = detail
+        self.status = status
+        super().__init__(detail)
 
 
 class BackendClient:
@@ -89,7 +91,8 @@ class BackendClient:
             data = await response.json()
             if response.status >= 400:
                 if "error" in data:
-                    raise BackendClientError(data["error"], response.status)
+                    error_message = data["error"].get("message", "Произошла неизвестная ошибка")
+                    raise BackendClientError(error_message, response.status)
                 raise BackendClientError("Произошла неизвестная ошибка", response.status)
             if 199 < response.status < 300:
                 resp = await response.json()
@@ -193,7 +196,7 @@ class BackendClient:
                 stale_age = cache.get_stale_age(cache_key)
                 logger.warning(
                     f"Cache miss for user {telegram_id}, serving stale data (age: {stale_age}s). "
-                    f"Backend unavailable or circuit breaker open."
+                    f"Backend unavailable or circuit breaker open.",
                 )
             else:
                 logger.debug(f"Fresh cache hit for user {telegram_id}")
@@ -219,7 +222,7 @@ class BackendClient:
             stale_age = cache.get_stale_age(cache_key)
             logger.warning(
                 f"Backend unavailable for user {telegram_id}, serving stale data (age: {stale_age}s). "
-                f"Circuit breaker may be protecting against cascade failures."
+                f"Circuit breaker may be protecting against cascade failures.",
             )
             return UserCacheData(**stale_data)
 

@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from src.core.config import CHANGE_DELTA, SHORT_DATE_FMT, TIME_FMT, WEEKDAY_MAP
 from src.messages import replies
 from src.schemas import EventCreate
-from src.service.backend_client import BackendClient
+from src.service.backend_client import BackendClient, BackendClientError
 from src.service.cache import Event, Slot
 from src.utils import send_message
 
@@ -68,15 +68,25 @@ class ScheduleService:
         return buttons
 
     async def _create_event(self, event: EventCreate):
-        user_data = await self.backend_client.get_user_cache_data(self.telegram_id)
+        try:
+            user_data = await self.backend_client.get_user_cache_data(self.telegram_id)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
         if not user_data or not user_data.user_settings.token:
             await self.message.answer(replies.SOMETHING_WENT_WRONG)
             await self.state.clear()
             return
-        response = await self.backend_client.create_event(
-            event,
-            token=user_data.user_settings.token,
-        )
+        try:
+            response = await self.backend_client.create_event(
+                event,
+                token=user_data.user_settings.token,
+            )
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
         if not response:
             await self.message.answer(replies.SOMETHING_WENT_WRONG)
             await self.state.clear()

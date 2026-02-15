@@ -55,6 +55,14 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
                 media_type=response.media_type,
             )
 
+        # Check if response is already wrapped (has 'success' key)
+        if isinstance(data, dict) and "success" in data:
+            # Already wrapped, return as is
+            return JSONResponse(
+                content=data,
+                status_code=response.status_code,
+            )
+
         # Wrap based on status code
         if 200 <= response.status_code < 400:
             wrapped = {"success": True, "data": data}
