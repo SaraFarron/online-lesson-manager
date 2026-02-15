@@ -114,12 +114,12 @@ async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
         time=time,
     )
     await message.answer(replies.LESSON_MOVED)
-    EventHistoryRepo(db).create(
-        user.get_username(),
-        MoveLesson.scene,
-        "moved_one_lesson",
-        f"{old_lesson} -> {new_lesson}",
-    )
+    # EventHistoryRepo(db).create(
+    #     user.get_username(),
+    #     UpdateLesson.scene,
+    #     "moved_one_lesson",
+    #     f"{old_lesson} -> {new_lesson}",
+    # )
     executor_tg = UserRepo(db).executor_telegram_id(user)
     await send_message(executor_tg, f"{user.get_username()} перенес(ла) {old_lesson} -> {new_lesson}")
     await auto_place_work_breaks(db, user, day, executor_tg)

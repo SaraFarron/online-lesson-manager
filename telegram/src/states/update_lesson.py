@@ -16,3 +16,22 @@ class UpdateLesson(StatesGroup):
     type_recur_date = State()
     type_new_date = State()
     choose_recur_new_time = f"{base_callback}recur/new/choose_time/"
+
+
+class DeleteLesson(StatesGroup):
+    scene = "delete_lesson"
+    base_callback = scene + "/"
+    once_or_forever = f"{base_callback}once_or_forever/"
+    type_recur_date = State()
+
+
+class MoveLesson(StatesGroup):
+    scene = "move_lesson"
+    base_callback = scene + "/"
+    choose_time = f"{base_callback}choose_time/"
+    once_or_forever = f"{base_callback}once_or_forever/"
+    choose_weekday = f"{base_callback}choose_weekday/"
+    choose_recur_time = f"{base_callback}recur/choose_time/"
+    type_recur_date = State()
+    type_new_date = State()
+    choose_recur_new_time = f"{base_callback}recur/new/choose_time/"

@@ -38,3 +38,11 @@ def choose_move_or_delete(callback: str):
         callback + "delete": "Отменить",
     }
     return inline_keyboard(buttons)
+
+
+def once_or_forever(callback: str):
+    buttons = {
+        callback + "once": "На одну дату",
+        callback + "forever": "Навсегда",
+    }
+    return inline_keyboard(buttons)

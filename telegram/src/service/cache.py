@@ -107,6 +107,7 @@ class BotCache:
 
         Returns:
             Dict with pruning stats: {removed_by_age, removed_by_memory, current_memory_mb}
+
         """
         stats = {"removed_by_age": 0, "removed_by_memory": 0}
 

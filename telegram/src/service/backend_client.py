@@ -88,16 +88,18 @@ class BackendClient:
         } | kwargs.pop("headers", {})
         session = await self._get_session()
         async with session.request(method, url, headers=headers, **kwargs) as response:
-            data = await response.json()
             if response.status >= 400:
+                data = await response.json()
                 if "error" in data:
                     error_message = data["error"].get("message", "Произошла неизвестная ошибка")
                     raise BackendClientError(error_message, response.status)
                 raise BackendClientError("Произошла неизвестная ошибка", response.status)
             if 199 < response.status < 300:
-                resp = await response.json()
-                if "data" in resp:  # TODO error handling
-                    return resp["data"]
+                if response.status == 204:
+                    return None
+                data = await response.json()
+                if "data" in data:  # TODO error handling
+                    return data["data"]
                 return response.status
             logger.warning(f"Backend returned status {response.status} for {method} {url}")
             return response.status
@@ -307,14 +309,11 @@ class BackendClient:
         pass
 
     async def delete_event(self, event_id: int, token: str):
-        response = await self._user_request(
+        return await self._user_request(
             "DELETE",
             f"{self.API_URL}/events{event_id}",
             token=token,
         )
-        if not response:
-            raise Exception("Failed to delete event")
-        return response
 
     async def create_recurrent_event(self, event: dict, token: str):
         # TODO: When implementing, ensure datetime fields are converted to UTC using moscow_to_utc()

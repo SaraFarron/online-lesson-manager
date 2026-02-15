@@ -1,14 +1,15 @@
+from src.service.backend_client import BackendClientError
 from datetime import date, datetime
 
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from src.core.config import DATE_FMT
-from src.keyboards import choose_lesson, choose_move_or_delete
+from src.keyboards import choose_lesson, choose_move_or_delete, once_or_forever
 from src.messages import replies
 from src.schemas import EventCreate
 from src.service.base import ScheduleService
-from src.states import UpdateLesson
+from src.states import UpdateLesson, MoveLesson, DeleteLesson
 from src.utils import get_callback_arg, parse_date, parse_time
 
 
@@ -17,7 +18,13 @@ class UpdateLessonService(ScheduleService):
         super().__init__(message, state, callback)
 
     async def get_lesson(self):
-        lessons = await self.backend_client.get_user_schedule(self.telegram_id)
+        try:
+            lessons = await self.backend_client.get_user_schedule(self.telegram_id)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
         if not lessons:
             await self.message.answer(replies.NO_LESSONS)
             await self.state.clear()
@@ -52,14 +59,14 @@ class MoveLessonService(ScheduleService):
         state_data = await self.state.get_data()
         # Move one event
         if state_data["lesson_id"] % 2:
-            await self.state.set_state(UpdateLesson.type_date)
+            await self.state.set_state(MoveLesson.type_date)
             await self.message.answer(replies.CHOOSE_LESSON_DATE)
 
         # Move recurrent event
         else:
             await self.message.answer(
                 replies.MOVE_ONCE_OR_FOREVER,
-                reply_markup=Keyboards.once_or_forever(UpdateLesson.once_or_forever),
+                reply_markup=Keyboards.once_or_forever(MoveLesson.once_or_forever),
             )
 
 
@@ -72,10 +79,11 @@ class DeleteLessonService(ScheduleService):
         # Delete one event
         if state_data["lesson_id"] % 2:
             await self._delete_event(state_data["lesson_id"])
+            return
 
         # Delete recurrent event
         await self.message.answer(
             replies.DELETE_ONCE_OR_FOREVER,
-            reply_markup=Keyboards.once_or_forever(UpdateLesson.once_or_forever),
+            reply_markup=once_or_forever(UpdateLesson.once_or_forever),
         )
 
