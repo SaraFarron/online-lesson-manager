@@ -67,30 +67,10 @@ async def type_date(message: Message, state: FSMContext) -> None:
     user, message = await student_permission(message)
     if user is None:
         return
+    
+    service = MoveLessonService(message, state)
+    await service.choose_time()
 
-    day = parse_date(message.text)
-    today = datetime.now().date()
-    if day is None:
-        await message.answer(replies.WRONG_DATE_FMT)
-        await state.set_state(UpdateLesson.type_date)
-        return
-    if today > day:
-        await message.answer(replies.CHOOSE_FUTURE_DATE)
-        if len(message.text) <= 5:
-            await message.answer(replies.ADD_YEAR)
-        await state.set_state(UpdateLesson.type_date)
-        return
-
-    await state.update_data(day=day)
-    available_time, _ = EventService(db).available_time(user.executor_id, day)
-    if available_time:
-        await message.answer(
-            replies.CHOOSE_TIME,
-            reply_markup=Keyboards.choose_time(available_time, UpdateLesson.choose_time),
-        )
-    else:
-        await message.answer(replies.NO_TIME)
-        await state.clear()
 
 
 @router.callback_query(F.data.startswith(UpdateLesson.choose_time))
@@ -98,32 +78,9 @@ async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
     user, message = await student_permission(callback)
     if user is None:
         return
-    state_data = await state.get_data()
 
-    day = state_data["day"]
-    time = datetime.strptime(
-        get_callback_arg(callback.data, UpdateLesson.choose_time),
-        config.TIME_FMT,
-    ).time()
-
-    old_lesson, new_lesson = LessonsService(db).move_lesson(
-        event_id=int(state_data["lesson"].replace("e", "")),
-        user_id=user.id,
-        executor_id=user.executor_id,
-        day=day,
-        time=time,
-    )
-    await message.answer(replies.LESSON_MOVED)
-    # EventHistoryRepo(db).create(
-    #     user.get_username(),
-    #     UpdateLesson.scene,
-    #     "moved_one_lesson",
-    #     f"{old_lesson} -> {new_lesson}",
-    # )
-    executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{user.get_username()} перенес(ла) {old_lesson} -> {new_lesson}")
-    await auto_place_work_breaks(db, user, day, executor_tg)
-    await state.clear()
+    service = MoveLessonService(message, state, callback)
+    await service.move_lesson()
 
 
 # ---- RECURRENT LESSON ---- #

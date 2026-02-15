@@ -114,7 +114,7 @@ class ScheduleService:
             return
 
         try:
-            response = await self.backend_client.delete_event(event_id, user_data.user_settings.token)
+            await self.backend_client.delete_event(event_id, user_data.user_settings.token)
         except BackendClientError as e:
             if e.status == 404:
                 await self.message.answer(replies.LESSON_NOT_FOUND_ERR)
