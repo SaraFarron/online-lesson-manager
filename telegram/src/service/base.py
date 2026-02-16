@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from src.core.config import CHANGE_DELTA, SHORT_DATE_FMT, TIME_FMT, WEEKDAY_MAP
+from src.keyboards import choose_time, choose_weekday
 from src.messages import replies
 from src.schemas import EventCreate
 from src.service.backend_client import BackendClient, BackendClientError
@@ -65,6 +66,43 @@ class ScheduleService:
                     button_text = f"{lesson.type} {current_day.strftime(SHORT_DATE_FMT)} в {lesson_time}"
                 buttons[lesson.id] = button_text
         return buttons
+
+    async def choose_weekday_action(self, callback: str):
+        try:
+            free_slots = await self.backend_client.get_user_recurrent_free_slots(self.telegram_id)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
+        if not free_slots:
+            await self.message.answer(replies.NO_TIME)
+            await self.state.clear()
+            return
+        weekdays = self.convert_weekdays(free_slots)
+        await self.message.answer(
+            replies.CHOOSE_WEEKDAY,
+            reply_markup=choose_weekday(weekdays, callback),
+        )
+
+    async def choose_time_action(self, weekday: int, callback: str):
+        try:
+            free_slots = await self.backend_client.get_user_recurrent_free_slots(self.telegram_id)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
+        if not free_slots or weekday not in free_slots:
+            await self.message.answer(replies.NO_TIME)
+            await self.state.clear()
+            return
+        await self.state.update_data(weekday=weekday)
+        available_time = self.convert_free_slots(free_slots[weekday])
+        await self.message.answer(
+            replies.CHOOSE_TIME,
+            reply_markup=choose_time(available_time, callback),
+        )
 
     async def _create_event(self, event: EventCreate):
         try:

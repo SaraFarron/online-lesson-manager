@@ -1,11 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.core import config
 from src.core.config import DATE_FMT, DATETIME_FMT, LESSON_SIZE, TIME_FMT, WEEKDAY_MAP
 from src.messages import replies
 from src.routers.utils import student_permission
@@ -45,6 +44,7 @@ async def move_or_delete(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     action = get_callback_arg(callback.data, UpdateLesson.move_or_delete)
+    await state.update_data(action=action)
 
     match action:
         case "move":
@@ -67,7 +67,7 @@ async def type_date(message: Message, state: FSMContext) -> None:
     user, message = await student_permission(message)
     if user is None:
         return
-    
+
     service = MoveLessonService(message, state)
     await service.choose_time()
 
@@ -91,40 +91,23 @@ async def once_or_forever(callback: CallbackQuery, state: FSMContext) -> None:
     if user is None:
         return
     state_data = await state.get_data()
-
-    mode = get_callback_arg(callback.data, UpdateLesson.once_or_forever)
-    if mode == "once" and state_data["action"] == "delete":
-        await state.set_state(UpdateLesson.type_recur_date)
-        await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
-
-    elif mode == "forever" and state_data["action"] == "delete":
-        lesson = db.get(RecurrentEvent, int(state_data["lesson"].replace("re", "")))
-        if lesson is None:
-            await message.answer(replies.LESSON_NOT_FOUND_ERR)
-            await state.clear()
-            return
-        lesson_str = str(lesson)
-        db.delete(lesson)
-        db.commit()
-        await message.answer(replies.LESSON_DELETED)
-        EventHistoryRepo(db).create(user.get_username(), UpdateLesson.scene, "deleted_recur_lesson", lesson_str)
-        executor_tg = UserRepo(db).executor_telegram_id(user)
-        await send_message(executor_tg, f"{user.get_username()} отменил(ла) {lesson_str}")
-        await state.clear()
-
-    elif mode == "once" and state_data["action"] == "move":
-        await state.set_state(UpdateLesson.type_recur_date)
-        await message.answer(replies.CHOOSE_CURRENT_LESSON_DATE)
-
-    elif mode == "forever" and state_data["action"] == "move":
-        weekdays = EventService(db).available_weekdays(user.executor_id)
-        await message.answer(
-            replies.CHOOSE_WEEKDAY,
-            reply_markup=Keyboards.weekdays(weekdays, UpdateLesson.choose_weekday),
-        )
-    else:
+    action = state_data.get("action")
+    if action is None:
         await message.answer(replies.UNKNOWN_ACTION_ERR)
         await state.clear()
+        return
+    
+    match action:
+        case "move":
+            service = MoveLessonService(message, state, callback)
+        case "delete":
+            service = DeleteLessonService(message, state, callback)
+        case _:
+            await message.answer(replies.UNKNOWN_ACTION_ERR)
+            await state.clear()
+            return
+    
+    await service.once_or_forever()
 
 
 # ---- RECURRENT LESSON MOVE FOREVER ---- #
@@ -135,15 +118,9 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext) -> None:
     user, message = await student_permission(callback)
     if user is None:
         return
-    state_data = await state.get_data()
 
-    weekday = int(get_callback_arg(callback.data, UpdateLesson.choose_weekday))
-    await state.update_data(weekday=weekday)
-    available_time, _ = EventService(db).available_time_weekday(user.executor_id, weekday)
-    await message.answer(
-        replies.CHOOSE_TIME,
-        reply_markup=Keyboards.choose_time(available_time, UpdateLesson.choose_recur_time),
-    )
+    service = MoveLessonService(message, state, callback)
+    await service.choose_recurrent_time()
 
 
 @router.callback_query(F.data.startswith(UpdateLesson.choose_recur_time))
@@ -151,31 +128,9 @@ async def choose_recur_time(callback: CallbackQuery, state: FSMContext) -> None:
     user, message = await student_permission(callback)
     if user is None:
         return
-    state_data = await state.get_data()
-
-    now = datetime.now()
-    time = get_callback_arg(callback.data, UpdateLesson.choose_recur_time)
-    start_of_week = now.date() - timedelta(days=now.weekday())
-    current_day = start_of_week + timedelta(days=state_data["weekday"])
-    start = datetime.combine(current_day, datetime.strptime(time, TIME_FMT).time())
-    old_lesson_str, lesson = LessonsService(db).update_recurrent_lesson(
-        event_id=int(state_data["lesson"].replace("re", "")),
-        user_id=user.id,
-        executor_id=user.executor_id,
-        start=start,
-    )
-    await message.answer(replies.LESSON_MOVED)
-    username = user.username if user.username else user.full_name
-    EventHistoryRepo(db).create(
-        username,
-        UpdateLesson.scene,
-        "moved_recur_lesson",
-        f"{old_lesson_str} -> {lesson}",
-    )
-    executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{username} перенес(ла) {old_lesson_str} -> {lesson}")
-    await auto_place_work_breaks(db, user, start, executor_tg)
-    await state.clear()
+    
+    service = MoveLessonService(message, state, callback)
+    await service.move_recurrent_lesson()
 
 
 # ---- RECURRENT LESSON ACTION ONCE ---- #
