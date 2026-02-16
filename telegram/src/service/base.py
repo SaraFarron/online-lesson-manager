@@ -106,6 +106,38 @@ class ScheduleService:
             message = f"{self.username} добавил(а) занятие на {day} в {lesson_time}"
         await send_message(teacher_id, message)
 
+    async def _update_event(self, event_id: int, event: EventCreate):
+        try:
+            user_data = await self.backend_client.get_user_cache_data(self.telegram_id)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
+        if not user_data or not user_data.user_settings.token:
+            await self.message.answer(replies.SOMETHING_WENT_WRONG)
+            await self.state.clear()
+            return
+
+        try:
+            await self.backend_client.update_event(
+                event_id,
+                event,
+                token=user_data.user_settings.token,
+            )
+        except BackendClientError as e:
+            if e.status == 404:
+                await self.message.answer(replies.LESSON_NOT_FOUND_ERR)
+                await self.state.clear()
+                return
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
+        await self.message.answer(replies.LESSON_MOVED)
+        await self.state.clear()
+        return
+
     async def _delete_event(self, event_id: int):
         user_data = await self.backend_client.get_user_cache_data(self.telegram_id)
         if not user_data or not user_data.user_settings.token:

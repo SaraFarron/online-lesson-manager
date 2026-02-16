@@ -303,15 +303,27 @@ class BackendClient:
             },
         )
 
-    async def update_event(self, event_id: int, event: dict, token: str):
-        # TODO: When implementing, ensure datetime fields are converted to UTC using moscow_to_utc()
-        # and formatted as ISO 8601 with 'Z' suffix: utc_dt.isoformat().replace('+00:00', 'Z')
-        pass
+    async def update_event(self, event_id: int, event: EventCreate, token: str):
+        # Combine date and time in Moscow timezone, then convert to UTC
+        moscow_dt = self.combine_date_time_moscow(event.day, event.start)
+        utc_dt = self.moscow_to_utc(moscow_dt)
+
+        return await self._user_request(
+            "PUT",
+            f"{self.API_URL}/events/{event_id}",
+            token=token,
+            json={
+                "title": event.title,
+                "start": utc_dt.isoformat().replace("+00:00", "Z"),  # Format as "2026-02-10T06:00:00Z"
+                "duration": event.duration,
+                "isRecurring": event.is_recurrent,
+            },
+        )
 
     async def delete_event(self, event_id: int, token: str):
         return await self._user_request(
             "DELETE",
-            f"{self.API_URL}/events{event_id}",
+            f"{self.API_URL}/events/{event_id}",
             token=token,
         )
 

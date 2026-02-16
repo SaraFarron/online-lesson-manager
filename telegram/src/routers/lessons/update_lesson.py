@@ -72,7 +72,6 @@ async def type_date(message: Message, state: FSMContext) -> None:
     await service.choose_time()
 
 
-
 @router.callback_query(F.data.startswith(UpdateLesson.choose_time))
 async def choose_time(callback: CallbackQuery, state: FSMContext) -> None:
     user, message = await student_permission(callback)

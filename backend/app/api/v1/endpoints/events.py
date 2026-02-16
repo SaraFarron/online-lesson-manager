@@ -71,7 +71,7 @@ async def create_event(
     return [EventResponse.from_models(created_event)]
 
 
-@router.put("{event_id}", response_model=EventResponse)
+@router.put("/{event_id}", response_model=EventResponse)
 async def update_event(
     db: DatabaseSession,
     user: CurrentUser,
@@ -92,7 +92,7 @@ async def update_event(
     return EventResponse.from_models(updated_event)
 
 
-@router.delete("{event_id}")
+@router.delete("/{event_id}")
 async def delete_event(
     db: DatabaseSession,
     user: CurrentUser,

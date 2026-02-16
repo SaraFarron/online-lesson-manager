@@ -110,31 +110,14 @@ class MoveLessonService(ScheduleService):
     
     async def move_lesson(self):
         state_data = await self.state.get_data()
+        event_id, day = state_data["lesson_id"], state_data["day"]
+        time = parse_time(get_callback_arg(self.callback.data, UpdateLesson.choose_time))
+        if time is None:
+            await self.message.answer(replies.WRONG_TIME_FMT)
+            await self.state.set_state(UpdateLesson.choose_time)
+            return
 
-        day = state_data["day"]
-        time = datetime.strptime(
-            get_callback_arg(self.callback.data, UpdateLesson.choose_time),
-            TIME_FMT,
-        ).time()
-
-        old_lesson, new_lesson = LessonsService(db).move_lesson(
-            event_id=int(state_data["lesson"].replace("e", "")),
-            user_id=user.id,
-            executor_id=user.executor_id,
-            day=day,
-            time=time,
-        )
-        await self.message.answer(replies.LESSON_MOVED)
-        # EventHistoryRepo(db).create(
-        #     user.get_username(),
-        #     UpdateLesson.scene,
-        #     "moved_one_lesson",
-        #     f"{old_lesson} -> {new_lesson}",
-        # )
-        executor_tg = UserRepo(db).executor_telegram_id(user)
-        await send_message(executor_tg, f"{user.get_username()} перенес(ла) {old_lesson} -> {new_lesson}")
-        await auto_place_work_breaks(db, user, day, executor_tg)
-        await state.clear()
+        await self._update_event(event_id, EventCreate(title="Перенос", day=day, start=time))
 
 
 class DeleteLessonService(ScheduleService):
