@@ -153,6 +153,74 @@ class MoveLessonService(ScheduleService):
             EventCreate(title="Урок", day=day, start=time, is_recurrent=True, weekday=weekday),
         )
 
+    async def type_recur_date(self):
+        day = await self.check_date(UpdateLesson.type_recur_date)
+        if day is None:
+            return
+        try:
+            lesson = await self.backend_client.get_event(self.state_data["lesson_id"], self.telegram_id)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
+        if not lesson:
+            await self.message.answer(replies.LESSON_NOT_FOUND_ERR)
+            await self.state.clear()
+            return
+
+        if lesson.start.weekday() != day.weekday():
+            await self.message.answer(replies.WRONG_WEEKDAY)
+            await self.state.set_state(UpdateLesson.type_recur_date)
+            return
+        
+        await self.state.update_data(day=day)
+        await self.state.update_data(weekday=day.weekday())
+        await self.message.answer(replies.CHOOSE_LESSON_DATE)
+        await self.state.set_state(UpdateLesson.type_new_date)
+
+    async def type_new_recur_date(self):
+        day = await self.check_date(UpdateLesson.type_new_date)
+        if day is None:
+            return
+        
+        try:
+            slots = await self.backend_client.get_user_free_slots(self.telegram_id, day)
+        except BackendClientError as e:
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+        
+        if not slots or str(day) not in slots:
+            await self.message.answer(replies.NO_TIME)
+            await self.state.clear()
+            return
+
+        await self.state.update_data(new_day=day)
+        await self.message.answer(
+            replies.CHOOSE_TIME,
+            reply_markup=choose_time(
+                self.convert_free_slots(slots[str(day)]),
+                UpdateLesson.choose_recur_new_time,
+            ),
+        )
+
+    async def move_recur_once(self):
+        state_data = await self.state.get_data()
+        event_id = state_data["lesson_id"]
+        time = parse_time(get_callback_arg(self.callback.data, UpdateLesson.choose_recur_new_time))
+        if time is None:
+            await self.message.answer(replies.WRONG_TIME_FMT)
+            await self.state.set_state(UpdateLesson.choose_recur_new_time)
+            return
+
+        day = state_data["new_day"]
+        await self._update_event(  # TODO move recurrent once
+            event_id,
+            EventCreate(title="Урок", day=day, start=time, is_recurrent=True, weekday=state_data["weekday"]),
+            is_recurrent_once=True,
+        )
+
 
 class DeleteLessonService(ScheduleService):
     def __init__(self, message: Message, state: FSMContext, callback: CallbackQuery | None = None) -> None:
@@ -188,3 +256,27 @@ class DeleteLessonService(ScheduleService):
         state_data = await self.state.get_data()
         event_id = state_data["lesson_id"]
         await self._delete_event(event_id)
+
+    async def cancel_once(self):
+        day = await self.check_date(UpdateLesson.type_recur_date)
+        if day is None:
+            return
+
+        state_data = await self.state.get_data()
+        event_id = state_data["lesson_id"]
+        user_token = await self.get_user_token()
+        if not user_token:
+            return
+        
+        try:
+            await self.backend_client.cancel_recurrent_event_occurrence(event_id, day, user_token)
+        except BackendClientError as e:
+            if e.status == 404:
+                await self.message.answer(replies.LESSON_NOT_FOUND_ERR)
+            else:
+                await self.message.answer(e.detail)
+            await self.state.clear()
+
+        await self.message.answer(replies.LESSON_DELETED)
+        await self.state.clear()
+

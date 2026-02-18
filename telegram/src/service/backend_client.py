@@ -245,6 +245,17 @@ class BackendClient:
         data = await self.get_user_cache_data(telegram_id)
         return data.schedule if data else None
 
+    async def get_event(self, event_id: int, telegram_id: int) -> Event | None:
+        """Get specific event by ID."""
+        schedule = await self.get_user_schedule(telegram_id)
+        if schedule is None:
+            return None
+        for events in schedule.values():
+            for event in events:
+                if event.id == event_id:
+                    return event
+        return None
+
     async def get_user_free_slots(self, telegram_id: int) -> dict[str, list[Slot]] | None:
         """Get user free slots."""
         data = await self.get_user_cache_data(telegram_id)
@@ -335,6 +346,9 @@ class BackendClient:
     async def update_recurrent_event(self, event_id: int, event: dict, token: str):
         # TODO: When implementing, ensure datetime fields are converted to UTC using moscow_to_utc()
         # and formatted as ISO 8601 with 'Z' suffix: utc_dt.isoformat().replace('+00:00', 'Z')
+        pass
+    
+    async def cancel_recurrent_event_occurrence(self, event_id: int, occurrence_date: date_type, token: str):
         pass
 
     async def close(self) -> None:

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -9,7 +9,7 @@ from src.messages import replies
 from src.schemas import EventCreate
 from src.service.backend_client import BackendClient, BackendClientError
 from src.service.cache import Event, Slot
-from src.utils import send_message
+from src.utils import parse_date, send_message
 
 
 class ScheduleService:
@@ -31,6 +31,23 @@ class ScheduleService:
         else:
             self.telegram_id = message.from_user.id
             self.username = message.from_user.username
+
+    async def check_date(self, callback: str) -> date | None:
+        day = parse_date(self.message.text)
+        today = datetime.now().date()
+
+        if day is None:
+            await self.message.answer(replies.WRONG_DATE_FMT)
+            await self.state.set_state(callback)
+            return None
+
+        if today > day:
+            await self.message.answer(replies.CHOOSE_FUTURE_DATE)
+            if len(self.message.text) <= 5:
+                await self.message.answer(replies.ADD_YEAR)
+            await self.state.set_state(callback)
+            return None
+        return day
 
     def convert_free_slots(self, slots: list[Slot], step: int = 15, duration: int = 60) -> list[str]:
         res = []
@@ -104,23 +121,27 @@ class ScheduleService:
             reply_markup=choose_time(available_time, callback),
         )
 
-    async def _create_event(self, event: EventCreate):
+    async def get_user_token(self) -> str | None:
         try:
             user_data = await self.backend_client.get_user_cache_data(self.telegram_id)
         except BackendClientError as e:
             await self.message.answer(e.detail)
             await self.state.clear()
-            return
+            return None
 
         if not user_data or not user_data.user_settings.token:
             await self.message.answer(replies.SOMETHING_WENT_WRONG)
             await self.state.clear()
+            return None
+        return user_data.user_settings.token
+
+    async def _create_event(self, event: EventCreate):
+        user_token = await self.get_user_token()
+        if not user_token:
             return
+
         try:
-            await self.backend_client.create_event(
-                event,
-                token=user_data.user_settings.token,
-            )
+            await self.backend_client.create_event(event, token=user_token)
         except BackendClientError as e:
             await self.message.answer(e.detail)
             await self.state.clear()
@@ -145,24 +166,12 @@ class ScheduleService:
         await send_message(teacher_id, message)
 
     async def _update_event(self, event_id: int, event: EventCreate):
-        try:
-            user_data = await self.backend_client.get_user_cache_data(self.telegram_id)
-        except BackendClientError as e:
-            await self.message.answer(e.detail)
-            await self.state.clear()
-            return
-
-        if not user_data or not user_data.user_settings.token:
-            await self.message.answer(replies.SOMETHING_WENT_WRONG)
-            await self.state.clear()
+        user_token = await self.get_user_token()
+        if not user_token:
             return
 
         try:
-            await self.backend_client.update_event(
-                event_id,
-                event,
-                token=user_data.user_settings.token,
-            )
+            await self.backend_client.update_event(event_id, event, token=user_token)
         except BackendClientError as e:
             if e.status == 404:
                 await self.message.answer(replies.LESSON_NOT_FOUND_ERR)
@@ -177,14 +186,12 @@ class ScheduleService:
         return
 
     async def _delete_event(self, event_id: int):
-        user_data = await self.backend_client.get_user_cache_data(self.telegram_id)
-        if not user_data or not user_data.user_settings.token:
-            await self.message.answer(replies.SOMETHING_WENT_WRONG)
-            await self.state.clear()
+        user_token = await self.get_user_token()
+        if not user_token:
             return
 
         try:
-            await self.backend_client.delete_event(event_id, user_data.user_settings.token)
+            await self.backend_client.delete_event(event_id, user_token)
         except BackendClientError as e:
             if e.status == 404:
                 await self.message.answer(replies.LESSON_NOT_FOUND_ERR)
