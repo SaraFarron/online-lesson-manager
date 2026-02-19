@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, HTTPException, Response, status
 
 from app.api.deps import CurrentUser, DatabaseSession
@@ -90,6 +92,35 @@ async def update_event(
             detail=f"Event with id {event_id} does not exist",
         )
     return EventResponse.from_models(updated_event)
+
+
+@router.post("/{event_id}/cancel", response_model=EventResponse)
+async def cancel_event(
+    db: DatabaseSession,
+    user: CurrentUser,
+    event_id: int,
+    cancel_date: date,
+) -> EventResponse:
+    """Cancel an existing event."""
+    service = EventService(db)
+    if event_id % 2 == 1:  # Odd ID = regular event
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only recurrent events can be canceled",
+        )
+    else:  # Even ID = recurrent event
+        created = await service.cancel_recurrent_event(event_id, cancel_date, user)
+    if not created:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event with id {event_id} does not exist or you don't own it",
+        )
+    if isinstance(created, str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=created,
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/{event_id}")

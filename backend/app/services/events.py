@@ -234,3 +234,30 @@ class EventService:
         start, end = await self._get_working_hours(user)
         free_slots = self._filter_out_occupied_slots(recurrent_events, start, end)
         return [{"start": time_slot[0], "end": time_slot[1]} for time_slot in free_slots]
+
+    async def cancel_recurrent_event(self, event_id: int, cancel_date: date, user: User) -> bool | str:
+        """Cancel a specific occurrence of a recurrent event."""
+        event = await self.recurrent_repo.get_by_id(event_id)
+        if not event:
+            return False
+        if user.role == User.Roles.TEACHER and event.teacher_id != user.id:
+            return False
+        if user.role == User.Roles.STUDENT and event.student_id != user.id:
+            return False
+        
+        # Check if cancellation already exists
+        existing_cancel = await self.cancels_repo.get_by_event_and_date(event_id, cancel_date)
+        if existing_cancel:
+            return "A cancellation for this date already exists."
+        
+        # Check if the cancel_date is a valid occurrence of the recurrent event
+        if cancel_date.weekday() != event.start.weekday() or cancel_date < event.start.date():
+            return "Invalid cancellation date. It must match the weekday of the recurrent event and be in the future."
+        
+        now = datetime.now(UTC)
+        # TODO 3 hours is hardcoded, should be configurable
+        if cancel_date == now.date() and (now + timedelta(hours=3)).time() > event.start.time():
+            return "Cannot cancel the event within 3 hours of its start time."
+
+        await self.cancels_repo.create({"recurrent_event_id": event_id, "canceled_date": cancel_date})
+        return True
