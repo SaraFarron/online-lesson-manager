@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from datetime import date
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Event, RecurrentCancels, RecurrentEvent, User
@@ -40,12 +42,20 @@ class RecurrentCancelsRepository(BaseRepository[RecurrentCancels]):
         )
         result = await self.session.execute(query)
         return list(result.scalars().all())
-    
-    async def get_by_event_and_date(self, recurrent_event_id: int, canceled_date) -> RecurrentCancels | None:
-        """Get a cancellation for a specific recurrent event on a specific date."""
+
+    async def get_by_event_and_date(self, recurrent_event_id: int, canceled_date: date) -> RecurrentCancels | None:
+        """Get a cancellation for a specific recurrent event on a specific date.
+        
+        Args:
+            recurrent_event_id: The ID of the recurrent event
+            canceled_date: The date to check (time portion is ignored)
+        
+        Returns:
+            RecurrentCancels object if found, None otherwise
+        """
         query = select(RecurrentCancels).where(
             RecurrentCancels.recurrent_event_id == recurrent_event_id,
-            RecurrentCancels.canceled_date == canceled_date,
+            func.date(RecurrentCancels.canceled_date) == canceled_date,
         )
         result = await self.session.execute(query)
         return result.scalars().first()

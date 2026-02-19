@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -75,3 +75,10 @@ class EventCreate(BaseEvent):
 
 class EventUpdate(BaseEvent):
     """Schema for updating an existing Event."""
+
+
+class EventMove(BaseModel):
+    """Schema for moving recurrent event occurrence."""
+
+    cancel_date: date
+    new_start: datetime

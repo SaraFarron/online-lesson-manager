@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Response, status
 
 from app.api.deps import CurrentUser, DatabaseSession
-from app.schemas import EventCreate, EventResponse, EventsTotalResponse, EventUpdate
+from app.schemas import EventCreate, EventMove, EventResponse, EventsTotalResponse, EventUpdate
 from app.services import EventService
 
 router = APIRouter()
@@ -94,13 +94,13 @@ async def update_event(
     return EventResponse.from_models(updated_event)
 
 
-@router.post("/{event_id}/cancel", response_model=EventResponse)
+@router.post("/{event_id}/cancel")
 async def cancel_event(
     db: DatabaseSession,
     user: CurrentUser,
     event_id: int,
     cancel_date: date,
-) -> EventResponse:
+):
     """Cancel an existing event."""
     service = EventService(db)
     if event_id % 2 == 1:  # Odd ID = regular event
@@ -121,6 +121,36 @@ async def cancel_event(
             detail=created,
         )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{event_id}/move")
+async def move_event(
+    db: DatabaseSession,
+    user: CurrentUser,
+    event_id: int,
+    move: EventMove,
+):
+    """Move an occurrence of a recurrent event to a new date and time."""
+    service = EventService(db)
+    if event_id % 2 == 1:  # Odd ID = regular event
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only recurrent events can be moved",
+        )
+    else:  # Even ID = recurrent event
+        success = await service.move_recurrent_event_occurrence(event_id, move, user)
+    if success is True:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    elif success is False:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event with id {event_id} does not exist or you don't own it",
+        )
+    else:  # success is a string error message
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=success,
+        )
 
 
 @router.delete("/{event_id}")

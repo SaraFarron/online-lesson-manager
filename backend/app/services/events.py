@@ -9,13 +9,14 @@ from app.repositories import (
     RecurrentEventRepository,
     TeacherSettingsRepository,
 )
-from app.schemas import EventCreate, EventUpdate
+from app.schemas import EventCreate, EventMove, EventUpdate
 
 
 class EventService:
     """Service for managing all kinds of events."""
 
     def __init__(self, session: AsyncSession) -> None:
+        self.session = session
         self.repository = EventRepository(session)
         self.recurrent_repo = RecurrentEventRepository(session)
         self.cancels_repo = RecurrentCancelsRepository(session)
@@ -261,3 +262,53 @@ class EventService:
 
         await self.cancels_repo.create({"recurrent_event_id": event_id, "canceled_date": cancel_date})
         return True
+
+    async def _move_recurrent_checks(self, event: RecurrentEvent, move_data: EventMove, user: User) -> bool | str:
+        # Verify user permissions
+        if user.role == User.Roles.TEACHER and event.teacher_id != user.id:
+            return True
+        if user.role == User.Roles.STUDENT and event.student_id != user.id:
+            return True
+        
+        # Validate cancellation date
+        if move_data.cancel_date.weekday() != event.start.weekday() or move_data.cancel_date < event.start.date():
+            return "Invalid cancellation date. It must match the weekday of the recurrent event and be in the future."
+        
+        # Check if cancellation already exists
+        existing_cancel = await self.cancels_repo.get_by_event_and_date(event.id, move_data.cancel_date)
+        if existing_cancel:
+            return "A cancellation for this date already exists."
+        
+        # Check 3-hour rule
+        now = datetime.now(UTC)
+        if move_data.cancel_date == now.date() and (now + timedelta(hours=3)).time() > event.start.time():
+            return "Cannot cancel the event within 3 hours of its start time."
+        return False
+        
+    async def move_recurrent_event_occurrence(self, event_id: int, move_data: EventMove, user: User) -> bool | str:
+        """Move a specific occurrence of a recurrent event to a new date and time."""
+        event = await self.recurrent_repo.get_by_id(event_id)
+        if not event:
+            return False
+        
+        error = await self._move_recurrent_checks(event, move_data, user)
+        if error:
+            return error
+        
+        new_event_data = {
+            "title": event.title,
+            "start": move_data.new_start,
+            "duration": event.duration,
+            "teacher_id": event.teacher_id,
+            "student_id": event.student_id,
+        }
+        
+        # Both operations execute in the request's transaction
+        # If create() raises ValueError (slot occupied), it will trigger automatic rollback
+        try:
+            await self.cancels_repo.create({"recurrent_event_id": event_id, "canceled_date": move_data.cancel_date})
+            await self.repository.create(new_event_data)
+            return True
+        except ValueError as e:
+            # Return error message; get_db() will rollback automatically
+            return str(e)
