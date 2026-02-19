@@ -349,7 +349,12 @@ class BackendClient:
         pass
     
     async def cancel_recurrent_event_occurrence(self, event_id: int, occurrence_date: date_type, token: str):
-        pass
+        return await self._user_request(
+            "POST",
+            f"{self.API_URL}/events/{event_id}/cancel",
+            token=token,
+            params={"cancel_date": occurrence_date.isoformat()},
+        )
 
     async def close(self) -> None:
         """Clean up session."""
