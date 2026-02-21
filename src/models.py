@@ -28,7 +28,9 @@ class User(Model, Base):
     username = Column(String)
     full_name = Column(String)
     role = Column(String)
-    executor_id = Column(Integer, ForeignKey("executors.id"), nullable=True, default=None)
+    executor_id = Column(
+        Integer, ForeignKey("executors.id"), nullable=True, default=None
+    )
 
     class Roles:
         TEACHER = "TEACHER"
@@ -68,7 +70,9 @@ class EventModel(Model):
 class Event(EventModel, Base):
     __tablename__ = "events"
     cancelled = Column(Boolean, default=False)
-    reschedule_id = Column(Integer, ForeignKey("events.id"), nullable=True, default=None)
+    reschedule_id = Column(
+        Integer, ForeignKey("events.id"), nullable=True, default=None
+    )
     reschedule = relationship("Event")
     is_reschedule = Column(Boolean, default=False)
 
@@ -99,7 +103,10 @@ class Event(EventModel, Base):
                 time = datetime.strftime(self.start, TIME_FMT)
                 return f"Перенос {date} в {time}"
             case self.EventTypes.VACATION:
-                start, end = datetime.strftime(self.start, DATE_FMT), datetime.strftime(self.end, DATE_FMT)
+                start, end = (
+                    datetime.strftime(self.start, DATE_FMT),
+                    datetime.strftime(self.end, DATE_FMT),
+                )
                 return f"Каникулы с {start} по {end}"
             case _:
                 return f"{self.event_type} {self.st_str}-{self.et_str}"

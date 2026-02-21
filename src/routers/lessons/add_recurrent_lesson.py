@@ -25,6 +25,7 @@ router = Router()
 router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
+
 class AddRecurrentLesson(StatesGroup):
     scene = "add_recurrent_lesson"
     command = "/" + scene
@@ -41,11 +42,16 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
 
     await state.update_data(user_id=user.telegram_id)
     weekdays = EventRepo(db).available_weekdays(user.executor_id)
-    await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, AddRecurrentLesson.choose_weekday))
+    await message.answer(
+        replies.CHOOSE_WEEKDAY,
+        reply_markup=Keyboards.weekdays(weekdays, AddRecurrentLesson.choose_weekday),
+    )
 
 
 @router.callback_query(F.data.startswith(AddRecurrentLesson.choose_weekday))
-async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+async def choose_weekday(
+    callback: CallbackQuery, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
@@ -57,7 +63,12 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
         await state.clear()
         return
     await state.update_data(weekday=weekday)
-    await message.answer(replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddRecurrentLesson.choose_time))
+    await message.answer(
+        replies.CHOOSE_TIME,
+        reply_markup=Keyboards.choose_time(
+            available_time, AddRecurrentLesson.choose_time
+        ),
+    )
 
 
 @router.callback_query(F.data.startswith(AddRecurrentLesson.choose_time))
@@ -67,7 +78,9 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
 
     now = datetime.now()
-    time = datetime.strptime(get_callback_arg(callback.data, AddRecurrentLesson.choose_time), "%H:%M").time()
+    time = datetime.strptime(
+        get_callback_arg(callback.data, AddRecurrentLesson.choose_time), "%H:%M"
+    ).time()
     start_of_week = now.date() - timedelta(days=now.weekday())
     current_day = start_of_week + timedelta(days=state_data["weekday"])
     start = datetime.combine(current_day, time)
@@ -85,7 +98,9 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
     db.commit()
     username = user.username if user.username else user.full_name
     await message.answer(replies.LESSON_ADDED)
-    EventHistoryRepo(db).create(username, AddRecurrentLesson.scene, "added_lesson", str(lesson))
+    EventHistoryRepo(db).create(
+        username, AddRecurrentLesson.scene, "added_lesson", str(lesson)
+    )
     executor, exec_user = UserRepo(db).users_executor(user)
     await send_message(executor.telegram_id, f"{username} добавил(а) {lesson}")
     schedule = EventRepo(db).day_schedule(
@@ -107,8 +122,10 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
         db.add(event_break)
         db.commit()
         break_time = datetime.strftime(event_break.start, TIME_FMT)
-        await send_message(executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}")
-        
+        await send_message(
+            executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}"
+        )
+
         # Create break before block if possible
         before_break_time = find_before_block_slot(schedule, block_start)
         if isinstance(before_break_time, datetime):
@@ -122,8 +139,13 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
             )
             db.add(event_before_break)
             db.commit()
-            before_break_time_str = datetime.strftime(event_before_break.start, TIME_FMT)
-            await send_message(executor.telegram_id, f"Автоматически добавлен перерыв перед блоком на {before_break_time_str}")
+            before_break_time_str = datetime.strftime(
+                event_before_break.start, TIME_FMT
+            )
+            await send_message(
+                executor.telegram_id,
+                f"Автоматически добавлен перерыв перед блоком на {before_break_time_str}",
+            )
     elif isinstance(block, str):
         await send_message(executor.telegram_id, block)
     await state.clear()

@@ -18,6 +18,7 @@ router = Router()
 router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
+
 class WorkBreaks(StatesGroup):
     scene = "manage_work_breaks"
     command = "/" + scene
@@ -30,7 +31,9 @@ class WorkBreaks(StatesGroup):
 
 @router.message(Command(WorkBreaks.command))
 @router.message(F.text == AdminCommands.WORK_BREAKS.value)
-async def manage_work_breaks_handler(message: Message, state: FSMContext, db: Session) -> None:
+async def manage_work_breaks_handler(
+    message: Message, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
     if user.role != User.Roles.TEACHER:
@@ -40,7 +43,9 @@ async def manage_work_breaks_handler(message: Message, state: FSMContext, db: Se
     work_breaks = EventRepo(db).work_breaks(user.executor_id)
     await message.answer(
         replies.CHOOSE_WH_ACTION,
-        reply_markup=Keyboards.work_breaks(work_breaks, WorkBreaks.add_break, WorkBreaks.remove_break),
+        reply_markup=Keyboards.work_breaks(
+            work_breaks, WorkBreaks.add_break, WorkBreaks.remove_break
+        ),
     )
 
 
@@ -52,11 +57,16 @@ async def add_break(callback: CallbackQuery, state: FSMContext, db: Session) -> 
     if user.role != User.Roles.TEACHER:
         raise Exception("message", replies.PERMISSION_DENIED, "user.role != Teacher")
 
-    await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(list(range(7)), WorkBreaks.choose_duration))
+    await message.answer(
+        replies.CHOOSE_WEEKDAY,
+        reply_markup=Keyboards.weekdays(list(range(7)), WorkBreaks.choose_duration),
+    )
 
 
 @router.callback_query(F.data.startswith(WorkBreaks.choose_duration))
-async def choose_duration(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+async def choose_duration(
+    callback: CallbackQuery, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
@@ -104,7 +114,9 @@ async def result(message: Message, state: FSMContext, db: Session) -> None:
     db.commit()
     await message.answer(replies.BREAK_ADDED)
     username = user.username if user.username else user.full_name
-    EventHistoryRepo(db).create(username, WorkBreaks.scene, "added_break", f"{weekday} {start.time()}")
+    EventHistoryRepo(db).create(
+        username, WorkBreaks.scene, "added_break", f"{weekday} {start.time()}"
+    )
     await state.clear()
 
 

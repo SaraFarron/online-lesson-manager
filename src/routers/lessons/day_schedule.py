@@ -18,6 +18,7 @@ router = Router()
 router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
+
 class DaySchedule(StatesGroup):
     scene = "day_schedule"
     command = "/" + scene
@@ -36,7 +37,9 @@ async def add_lesson_handler(message: Message, state: FSMContext, db: Session) -
         None if user.role == User.Roles.TEACHER else user.id,
     )
     users_map = {
-        u.id: f"@{u.username}" if u.username else f'<a href="tg://user?id={u.telegram_id}">{u.full_name}</a>'
+        u.id: f"@{u.username}"
+        if u.username
+        else f'<a href="tg://user?id={u.telegram_id}">{u.full_name}</a>'
         for u in db.query(User).filter(User.executor_id == user.executor_id)
     }
     result = day_schedule_text(lessons, users_map, user)

@@ -27,6 +27,7 @@ router = Router()
 router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
+
 class AddLesson(StatesGroup):
     scene = "add_lesson"
     command = "/" + scene
@@ -71,7 +72,8 @@ async def choose_date(message: Message, state: FSMContext, db: Session) -> None:
     available_time = EventRepo(db).available_time(user.executor_id, day)
     if available_time:
         await message.answer(
-            replies.CHOOSE_TIME, reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time),
+            replies.CHOOSE_TIME,
+            reply_markup=Keyboards.choose_time(available_time, AddLesson.choose_time),
         )
     else:
         await message.answer(replies.NO_TIME)
@@ -117,13 +119,15 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
             executor_id=executor.id,
             event_type=Event.EventTypes.WORK_BREAK,
             start=block_end,
-            end=block_end + timedelta(minutes=15)
+            end=block_end + timedelta(minutes=15),
         )
         db.add(event_break)
         db.commit()
         break_time = datetime.strftime(event_break.start, TIME_FMT)
-        await send_message(executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}")
-        
+        await send_message(
+            executor.telegram_id, f"Автоматически добавлен перерыв на {break_time}"
+        )
+
         # Create break before block if possible
         before_break_time = find_before_block_slot(schedule, block_start)
         if isinstance(before_break_time, datetime):
@@ -132,12 +136,17 @@ async def choose_time(callback: CallbackQuery, state: FSMContext, db: Session) -
                 executor_id=executor.id,
                 event_type=Event.EventTypes.WORK_BREAK,
                 start=before_break_time,
-                end=before_break_time + timedelta(minutes=15)
+                end=before_break_time + timedelta(minutes=15),
             )
             db.add(event_before_break)
             db.commit()
-            before_break_time_str = datetime.strftime(event_before_break.start, TIME_FMT)
-            await send_message(executor.telegram_id, f"Автоматически добавлен перерыв перед блоком на {before_break_time_str}")
+            before_break_time_str = datetime.strftime(
+                event_before_break.start, TIME_FMT
+            )
+            await send_message(
+                executor.telegram_id,
+                f"Автоматически добавлен перерыв перед блоком на {before_break_time_str}",
+            )
     elif isinstance(block, str):
         await send_message(executor.telegram_id, block)
     await state.clear()

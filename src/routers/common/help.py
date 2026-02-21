@@ -22,7 +22,11 @@ async def help_handler(message: Message, db: Session) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id)
     if user is None:
-        raise Exception("message", "У вас нет прав на эту команду", "permission denied user is None")
-    await message.answer(replies.HELP_MESSAGE, reply_markup=Keyboards.all_commands(user.role))
+        raise Exception(
+            "message", "У вас нет прав на эту команду", "permission denied user is None"
+        )
+    await message.answer(
+        replies.HELP_MESSAGE, reply_markup=Keyboards.all_commands(user.role)
+    )
     username = user.username if user.username else user.full_name
     EventHistoryRepo(db).create(username, "help", "help", "")

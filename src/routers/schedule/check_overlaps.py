@@ -1,4 +1,3 @@
-
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -17,6 +16,7 @@ router = Router()
 router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
+
 class CheckOverlaps(StatesGroup):
     scene = "check_overlaps"
     command = "/" + scene
@@ -26,7 +26,9 @@ class CheckOverlaps(StatesGroup):
 
 @router.message(Command(CheckOverlaps.command))
 @router.message(F.text == AdminCommands.CHECK_OVERLAPS.value)
-async def check_overlaps_handler(message: Message, state: FSMContext, db: Session) -> None:
+async def check_overlaps_handler(
+    message: Message, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
     if user.role != User.Roles.TEACHER:
@@ -48,7 +50,9 @@ async def check_overlaps_handler(message: Message, state: FSMContext, db: Sessio
 
 
 @router.callback_query(F.data.startswith(CheckOverlaps.send_messages))
-async def send_messages(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+async def send_messages(
+    callback: CallbackQuery, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)

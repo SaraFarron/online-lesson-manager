@@ -18,21 +18,25 @@ class RouterConf:
 def telegram_checks(event: Message | CallbackQuery):
     if isinstance(event, Message):
         if not event.from_user:
-            raise Exception("message", "Ошибка на стороне telegram", "event.from_user is False")
+            raise Exception(
+                "message", "Ошибка на стороне telegram", "event.from_user is False"
+            )
         return event
     if not isinstance(event.message, Message):
-        raise Exception("message", "Ошибка на стороне telegram", "event.message is not Message")
+        raise Exception(
+            "message", "Ошибка на стороне telegram", "event.message is not Message"
+        )
     return event.message
 
 
 def parse_date(text: str, in_future=False):
     for fmt in (
-            SHORT_DATE_FMT,
-            SHORT_DATE_FMT.replace(".", " "),
-            SHORT_DATE_FMT.replace(".", "-"),
-            "%Y-%m-%d",
-            "%Y %m %d",
-            "%Y.%m.%d",
+        SHORT_DATE_FMT,
+        SHORT_DATE_FMT.replace(".", " "),
+        SHORT_DATE_FMT.replace(".", "-"),
+        "%Y-%m-%d",
+        "%Y %m %d",
+        "%Y.%m.%d",
     ):
         try:
             date = datetime.strptime(text, fmt)
@@ -63,7 +67,11 @@ def get_callback_arg(callback_data: str, callback: str):
 
 def calc_end_time(time: time):
     """Calculate end time."""
-    return time.replace(hour=time.hour + 1) if time.hour < MAX_HOUR else time.replace(hour=0)
+    return (
+        time.replace(hour=time.hour + 1)
+        if time.hour < MAX_HOUR
+        else time.replace(hour=0)
+    )
 
 
 async def send_message(telegram_id: int, message: str) -> None:
@@ -79,13 +87,20 @@ async def send_message(telegram_id: int, message: str) -> None:
 
 def day_schedule_text(lessons: list, users_map: dict, user: User):
     result = []
-    event_types = [Event.EventTypes.LESSON, Event.EventTypes.MOVED_LESSON, RecurrentEvent.EventTypes.LESSON]
+    event_types = [
+        Event.EventTypes.LESSON,
+        Event.EventTypes.MOVED_LESSON,
+        RecurrentEvent.EventTypes.LESSON,
+    ]
     if user.role == User.Roles.TEACHER:
         event_types.append(Event.EventTypes.WORK_BREAK)
     for lesson in lessons:
         if lesson[3] in event_types:
             dt = lesson[0]
-            if not isinstance(lesson[-1], bool) and lesson[3] == Event.EventTypes.LESSON:
+            if (
+                not isinstance(lesson[-1], bool)
+                and lesson[3] == Event.EventTypes.LESSON
+            ):
                 lesson_str = f"Разовый урок в {datetime.strftime(dt, TIME_FMT)}"
             else:
                 lesson_str = f"{lesson[3]} в {datetime.strftime(dt, TIME_FMT)}"
@@ -159,7 +174,7 @@ def find_before_block_slot(events, block_start):
     Returns: block_start - 15 minutes if possible, False otherwise.
     """
     events = sorted(events, key=lambda x: x[0])
-    
+
     # Find the previous event before block_start
     prev_event = None
     for event in events:
@@ -168,15 +183,15 @@ def find_before_block_slot(events, block_start):
             prev_event = event
         else:
             break
-    
+
     # If no previous event, we can place break at block_start - 15min
     if prev_event is None:
         return block_start - timedelta(minutes=15)
-    
+
     prev_end = prev_event[1]
-    
+
     # Check if there's a 15-minute gap between prev_event.end and block_start
     if block_start - prev_end >= timedelta(minutes=15):
         return block_start - timedelta(minutes=15)
-    
+
     return False

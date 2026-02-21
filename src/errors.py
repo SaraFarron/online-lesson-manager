@@ -23,4 +23,5 @@ def add_errors(dp: Dispatcher):
             await message.answer(err_msgs.UNKNOWN)
             logger.error(err_data)
             logger.exception(event.exception)
+
     return dp

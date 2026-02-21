@@ -31,7 +31,8 @@ async def send_notifications(now: datetime):
             events = repo.day_schedule(user.executor_id, now.date(), student_id)
             user_ids = [e[2] for e in events]
             users_map = {
-                u.id: u.username if u.username else u.full_name for u in db.query(User).filter(User.id.in_(user_ids))
+                u.id: u.username if u.username else u.full_name
+                for u in db.query(User).filter(User.id.in_(user_ids))
             }
             text = notification(events, user, users_map)
             if not text:

@@ -21,6 +21,7 @@ router.callback_query.middleware(DatabaseMiddleware())
 # Temporary storage for media groups
 media_group_storage = {}
 
+
 class Notifications(StatesGroup):
     scene = "notifications"
     command = "/" + scene
@@ -30,7 +31,9 @@ class Notifications(StatesGroup):
 
 @router.message(Command(Notifications.command))
 @router.message(F.text == AdminCommands.SEND_TO_EVERYONE.value)
-async def notifications_handler(message: Message, state: FSMContext, db: Session) -> None:
+async def notifications_handler(
+    message: Message, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
     if user.role != User.Roles.TEACHER:
@@ -56,7 +59,9 @@ async def notification(message: Message, state: FSMContext, db: Session) -> None
     if receivers == len(students):
         await message.answer(f"Сообщение отправлено {receivers} ученикам.")
     if errors:
-        await message.answer("Не удалось отправить сообщение ученикам:\n" + ", ".join(errors))
+        await message.answer(
+            "Не удалось отправить сообщение ученикам:\n" + ", ".join(errors)
+        )
     await state.clear()
 
 
@@ -68,18 +73,24 @@ class TelegramMessages:
                 if message.content_type == ContentType.TEXT:
                     await self.send_text_message(telegram_id, message.text)
                 elif message.content_type == ContentType.PHOTO:
-                    await self.send_photo_message(telegram_id, message.photo[-1].file_id, message.caption)
+                    await self.send_photo_message(
+                        telegram_id, message.photo[-1].file_id, message.caption
+                    )
                 elif message.content_type == ContentType.VIDEO:
-                    await self.send_video_message(telegram_id, message.video.file_id, message.caption)
+                    await self.send_video_message(
+                        telegram_id, message.video.file_id, message.caption
+                    )
                 else:
                     await message.answer(replies.UNSUPPORTED_MEDIA_TYPE)
                 return True
             except Exception as e:
-                print(f"Attempt {attempt + 1} failed to send message to {username}: {e}")
+                print(
+                    f"Attempt {attempt + 1} failed to send message to {username}: {e}"
+                )
                 attempt += 1
                 await asyncio.sleep(1)  # Wait before retrying
         return False
-    
+
     async def send_complex_message(self, message: Message, students: list):
         # Handle media groups
         if message.media_group_id:
@@ -96,14 +107,18 @@ class TelegramMessages:
         # Handle single messages
         receivers, errors = [], []
         for student in students:
-            success = await self.send_message(student.telegram_id, student.username, message)
+            success = await self.send_message(
+                student.telegram_id, student.username, message
+            )
             if success:
                 receivers.append(student.username)
             else:
                 errors.append(student.username)
         return receivers, errors
 
-    async def send_media_group(self, telegram_id: int, media_messages: list[Message]) -> None:
+    async def send_media_group(
+        self, telegram_id: int, media_messages: list[Message]
+    ) -> None:
         """Send a media group (album) to a user"""
         # Prepare media group
         media_group = []
@@ -173,7 +188,9 @@ class TelegramMessages:
         async with aiohttp.ClientSession() as session, session.get(url) as resp:
             await resp.text()
 
-    async def send_photo_message(self, telegram_id: int, photo_file_id: str, caption: str | None = None) -> None:
+    async def send_photo_message(
+        self, telegram_id: int, photo_file_id: str, caption: str | None = None
+    ) -> None:
         """Send a photo message to the user."""
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto?chat_id={telegram_id}&photo={photo_file_id}"
         if caption:
@@ -182,7 +199,9 @@ class TelegramMessages:
         async with aiohttp.ClientSession() as session, session.get(url) as resp:
             await resp.text()
 
-    async def send_video_message(self, telegram_id: int, video_file_id: str, caption: str | None = None) -> None:
+    async def send_video_message(
+        self, telegram_id: int, video_file_id: str, caption: str | None = None
+    ) -> None:
         """Send a video message to the user."""
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo?chat_id={telegram_id}&video={video_file_id}"
         if caption:

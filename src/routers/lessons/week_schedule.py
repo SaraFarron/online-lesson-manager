@@ -19,6 +19,7 @@ router = Router()
 router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
+
 class WeekSchedule(StatesGroup):
     scene = "week_schedule"
     command = "/" + scene
@@ -29,7 +30,9 @@ class WeekSchedule(StatesGroup):
 @router.message(Command(WeekSchedule.command))
 @router.message(F.text == Commands.WEEK_SCHEDULE.value)
 @router.callback_query(F.data.startswith(WeekSchedule.week_start))
-async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContext, db: Session) -> None:
+async def week_schedule_handler(
+    event: Message | CallbackQuery, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(event)
     state_data = await state.get_data()
     if isinstance(event, CallbackQuery):
@@ -39,13 +42,17 @@ async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContex
         await state.update_data(user_id=message.from_user.id)
 
     users_map = {  # TODO f"tg://user?id={u.telegram_id}" does not work
-        u.id: f"@{u.username}" if u.username else html.link(u.full_name, f"tg://user?id={u.telegram_id}")
+        u.id: f"@{u.username}"
+        if u.username
+        else html.link(u.full_name, f"tg://user?id={u.telegram_id}")
         for u in db.query(User).filter(User.executor_id == user.executor_id)
     }
     if isinstance(event, Message):
         date = datetime.now()
     else:
-        date = datetime.strptime(get_callback_arg(event.data, WeekSchedule.week_start), DATE_FMT)
+        date = datetime.strptime(
+            get_callback_arg(event.data, WeekSchedule.week_start), DATE_FMT
+        )
     start_of_week = date - timedelta(days=date.weekday())
     date_lesson_map = {}
     for i in range(7):
@@ -58,10 +65,15 @@ async def week_schedule_handler(event: Message | CallbackQuery, state: FSMContex
         )
         result = day_schedule_text(lessons, users_map, user)
         lessons_str = "\n".join(result) if result else replies.NO_LESSONS
-        key = html.bold(f"{datetime.strftime(current_date, SHORT_DATE_FMT)} {WEEKDAY_MAP[weekday]['short']}")
+        key = html.bold(
+            f"{datetime.strftime(current_date, SHORT_DATE_FMT)} {WEEKDAY_MAP[weekday]['short']}"
+        )
         date_lesson_map[key] = lessons_str
 
     text = []
     for d, day_text in date_lesson_map.items():
         text.append(d + "\n" + day_text)
-    await message.answer("\n\n".join(text), reply_markup=Keyboards.choose_week(date, WeekSchedule.week_start))
+    await message.answer(
+        "\n\n".join(text),
+        reply_markup=Keyboards.choose_week(date, WeekSchedule.week_start),
+    )

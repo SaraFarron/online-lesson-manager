@@ -19,6 +19,7 @@ router = Router()
 router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
+
 class WorkSchedule(StatesGroup):
     scene = "manage_work_schedule"
     command = "/" + scene
@@ -31,7 +32,9 @@ class WorkSchedule(StatesGroup):
 
 @router.message(Command(WorkSchedule.command))
 @router.message(F.text == AdminCommands.MANAGE_WORK_HOURS.value)
-async def manage_work_schedule_handler(message: Message, state: FSMContext, db: Session) -> None:
+async def manage_work_schedule_handler(
+    message: Message, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(message)
     user = UserRepo(db).get_by_telegram_id(message.from_user.id, True)
     if user.role != User.Roles.TEACHER:
@@ -42,10 +45,14 @@ async def manage_work_schedule_handler(message: Message, state: FSMContext, db: 
     weekends = EventRepo(db).weekends(user.executor_id)
     await message.answer(
         replies.CHOOSE_WH_ACTION,
-        reply_markup=Keyboards.work_hours(work_hours, weekends, WorkSchedule.action, WorkSchedule.choose_weekday),
+        reply_markup=Keyboards.work_hours(
+            work_hours, weekends, WorkSchedule.action, WorkSchedule.choose_weekday
+        ),
     )
 
+
 # ---- WORK HOURS ---- #
+
 
 @router.callback_query(F.data.startswith(WorkSchedule.action))
 async def action(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
@@ -60,10 +67,14 @@ async def action(callback: CallbackQuery, state: FSMContext, db: Session) -> Non
     if action_type.startswith("delete"):
         if action_type.endswith("start"):
             time = EventRepo(db).delete_work_hour_setting(user.executor_id, "start")
-            EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_start", str(time))
+            EventHistoryRepo(db).create(
+                username, WorkSchedule.scene, "deleted_start", str(time)
+            )
         elif action_type.endswith("end"):
             time = EventRepo(db).delete_work_hour_setting(user.executor_id, "end")
-            EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_end", str(time))
+            EventHistoryRepo(db).create(
+                username, WorkSchedule.scene, "deleted_end", str(time)
+            )
         await message.answer(replies.WORK_HOURS_DELETED)
     elif action_type.startswith("add"):
         if action_type.endswith("start"):
@@ -73,7 +84,11 @@ async def action(callback: CallbackQuery, state: FSMContext, db: Session) -> Non
         await state.set_state(WorkSchedule.choose_time)
         await message.answer(replies.CHOOSE_TIME)
     else:
-        raise Exception("message", "Неизвестное действие", f"callback.data is unknown: {callback.data}")
+        raise Exception(
+            "message",
+            "Неизвестное действие",
+            f"callback.data is unknown: {callback.data}",
+        )
 
 
 @router.message(WorkSchedule.choose_time)
@@ -107,13 +122,19 @@ async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
     db.commit()
     await message.answer(replies.WH_CHANGED)
     username = user.username if user.username else user.full_name
-    EventHistoryRepo(db).create(username, WorkSchedule.scene, f"added_{state_data['mode']}", str(event))
+    EventHistoryRepo(db).create(
+        username, WorkSchedule.scene, f"added_{state_data['mode']}", str(event)
+    )
     await state.clear()
+
 
 # ---- WEEKENDS ---- #
 
+
 @router.callback_query(F.data.startswith(WorkSchedule.choose_weekday))
-async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+async def choose_weekday(
+    callback: CallbackQuery, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
@@ -130,16 +151,25 @@ async def choose_weekday(callback: CallbackQuery, state: FSMContext, db: Session
         await message.answer(replies.WEEKEND_DELETED)
         await state.clear()
         username = user.username if user.username else user.full_name
-        EventHistoryRepo(db).create(username, WorkSchedule.scene, "deleted_weekend", weekday)
+        EventHistoryRepo(db).create(
+            username, WorkSchedule.scene, "deleted_weekend", weekday
+        )
     elif "add_weekend" in callback.data:
         weekdays = EventRepo(db).available_work_weekdays(user.executor_id)
-        await message.answer(replies.CHOOSE_WEEKDAY, reply_markup=Keyboards.weekdays(weekdays, WorkSchedule.create_weekend))
+        await message.answer(
+            replies.CHOOSE_WEEKDAY,
+            reply_markup=Keyboards.weekdays(weekdays, WorkSchedule.create_weekend),
+        )
     else:
-        raise Exception("message", "Неизвестное событие", f"unknown weekend action {callback.data}")
+        raise Exception(
+            "message", "Неизвестное событие", f"unknown weekend action {callback.data}"
+        )
 
 
 @router.callback_query(F.data.startswith(WorkSchedule.create_weekend))
-async def create_weekend(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+async def create_weekend(
+    callback: CallbackQuery, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)

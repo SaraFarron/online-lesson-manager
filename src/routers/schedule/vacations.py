@@ -18,6 +18,7 @@ router = Router()
 router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
 
+
 class Vacations(StatesGroup):
     scene = "vacations"
     command = "/" + scene
@@ -34,11 +35,16 @@ async def vacations_handler(message: Message, state: FSMContext, db: Session) ->
     await state.update_data(user_id=user.telegram_id)
 
     vacations = EventRepo(db).vacations(user.id)
-    await message.answer(replies.CHOOSE_ACTION, reply_markup=Keyboards.vacations(vacations, Vacations.edit_vacations))
+    await message.answer(
+        replies.CHOOSE_ACTION,
+        reply_markup=Keyboards.vacations(vacations, Vacations.edit_vacations),
+    )
 
 
 @router.callback_query(F.data.startswith(Vacations.edit_vacations))
-async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
+async def edit_vacations(
+    callback: CallbackQuery, state: FSMContext, db: Session
+) -> None:
     message = telegram_checks(callback)
     state_data = await state.get_data()
     user = UserRepo(db).get_by_telegram_id(state_data["user_id"], True)
@@ -52,7 +58,9 @@ async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session
         db.commit()
         await message.answer(replies.VACATION_DELETED)
         username = user.username if user.username else user.full_name
-        EventHistoryRepo(db).create(username, Vacations.scene, "delete_vacation", event_str)
+        EventHistoryRepo(db).create(
+            username, Vacations.scene, "delete_vacation", event_str
+        )
         executor_tg = UserRepo(db).executor_telegram_id(user)
         await send_message(executor_tg, f"{username} удалил(а) Каникулы {event_str}")
         await state.clear()
@@ -60,7 +68,9 @@ async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session
         await message.answer(replies.CHOOSE_DATES)
         await state.set_state(Vacations.choose_dates)
     else:
-        raise Exception("message", "Неизвестное событие", f"unknown action: {callback.data}")
+        raise Exception(
+            "message", "Неизвестное событие", f"unknown action: {callback.data}"
+        )
 
 
 @router.message(Vacations.choose_dates)
