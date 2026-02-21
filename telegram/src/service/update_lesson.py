@@ -286,13 +286,11 @@ class DeleteLessonService(ScheduleService):
         
         try:
             await self.backend_client.cancel_recurrent_event_occurrence(event_id, day, user_token)
+            await self.message.answer(replies.LESSON_DELETED)
         except BackendClientError as e:
             if e.status == 404:
                 await self.message.answer(replies.LESSON_NOT_FOUND_ERR)
             else:
                 await self.message.answer(e.detail)
-            await self.state.clear()
 
-        await self.message.answer(replies.LESSON_DELETED)
         await self.state.clear()
-

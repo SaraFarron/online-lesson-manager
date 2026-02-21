@@ -361,13 +361,14 @@ class BackendClient:
     async def move_recurrent_event_occurrence(
         self, event_id: int, cancel_date: date_type, new_start: datetime, token: str,
     ):
+        start = self.moscow_to_utc(new_start).isoformat().replace("+00:00", "Z")
         return await self._user_request(
             "POST",
             f"{self.API_URL}/events/{event_id}/move",
             token=token,
             json={
                 "cancel_date": cancel_date.isoformat(),
-                "new_start": new_start.isoformat(),
+                "new_start": start,
             },
         )
 
