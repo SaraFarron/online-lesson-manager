@@ -260,7 +260,10 @@ class EventService:
         if cancel_date == now.date() and (now + timedelta(hours=3)).time() > event.start.time():
             return "Cannot cancel the event within 3 hours of its start time."
 
-        await self.cancels_repo.create({"recurrent_event_id": event_id, "canceled_date": cancel_date})
+        # Convert date to UTC datetime at midnight to avoid timezone conversion issues
+        # canceled_date is stored as DateTime in DB but represents just a date
+        canceled_datetime = datetime.combine(cancel_date, time.min, tzinfo=UTC)
+        await self.cancels_repo.create({"recurrent_event_id": event_id, "canceled_date": canceled_datetime})
         return True
 
     async def _move_recurrent_checks(self, event: RecurrentEvent, move_data: EventMove, user: User) -> bool | str:
@@ -295,18 +298,23 @@ class EventService:
         if error:
             return error
         
+        duration = event.end - event.start
         new_event_data = {
             "title": event.title,
             "start": move_data.new_start,
-            "duration": event.duration,
+            "end": move_data.new_start + duration,
             "teacher_id": event.teacher_id,
             "student_id": event.student_id,
         }
-        
+
+        # Convert date to UTC datetime at midnight to avoid timezone conversion issues
+        # canceled_date is stored as DateTime in DB but represents just a date
+        canceled_datetime = datetime.combine(move_data.cancel_date, time.min, tzinfo=UTC)
+
         # Both operations execute in the request's transaction
         # If create() raises ValueError (slot occupied), it will trigger automatic rollback
         try:
-            await self.cancels_repo.create({"recurrent_event_id": event_id, "canceled_date": move_data.cancel_date})
+            await self.cancels_repo.create({"recurrent_event_id": event_id, "canceled_date": canceled_datetime})
             await self.repository.create(new_event_data)
             return True
         except ValueError as e:

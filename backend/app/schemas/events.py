@@ -82,3 +82,17 @@ class EventMove(BaseModel):
 
     cancel_date: date
     new_start: datetime
+    
+    @field_validator("new_start")
+    @classmethod
+    def validate_utc_only(cls, v: datetime) -> datetime:
+        """Ensure datetime is timezone-aware and in UTC."""
+        if v.tzinfo is None:
+            raise ValueError('Datetime must include timezone information (e.g., "2026-02-10T09:00:00Z")')
+
+        # Check if timezone is UTC
+        if v.tzinfo != UTC and v.utcoffset() != timedelta(0):
+            raise ValueError("Only UTC timezone is allowed. Please convert to UTC before sending.")
+
+        # Normalize to UTC
+        return v.astimezone(UTC)
