@@ -157,8 +157,9 @@ class MoveLessonService(ScheduleService):
         day = await self.check_date(UpdateLesson.type_recur_date)
         if day is None:
             return
+        state_data = await self.state.get_data()
         try:
-            lesson = await self.backend_client.get_event(self.state_data["lesson_id"], self.telegram_id)
+            lesson = await self.backend_client.get_event(state_data["lesson_id"], self.telegram_id)
         except BackendClientError as e:
             await self.message.answer(e.detail)
             await self.state.clear()
@@ -185,7 +186,7 @@ class MoveLessonService(ScheduleService):
             return
         
         try:
-            slots = await self.backend_client.get_user_free_slots(self.telegram_id, day)
+            slots = await self.backend_client.get_user_free_slots(self.telegram_id)
         except BackendClientError as e:
             await self.message.answer(e.detail)
             await self.state.clear()
@@ -214,12 +215,27 @@ class MoveLessonService(ScheduleService):
             await self.state.set_state(UpdateLesson.choose_recur_new_time)
             return
 
-        day = state_data["new_day"]
-        await self._update_event(  # TODO move recurrent once
-            event_id,
-            EventCreate(title="Урок", day=day, start=time, is_recurrent=True, weekday=state_data["weekday"]),
-            is_recurrent_once=True,
-        )
+        user_token = await self.get_user_token()
+        if not user_token:
+            return
+        day, cancel_day = state_data["new_day"], state_data["day"]
+        new_start = datetime.combine(day, time)
+        
+        try:
+            await self.backend_client.move_recurrent_event_occurrence(
+                event_id, cancel_day, new_start, user_token,
+            )
+        except BackendClientError as e:
+            if e.status == 404:
+                await self.message.answer(replies.LESSON_NOT_FOUND_ERR)
+                await self.state.clear()
+                return
+            await self.message.answer(e.detail)
+            await self.state.clear()
+            return
+
+        await self.message.answer(replies.LESSON_MOVED)
+        await self.state.clear()
 
 
 class DeleteLessonService(ScheduleService):

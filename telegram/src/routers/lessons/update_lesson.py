@@ -181,5 +181,5 @@ async def choose_recur_new_time(callback: CallbackQuery, state: FSMContext) -> N
     if user is None:
         return
 
-    service = MoveLessonService(message, state)
+    service = MoveLessonService(message, state, callback)
     await service.move_recur_once()

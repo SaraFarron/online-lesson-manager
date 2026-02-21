@@ -300,7 +300,7 @@ class EventService:
         
         duration = event.end - event.start
         new_event_data = {
-            "title": event.title,
+            "title": "Перенос",
             "start": move_data.new_start,
             "end": move_data.new_start + duration,
             "teacher_id": event.teacher_id,

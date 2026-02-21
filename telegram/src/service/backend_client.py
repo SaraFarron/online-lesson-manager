@@ -250,9 +250,11 @@ class BackendClient:
         schedule = await self.get_user_schedule(telegram_id)
         if schedule is None:
             return None
-        for events in schedule.values():
+        for day, events in schedule.items():
             for event in events:
                 if event.id == event_id:
+                    if isinstance(event.start, time):
+                        event.start = datetime.strptime(f"{day} {event.start}", "%Y-%m-%d %H:%M:%S")
                     return event
         return None
 
@@ -347,13 +349,26 @@ class BackendClient:
         # TODO: When implementing, ensure datetime fields are converted to UTC using moscow_to_utc()
         # and formatted as ISO 8601 with 'Z' suffix: utc_dt.isoformat().replace('+00:00', 'Z')
         pass
-    
+
     async def cancel_recurrent_event_occurrence(self, event_id: int, occurrence_date: date_type, token: str):
         return await self._user_request(
             "POST",
             f"{self.API_URL}/events/{event_id}/cancel",
             token=token,
             params={"cancel_date": occurrence_date.isoformat()},
+        )
+
+    async def move_recurrent_event_occurrence(
+        self, event_id: int, cancel_date: date_type, new_start: datetime, token: str,
+    ):
+        return await self._user_request(
+            "POST",
+            f"{self.API_URL}/events/{event_id}/move",
+            token=token,
+            json={
+                "cancel_date": cancel_date.isoformat(),
+                "new_start": new_start.isoformat(),
+            },
         )
 
     async def close(self) -> None:
