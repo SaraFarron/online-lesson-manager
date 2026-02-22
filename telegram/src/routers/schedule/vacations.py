@@ -1,100 +1,52 @@
-from datetime import datetime
-
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy.orm import Session
 
-from src.db.models import Event
-from src.db.repositories import EventHistoryRepo, UserRepo
-from src.keyboards import Commands, Keyboards
-from src.messages import replies
-from src.service.services import EventService, UserService
-from src.service.utils import get_callback_arg, parse_date, send_message
+from src.routers.utils import student_permission
+from src.service import VacationsService
+from src.states import Vacations
 
 router = Router()
 
 
-router.callback_query.middleware(DatabaseMiddleware())
-
-class Vacations(StatesGroup):
-    scene = "vacations"
-    command = "/" + scene
-    base_callback = scene + "/"
-    edit_vacations = f"{base_callback}edit_vacations"
-    choose_dates = State()
-
-
 @router.message(Command(Vacations.command))
-@router.message(F.text == Commands.VACATIONS.value)
-async def vacations_handler(message: Message, state: FSMContext, db: Session) -> None:
-    message, user = UserService(db).check_user(message)
+@router.message(F.text == Vacations.text)
+async def vacations_handler(message: Message, state: FSMContext) -> None:
+    user, message = await student_permission(message)
+    if user is None:
+        return
+
     await state.update_data(user_id=user.telegram_id)
-
-    vacations = EventService(db).vacations(user.id)
-    await message.answer(replies.CHOOSE_ACTION, reply_markup=Keyboards.vacations(vacations, Vacations.edit_vacations))
-
-
-@router.callback_query(F.data.startswith(Vacations.edit_vacations))
-async def edit_vacations(callback: CallbackQuery, state: FSMContext, db: Session) -> None:
-    state_data = await state.get_data()
-    message, user = UserService(db).check_user_with_id(callback, state_data["user_id"])
-
-    action = get_callback_arg(callback.data, Vacations.edit_vacations)
-    if action.startswith("delete_vacation"):
-        event_id = int(action.split("/")[-1])
-        event = db.get(Event, event_id)
-        event_str = f"{event.start.date()} - {event.end.date()}"
-        db.delete(event)
-        db.commit()
-        await message.answer(replies.VACATION_DELETED)
-        username = user.username if user.username else user.full_name
-        EventHistoryRepo(db).create(username, Vacations.scene, "delete_vacation", event_str)
-        executor_tg = UserRepo(db).executor_telegram_id(user)
-        await send_message(executor_tg, f"{username} удалил(а) Каникулы {event_str}")
-        await state.clear()
-    elif action.startswith("add_vacation"):
-        await message.answer(replies.CHOOSE_DATES)
-        await state.set_state(Vacations.choose_dates)
-    else:
-        raise Exception("message", "Неизвестное событие", f"unknown action: {callback.data}")
+    service = VacationsService(message, state)
+    await service.vacations_list()
 
 
-@router.message(Vacations.choose_dates)
-async def choose_time(message: Message, state: FSMContext, db: Session) -> None:
-    state_data = await state.get_data()
-    message, user = UserService(db).check_user_with_id(message, state_data["user_id"])
-
-    try:
-        dates = [d.strip() for d in message.text.split("-")]
-        start, end = parse_date(dates[0]), parse_date(dates[1])
-        assert start is not None
-        assert end is not None
-    except (ValueError, IndexError, AssertionError):
-        await message.answer(replies.WRONG_DATES_FMT)
-        await state.set_state(Vacations.choose_dates)
+@router.callback_query(F.data.startswith(Vacations.add_vacation))
+async def get_dates(callback: CallbackQuery, state: FSMContext) -> None:
+    user, message = await student_permission(callback)
+    if user is None:
         return
 
-    if start > end:
-        await message.answer(replies.START_LT_END)
-        await state.set_state(Vacations.choose_dates)
+    service = VacationsService(message, state, callback)
+    await service.get_dates()
+
+
+@router.callback_query(Vacations.choose_dates)
+async def add_vacation(message: Message, state: FSMContext) -> None:
+    user, message = await student_permission(message)
+    if user is None:
         return
 
-    event = Event(
-        user_id=user.id,
-        executor_id=user.executor_id,
-        event_type=Event.EventTypes.VACATION,
-        start=datetime.combine(start, datetime.now().time().replace(hour=0, minute=0)),
-        end=datetime.combine(end, datetime.now().time().replace(hour=23, minute=59)),
-    )
-    db.add(event)
-    db.commit()
-    await message.answer(replies.VACATION_ADDED)
-    event_str = f"{event.start.date()} - {event.end.date()}"
-    username = user.username if user.username else user.full_name
-    EventHistoryRepo(db).create(username, Vacations.scene, "added_vacation", event_str)
-    executor_tg = UserRepo(db).executor_telegram_id(user)
-    await send_message(executor_tg, f"{username} добавил(а) {event}")
-    await state.clear()
+    service = VacationsService(message, state)
+    await service.add_vacation()
+
+
+@router.callback_query(F.data.startswith(Vacations.remove_vacation))
+async def remove_vacation(callback: CallbackQuery, state: FSMContext) -> None:
+    user, message = await student_permission(callback)
+    if user is None:
+        return
+
+    service = VacationsService(message, state, callback)
+    await service.remove_vacation()

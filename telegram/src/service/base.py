@@ -12,12 +12,9 @@ from src.service.cache import Event, Slot
 from src.utils import parse_date, send_message
 
 
-class ScheduleService:
+class BaseService:
     def __init__(
-        self,
-        message: Message | CallbackQuery,
-        state: FSMContext,
-        callback: CallbackQuery | None = None,
+        self, message: Message | CallbackQuery, state: FSMContext, callback: CallbackQuery | None = None,
     ) -> None:
         self.message = message
         self.callback = callback
@@ -31,6 +28,16 @@ class ScheduleService:
         else:
             self.telegram_id = message.from_user.id
             self.username = message.from_user.username
+
+
+class ScheduleService(BaseService):
+    def __init__(
+        self,
+        message: Message | CallbackQuery,
+        state: FSMContext,
+        callback: CallbackQuery | None = None,
+    ) -> None:
+        super().__init__(message, state, callback)
 
     async def check_date(self, callback: str) -> date | None:
         day = parse_date(self.message.text)

@@ -9,7 +9,7 @@ from circuitbreaker import circuit
 from src.core.config import TIMEZONE
 from src.core.logger import logger
 from src.schemas import EventCreate, UserCreate
-from src.service.cache import Event, Slot, UserCacheData, UserSettings, cache
+from src.service.cache import Event, Slot, UserCacheData, UserSettings, Vacation, cache
 
 
 class BackendClientError(Exception):
@@ -169,7 +169,7 @@ class BackendClient:
     async def get_teachers(self) -> dict[str, int]:
         """Fetch teacher codes from backend."""
         response = await self._request("GET", f"{self.API_URL}/users/teachers")
-        return response if response else {}
+        return response or {}
 
     async def get_user_cache_data(self, telegram_id: int) -> UserCacheData | None:
         """
@@ -239,6 +239,11 @@ class BackendClient:
         """Get user data."""
         data = await self.get_user_cache_data(telegram_id)
         return data.user_settings if data else None
+
+    async def get_vacations(self, telegram_id: int) -> list[Vacation]:
+        """Get vacations schedule."""
+        user_settings = await self.get_user(telegram_id)
+        return user_settings.vacations if user_settings else []
 
     async def get_user_schedule(self, telegram_id: int) -> dict[str, list[Event]] | None:
         """Get user schedule."""
@@ -359,7 +364,11 @@ class BackendClient:
         )
 
     async def move_recurrent_event_occurrence(
-        self, event_id: int, cancel_date: date_type, new_start: datetime, token: str,
+        self,
+        event_id: int,
+        cancel_date: date_type,
+        new_start: datetime,
+        token: str,
     ):
         start = self.moscow_to_utc(new_start).isoformat().replace("+00:00", "Z")
         return await self._user_request(

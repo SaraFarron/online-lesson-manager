@@ -11,7 +11,7 @@ from src.routers.lessons.update_lesson import router as update_lesson_router
 # from src.routers.lessons.day_schedule import router as day_schedule_router
 # from src.routers.lessons.week_schedule import router as week_schedule_router
 # from src.routers.schedule.check_overlaps import router as check_overlaps_router
-# from src.routers.schedule.vacations import router as vacations_router
+from src.routers.schedule.vacations import router as vacations_router
 # from src.routers.schedule.work_breaks import router as breaks_router
 
 # Schedule
@@ -31,7 +31,7 @@ all_routers = [
     # day_schedule_router,
     # week_schedule_router,
     # work_schedule_router,
-    # vacations_router,
+    vacations_router,
     # profile_router,
     # notifications_router,
     # breaks_router,

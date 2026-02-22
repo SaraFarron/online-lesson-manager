@@ -3,6 +3,7 @@ from src.service.add_recurrent_lesson import AddRecurrentLessonService
 from src.service.backend_client import BackendClient
 from src.service.start import UserService
 from src.service.update_lesson import DeleteLessonService, MoveLessonService, UpdateLessonService
+from src.service.vacations import VacationsService
 
 __all__ = [
     "AddLessonService",
@@ -13,4 +14,5 @@ __all__ = [
     "StartService",
     "UpdateLessonService",
     "UserService",
+    "VacationsService",
 ]

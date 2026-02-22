@@ -17,6 +17,11 @@ class Slot(BaseModel):
     end: time
 
 
+class Vacation(BaseModel):
+    start: datetime
+    end: datetime
+
+
 class UserSettings(BaseModel):
     telegram_id: int = 0
     teacher_telegram_id: int | None = None
@@ -24,6 +29,7 @@ class UserSettings(BaseModel):
     username: str | None = None
     role: str = "student"
     token: str | None = None
+    vacations: list[Vacation] = []
 
 
 class UserCacheData(BaseModel):
