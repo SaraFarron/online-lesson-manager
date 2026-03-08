@@ -25,6 +25,16 @@ class EventRepository(BaseRepository[Event]):
             )
         result = await self.session.execute(query)
         return list(result.scalars().all())
+    
+    async def get_vacations(self, user: User) -> list[Event]:
+        """Get vacation periods for a user."""
+        query = select(Event).where(
+            Event.student_id == user.id,
+            Event.title == Event.Types.VACATION,
+            Event.end >= func.now(),  # Only future or ongoing vacations
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
 
 
 class RecurrentCancelsRepository(BaseRepository[RecurrentCancels]):

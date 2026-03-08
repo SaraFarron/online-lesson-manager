@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, datetime, time
 
 from pydantic import BaseModel
 
@@ -9,3 +9,9 @@ class EventCreate(BaseModel):
     start: time
     duration: int = 60  # default duration in minutes
     is_recurrent: bool = False
+
+
+class Vacation(BaseModel):
+    id: int
+    start: datetime
+    end: datetime

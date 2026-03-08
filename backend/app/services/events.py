@@ -91,6 +91,11 @@ class EventService:
                 return True
         return False
 
+    async def check_vacation(self, start: datetime, end: datetime) -> bool:
+        """Check if a vacation period is valid (end time must be in the future and after start time)."""
+        now = datetime.now(UTC)
+        return end > now and end > start
+
     async def create_event(self, event: EventCreate, user: User) -> Event | RecurrentEvent:
         """Create a new event."""
         event_dict = event.to_dict(user)
@@ -121,11 +126,16 @@ class EventService:
             created_event = await self.recurrent_repo.create(event_dict)
         else:
             event_end = event.start + timedelta(minutes=event.duration)
-            is_available = await self.check_slot_availability(
-                user, event.start.date(), event.start.time(), event_end.time()
-            )
+            if event.title == Event.Types.VACATION:
+                is_available = await self.check_vacation(event.start, event_end)
+                err = "Invalid vacation period. End time must be in the future and after start time."
+            else:
+                is_available = await self.check_slot_availability(
+                    user, event.start.date(), event.start.time(), event_end.time()
+                )
+                err = "The requested time slot is occupied."
             if not is_available:
-                raise ValueError("The requested time slot is occupied.")
+                raise ValueError(err)
             created_event = await self.repository.create(event_dict)
         
         return created_event
@@ -320,3 +330,8 @@ class EventService:
         except ValueError as e:
             # Return error message; get_db() will rollback automatically
             return str(e)
+
+    async def get_vacations(self, user: User) -> list[dict[str, datetime | int]]:
+        """Get vacation periods for a user."""
+        vacations = await self.repository.get_vacations(user)
+        return [{"start": vac.start, "end": vac.end, "id": vac.id} for vac in vacations]

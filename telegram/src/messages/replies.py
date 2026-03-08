@@ -36,6 +36,7 @@ REGISTRATION_FAILED = "Регистрация не удалась, провер�
 WRONG_DATE_FMT = f"Неверный формат даты, допустимые: {html.code('ДД ММ')} или {html.code('ГГГГ ММ ДД')}"
 UNKNOWN_ACTION_ERR = "Произошла ошибка: неизвестное действие"
 LESSON_NOT_FOUND_ERR = "Произошла ошибка: урок не найден"
+VACATION_NOT_FOUND_ERR = "Произошла ошибка: каникулы не найдены"
 PERMISSION_DENIED = "У вас нет доступа к этой команде"
 SOMETHING_WENT_WRONG = "Что-то пошло не так, попробуйте еще раз позже"
 
@@ -80,7 +81,7 @@ html_code_dd_mm = html.code("ДД ММ - ДД ММ")
 html_code_dd_mm_yy = html.code("ГГГГ ММ ДД - ГГГГ ММ ДД")
 WRONG_DATES_FMT = f"""
 Неверный формат начала и конца каникул, введите в формате {html_code_dd_mm} или {html_code_dd_mm_yy},
-например: {html.code("2025 05 05 - 2025 05 25")}
+например: {html.code("05 05 - 05 25")}
 """
 START_LT_END = "Начальная дата должна быть раньше конечной"
 CHOOSE_TIMES = f"Введите время начала и конца перерыва, формат {html.code('ЧЧ ММ - ЧЧ ММ')}"

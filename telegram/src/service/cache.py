@@ -4,6 +4,8 @@ from datetime import datetime, time
 from cachetools import TTLCache
 from pydantic import BaseModel
 
+from src.schemas import Vacation
+
 
 class Event(BaseModel):
     id: int
@@ -15,11 +17,6 @@ class Event(BaseModel):
 class Slot(BaseModel):
     start: time
     end: time
-
-
-class Vacation(BaseModel):
-    start: datetime
-    end: datetime
 
 
 class UserSettings(BaseModel):
@@ -59,7 +56,7 @@ class BotCache:
         data = self._cache.get(key)
         if data is not None:
             return data
-        
+
         # Fallback to stale cache if fresh miss
         return self._stale_cache.get(key)
 

@@ -6,6 +6,6 @@ class Vacations(StatesGroup):
     text = "Расписание каникул"
     command = "/" + scene
     base_callback = scene + "/"
-    remove_vacation = f"{base_callback}remove_vacation"
+    remove_vacation = f"{base_callback}remove_vacation/"
     add_vacation = f"{base_callback}add_vacation"
     choose_dates = State()

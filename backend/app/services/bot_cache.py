@@ -41,6 +41,7 @@ class BotCacheService:
         recurrent_free_slots = {}
         for weekday in range(7):
             recurrent_free_slots[str(weekday)] = await self.event_service.get_recurrent_free_slots(user, weekday)
+        vacations = await self.event_service.get_vacations(user)
         new_token = await self.auth_service.generate_token(user.id)
         return TelegramCacheResponse(
             free_slots=free_slots,
@@ -49,6 +50,7 @@ class BotCacheService:
             user_settings={
                 "teacher_telegram_id": user.teacher.telegram_id if user.teacher else None,
                 "token": new_token.token,
+                "vacations": vacations,
             },  # Placeholder for user settings
         )
 

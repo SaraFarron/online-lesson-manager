@@ -32,7 +32,7 @@ async def get_dates(callback: CallbackQuery, state: FSMContext) -> None:
     await service.get_dates()
 
 
-@router.callback_query(Vacations.choose_dates)
+@router.message(Vacations.choose_dates)
 async def add_vacation(message: Message, state: FSMContext) -> None:
     user, message = await student_permission(message)
     if user is None:

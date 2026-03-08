@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Sequence, String
@@ -14,6 +15,11 @@ if TYPE_CHECKING:
 # RecurrentEvents get even IDs (2, 4, 6, ...)
 events_id_seq = Sequence("events_id_seq", start=1, increment=2)
 recurrent_events_id_seq = Sequence("recurrent_events_id_seq", start=2, increment=2)
+
+
+class EventType(str, Enum):
+    LESSON = "lesson"
+    VACATION = "vacation"
 
 
 class Event(Base):
@@ -55,6 +61,7 @@ class Event(Base):
 
     class Types:
         LESSON = "lesson"
+        VACATION = "vacation"
 
 
 class RecurrentEvent(Base):

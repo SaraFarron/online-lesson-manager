@@ -174,7 +174,7 @@ class MoveLessonService(ScheduleService):
             await self.message.answer(replies.WRONG_WEEKDAY)
             await self.state.set_state(UpdateLesson.type_recur_date)
             return
-        
+
         await self.state.update_data(day=day)
         await self.state.update_data(weekday=day.weekday())
         await self.message.answer(replies.CHOOSE_LESSON_DATE)
@@ -184,14 +184,14 @@ class MoveLessonService(ScheduleService):
         day = await self.check_date(UpdateLesson.type_new_date)
         if day is None:
             return
-        
+
         try:
             slots = await self.backend_client.get_user_free_slots(self.telegram_id)
         except BackendClientError as e:
             await self.message.answer(e.detail)
             await self.state.clear()
             return
-        
+
         if not slots or str(day) not in slots:
             await self.message.answer(replies.NO_TIME)
             await self.state.clear()
@@ -220,10 +220,13 @@ class MoveLessonService(ScheduleService):
             return
         day, cancel_day = state_data["new_day"], state_data["day"]
         new_start = datetime.combine(day, time)
-        
+
         try:
             await self.backend_client.move_recurrent_event_occurrence(
-                event_id, cancel_day, new_start, user_token,
+                event_id,
+                cancel_day,
+                new_start,
+                user_token,
             )
         except BackendClientError as e:
             if e.status == 404:
@@ -246,7 +249,7 @@ class DeleteLessonService(ScheduleService):
         state_data = await self.state.get_data()
         # Delete one event
         if state_data["lesson_id"] % 2:
-            await self._delete_event(state_data["lesson_id"])
+            await self._delete_event(state_data["lesson_id"], replies.LESSON_NOT_FOUND_ERR, replies.LESSON_DELETED)
             return
 
         # Delete recurrent event
@@ -271,7 +274,7 @@ class DeleteLessonService(ScheduleService):
     async def delete_recurrent(self):
         state_data = await self.state.get_data()
         event_id = state_data["lesson_id"]
-        await self._delete_event(event_id)
+        await self._delete_event(event_id, replies.LESSON_NOT_FOUND_ERR, replies.LESSON_DELETED)
 
     async def cancel_once(self):
         day = await self.check_date(UpdateLesson.type_recur_date)
@@ -283,7 +286,7 @@ class DeleteLessonService(ScheduleService):
         user_token = await self.get_user_token()
         if not user_token:
             return
-        
+
         try:
             await self.backend_client.cancel_recurrent_event_occurrence(event_id, day, user_token)
             await self.message.answer(replies.LESSON_DELETED)
