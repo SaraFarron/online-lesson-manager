@@ -682,12 +682,12 @@ class EventRepo(Repo):
                     if len(event1) == 7:
                         if len(event2) == 6:
                             e2_start, e2_end = (
-                                datetime.combine(event2[4], event2[0]),
-                                datetime.combine(event2[4], event2[1]),
+                                datetime.combine(event2[5], event2[0]),
+                                datetime.combine(event2[5], event2[1]),
                             )
                             c_start, c_end = (
-                                datetime.combine(event2[4], event1[0]),
-                                datetime.combine(event2[4], event1[1]),
+                                datetime.combine(event2[5], event1[0]),
+                                datetime.combine(event2[5], event1[1]),
                             )
                             if (
                                 c_start <= e2_start <= c_end
