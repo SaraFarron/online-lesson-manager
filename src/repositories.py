@@ -409,8 +409,8 @@ class EventRepo(Repo):
         start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
         current_day = start_of_week + timedelta(days=weekday)
 
-        # mb use recurrent_events_for_weekday_without_cancels here
-        events = self.recurrent_events_for_day(executor_id, current_day)
+        # Use recurrent_events_for_weekday_without_cancels to prevent overlaps even when specific dates are cancelled
+        events = self.recurrent_events_for_weekday_without_cancels(executor_id, weekday, current_day)
 
         start, end = (
             self.get_work_start(executor_id)[0],
