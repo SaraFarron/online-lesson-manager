@@ -95,3 +95,11 @@ UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE"
 # LESSONS_ARE_COMING = "🔔 Скоро уроки!\n"
 # LESSON_IS_COMING_TEACHER = "Урок у %s в %s"
 # LESSON_IS_COMING_STUDENT = "Урок в %s"
+
+THANKS_FOR_USING_BOT = """
+Спасибо, что использовали этого бота!
+К сожалению, из-за блокировок Telegram в России бот более не может предложить актуальное расписание занятий.
+Чтобы добавить, изменить или удалить занятия, пожалуйста, свяжитесь с преподавателем напрямую.
+Telegram: @Irina_Gambal
+VK: https://vk.ru/irina_gambal
+"""

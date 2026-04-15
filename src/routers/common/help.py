@@ -16,7 +16,13 @@ router: Router = Router()
 router.message.middleware(DatabaseMiddleware())
 
 
-@router.message(Command(COMMAND))
+@router.message()
+async def thanks_for_using_bot_handler(message: Message) -> None:
+    """Handler receives messages with thanks for using the bot."""
+    await message.answer(replies.THANKS_FOR_USING_BOT)
+
+
+# @router.message(Command(COMMAND))
 async def help_handler(message: Message, db: Session) -> None:
     """Handler receives messages with `/help` command."""
     message = telegram_checks(message)

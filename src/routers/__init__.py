@@ -21,20 +21,20 @@ from src.routers.users.notifications import router as notifications_router
 from src.routers.users.profile import router as profile_router
 
 all_routers = [
-    cancel_router,
-    start_router,
+    # cancel_router,
+    # start_router,
     help_router,
-    add_lesson_router,
-    add_rec_lesson_router,
-    move_lesson_router,
-    day_schedule_router,
-    week_schedule_router,
-    work_schedule_router,
-    vacations_router,
-    profile_router,
-    notifications_router,
-    breaks_router,
-    check_overlaps_router,
+    # add_lesson_router,
+    # add_rec_lesson_router,
+    # move_lesson_router,
+    # day_schedule_router,
+    # week_schedule_router,
+    # work_schedule_router,
+    # vacations_router,
+    # profile_router,
+    # notifications_router,
+    # breaks_router,
+    # check_overlaps_router,
 ]
 
 __all__ = ["all_routers"]
