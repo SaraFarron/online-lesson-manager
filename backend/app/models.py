@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Optional
 
 from pydantic import EmailStr
 from sqlalchemy import DateTime
@@ -42,6 +43,7 @@ class UserBase(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
     is_teacher: bool = False
+    teacher_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", nullable=True, ondelete="SET NULL")
     full_name: str | None = Field(default=None, max_length=255)
 
 
@@ -79,10 +81,33 @@ class UpdatePassword(SQLModel):
 # Database model, database table inferred from class name
 class User(Base, UserBase, table=True):
     hashed_password: str
-    events_as_teacher: list[Event] = Relationship(back_populates="teacher", cascade_delete=True)
-    events_as_student: list[Event] = Relationship(back_populates="student", cascade_delete=True)
-    recurrent_events_as_teacher: list[RecurrentEvent] = Relationship(back_populates="teacher", cascade_delete=True)
-    recurrent_events_as_student: list[RecurrentEvent] = Relationship(back_populates="student", cascade_delete=True)
+    events_as_teacher: list[Event] = Relationship(
+        back_populates="teacher", cascade_delete=True, sa_relationship_kwargs={"foreign_keys": "Event.teacher_id"}
+    )
+    events_as_student: list[Event] = Relationship(
+        back_populates="student", cascade_delete=True, sa_relationship_kwargs={"foreign_keys": "Event.student_id"}
+    )
+    recurrent_events_as_teacher: list[RecurrentEvent] = Relationship(
+        back_populates="teacher",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "RecurrentEvent.teacher_id"},
+    )
+    recurrent_events_as_student: list[RecurrentEvent] = Relationship(
+        back_populates="student",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "RecurrentEvent.student_id"},
+    )
+    homeworks_as_teacher: list[Homework] = Relationship(
+        back_populates="teacher", cascade_delete=True, sa_relationship_kwargs={"foreign_keys": "Homework.teacher_id"}
+    )
+    homeworks_as_student: list[Homework] = Relationship(
+        back_populates="student", cascade_delete=True, sa_relationship_kwargs={"foreign_keys": "Homework.student_id"}
+    )
+    teacher: Optional["User"] = Relationship(
+        back_populates="students", sa_relationship_kwargs={"remote_side": "User.id", "foreign_keys": "User.teacher_id"}
+    )
+    students: list["User"] = Relationship(back_populates="teacher")
+
 
 
 # Properties to return via API, id is always required
@@ -125,6 +150,14 @@ class Event(Base, EventBase, table=True):
     student: User = Relationship(
         back_populates="events_as_student", sa_relationship_kwargs={"foreign_keys": "Event.student_id"}
     )
+    homeworks: list[Homework] = Relationship(
+        back_populates="lesson", cascade_delete=True, sa_relationship_kwargs={"foreign_keys": "Homework.lesson_id"}
+    )
+
+
+class Events(SQLModel):
+    data: list[Event]
+    count: int
 
 
 class RecurrentEventBase(EventBase):
@@ -151,6 +184,16 @@ class RecurrentEvent(Base, RecurrentEventBase, table=True):
         back_populates="recurrent_events_as_student",
         sa_relationship_kwargs={"foreign_keys": "RecurrentEvent.student_id"},
     )
+    homeworks: list[Homework] = Relationship(
+        back_populates="recurrent_lesson",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "Homework.recurrent_lesson_id"},
+    )
+
+
+class RecurrentEvents(SQLModel):
+    data: list[RecurrentEvent]
+    count: int
 
 
 class DocumentBase(SQLModel):
