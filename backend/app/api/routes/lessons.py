@@ -17,7 +17,7 @@ from app.models import (
     RecurrentEventUpdate,
 )
 
-router = APIRouter(prefix="/lessons", tags=["lessons"])
+router = APIRouter(prefix="/events", tags=["events"])
 
 
 @router.get("/", response_model=Events)
