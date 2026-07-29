@@ -103,10 +103,10 @@ class User(Base, UserBase, table=True):
     homeworks_as_student: list[Homework] = Relationship(
         back_populates="student", cascade_delete=True, sa_relationship_kwargs={"foreign_keys": "Homework.student_id"}
     )
-    teacher: Optional["User"] = Relationship(
+    teacher: Optional["User"] = Relationship(  # noqa: UP037, UP045
         back_populates="students", sa_relationship_kwargs={"remote_side": "User.id", "foreign_keys": "User.teacher_id"}
     )
-    students: list["User"] = Relationship(back_populates="teacher")
+    students: list["User"] = Relationship(back_populates="teacher")  # noqa: UP037
 
 
 
@@ -132,7 +132,7 @@ class EventBase(SQLModel):
 
 # Properties to receive on item creation
 class EventCreate(EventBase):
-    pass
+    student_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
 
 
 # Properties to receive on item update
