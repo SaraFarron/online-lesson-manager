@@ -56,7 +56,7 @@ def read_events(
 
 
 @router.get("/{id}", response_model=Event)
-def read_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> Any:
+def read_event(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> Any:
     """
     Get event by ID.
     """
@@ -84,6 +84,7 @@ def create_event(
         }
     event = Event.model_validate(event_in, update=update_dict)
     session.add(event)
+    # TODO create timetable row
     session.commit()
     session.refresh(event)
     return event
@@ -108,6 +109,7 @@ def update_event(
     update_dict = event_in.model_dump(exclude_unset=True)
     event.sqlmodel_update(update_dict)
     session.add(event)
+    # TODO create timetable row
     session.commit()
     session.refresh(event)
     return event
@@ -126,6 +128,7 @@ def delete_event(
     if not current_user.is_superuser and (event.teacher_id != current_user.id and event.student_id != current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
     session.delete(event)
+    # TODO remove timetable row
     session.commit()
     return Message(message="Event deleted successfully")
 
@@ -206,6 +209,7 @@ def create_recurrent_event(
         }
     recurrent_event = RecurrentEvent.model_validate(recurrent_event_in, update=update_dict)
     session.add(recurrent_event)
+    # TODO create timetable row
     session.commit()
     session.refresh(recurrent_event)
     return recurrent_event
@@ -234,6 +238,7 @@ def update_recurrent_event(
     update_dict = recurrent_event_in.model_dump(exclude_unset=True)
     recurrent_event.sqlmodel_update(update_dict)
     session.add(recurrent_event)
+    # TODO create timetable row
     session.commit()
     session.refresh(recurrent_event)
     return recurrent_event
@@ -252,5 +257,6 @@ def delete_recurrent_event(
     if not current_user.is_superuser and (recurrent_event.teacher_id != current_user.id and recurrent_event.student_id != current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
     session.delete(recurrent_event)
+    # TODO remove timetable row
     session.commit()
     return Message(message="Recurrent event deleted successfully")

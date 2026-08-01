@@ -31,7 +31,7 @@ Auth Service:
 - roles
 
 Schedule Service:
-- crud lessons
+- crud lessons DONE
   - changing lesson triggers change in Timetable
 - crud breaks
   - changing break triggers change in Timetable

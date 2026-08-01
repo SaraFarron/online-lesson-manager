@@ -196,6 +196,23 @@ class RecurrentEvents(SQLModel):
     count: int
 
 
+class TimetableBase(SQLModel):
+    title: str = Field(max_length=255)
+    start: datetime
+    end: datetime
+    interval: int
+    users: list[User]  # TODO m2m
+
+
+class Timetable(TimetableBase, table=True):
+    pass
+
+
+class TimetableRows(SQLModel):
+    data: list[Timetable]
+    count: int
+
+
 class DocumentBase(SQLModel):
     name: str = Field(min_length=1, max_length=255)
     path: str = Field(min_length=1, max_length=1024)
