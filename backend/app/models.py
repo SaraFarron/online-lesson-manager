@@ -78,9 +78,15 @@ class UpdatePassword(SQLModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class TimetableUserLink(SQLModel, table=True):
+    timetable_id: uuid.UUID = Field(foreign_key="timetable.id", primary_key=True, ondelete="CASCADE")
+    user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True, ondelete="CASCADE")
+
+
 # Database model, database table inferred from class name
 class User(Base, UserBase, table=True):
     hashed_password: str
+    timetables: list[Timetable] = Relationship(back_populates="users", link_model=TimetableUserLink)
     events_as_teacher: list[Event] = Relationship(
         back_populates="teacher", cascade_delete=True, sa_relationship_kwargs={"foreign_keys": "Event.teacher_id"}
     )
@@ -201,11 +207,10 @@ class TimetableBase(SQLModel):
     start: datetime
     end: datetime
     interval: int
-    users: list[User]  # TODO m2m
 
 
-class Timetable(TimetableBase, table=True):
-    pass
+class Timetable(Base, TimetableBase, table=True):
+    users: list[User] = Relationship(back_populates="timetables", link_model=TimetableUserLink)
 
 
 class TimetableRows(SQLModel):
