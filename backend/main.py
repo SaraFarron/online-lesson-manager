@@ -4,10 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from src.auth.router import router as auth_router
-from src.config import settings
-from src.pages.router import htmx_router
-from src.pages.router import router as pages_router
+from backend.auth.router import router as auth_router
+from backend.config import settings
+from backend.pages.router import htmx_router
+from backend.pages.router import router as pages_router
 
 SHOW_DOCS_IN = {"local", "staging"}
 

@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.config import settings
+from backend.config import settings
 
 _is_sqlite = "sqlite" in str(settings.DATABASE_URL)
 

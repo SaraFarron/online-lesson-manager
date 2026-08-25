@@ -25,7 +25,7 @@ Pin to these versions or newer. Examples in this file assume them.
 Organize by domain, not by file type. One package per bounded context.
 
 ```
-src/
+backend/
 ├── {domain}/           # e.g., auth/, posts/, aws/
 │   ├── router.py       # API endpoints
 │   ├── schemas.py      # Pydantic models
@@ -43,12 +43,12 @@ src/
 └── main.py             # FastAPI app + lifespan
 ```
 
-**Cross-domain imports**: always use the explicit module name. Never `from src.auth import *`.
+**Cross-domain imports**: always use the explicit module name. Never `from backend.auth import *`.
 
 ```python
-from src.auth import constants as auth_constants
-from src.notifications import service as notification_service
-from src.posts.constants import ErrorCode as PostsErrorCode
+from backend.auth import constants as auth_constants
+from backend.notifications import service as notification_service
+from backend.posts.constants import ErrorCode as PostsErrorCode
 ```
 
 ## Async Routes
@@ -68,23 +68,27 @@ from src.posts.constants import ErrorCode as PostsErrorCode
 # DON'T — blocking call inside async route freezes the entire event loop
 @router.get("/bad")
 async def bad():
-    time.sleep(10)            # blocks every request on this worker
+    time.sleep(10)  # blocks every request on this worker
     return {"ok": True}
+
 
 # DO — sync route lets FastAPI run it in a threadpool
 @router.get("/sync-ok")
 def sync_ok():
-    time.sleep(10)            # blocks one threadpool worker, not the loop
+    time.sleep(10)  # blocks one threadpool worker, not the loop
     return {"ok": True}
+
 
 # DO — async route with awaitable sleep
 @router.get("/async-ok")
 async def async_ok():
-    await asyncio.sleep(10)   # yields control, loop keeps serving requests
+    await asyncio.sleep(10)  # yields control, loop keeps serving requests
     return {"ok": True}
+
 
 # DO — async route that has to call a sync library
 from fastapi.concurrency import run_in_threadpool
+
 
 @router.get("/wrap")
 async def wrap():
@@ -114,7 +118,7 @@ class UserCreate(BaseModel):
     first_name: str = Field(min_length=1, max_length=128)
     username: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     email: EmailStr
-    age: int = Field(ge=18)                     # required, must be >= 18
+    age: int = Field(ge=18)  # required, must be >= 18
     favorite_band: MusicBand | None = None
     website: AnyUrl | None = None
 ```
@@ -150,13 +154,15 @@ class CustomModel(BaseModel):
 `pydantic-settings` is its own package since Pydantic v2.
 
 ```python
-# src/auth/config.py
+# backend/auth/config.py
 from datetime import timedelta
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AuthConfig(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="AUTH_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="AUTH_", env_file=".env", extra="ignore"
+    )
 
     JWT_ALG: str
     JWT_SECRET: str
@@ -183,9 +189,11 @@ from fastapi import Depends
 
 PostDep = Annotated[dict, Depends(valid_post_id)]
 
+
 @router.get("/posts/{post_id}")
 async def get_post(post: PostDep):
     return post
+
 
 # Avoid — default-argument form (still works, but legacy)
 @router.get("/posts/{post_id}")
@@ -226,6 +234,7 @@ Use **`PyJWT`**, not `python-jose` (unmaintained).
 import jwt  # PyJWT
 from jwt.exceptions import InvalidTokenError
 
+
 def decode_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALG])
@@ -238,7 +247,7 @@ def decode_token(token: str) -> dict:
 Prefer SQLAlchemy 2.0's async API. `encode/databases` is in maintenance mode — don't pick it for new projects.
 
 ```python
-# src/database.py
+# backend/database.py
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 engine = create_async_engine(str(settings.DATABASE_URL), pool_pre_ping=True)
@@ -287,10 +296,11 @@ metadata = MetaData(naming_convention=POSTGRES_INDEXES_NAMING_CONVENTION)
 ```python
 from fastapi import BackgroundTasks
 
+
 @router.post("/signup")
 async def signup(data: SignupIn, bg: BackgroundTasks):
     user = await service.create_user(data)
-    bg.add_task(send_welcome_email, user.email)   # fire-and-forget, in-process
+    bg.add_task(send_welcome_email, user.email)  # fire-and-forget, in-process
     return user
 ```
 
@@ -305,7 +315,7 @@ async def signup(data: SignupIn, bg: BackgroundTasks):
 import pytest
 from httpx import AsyncClient, ASGITransport
 
-from src.main import app
+from backend.main import app
 
 
 @pytest.fixture
@@ -328,8 +338,8 @@ async def test_create_post(client: AsyncClient):
 Don't monkeypatch internals. Use FastAPI's built-in `dependency_overrides`.
 
 ```python
-from src.auth.dependencies import parse_jwt_data
-from src.main import app
+from backend.auth.dependencies import parse_jwt_data
+from backend.main import app
 
 
 def fake_user():
@@ -359,12 +369,12 @@ def _override_auth():
 ### Hide docs outside selected envs
 ```python
 from fastapi import FastAPI
-from src.config import settings
+from backend.config import settings
 
 SHOW_DOCS_IN = {"local", "staging"}
 app_kwargs = {"title": "My API"}
 if settings.ENVIRONMENT not in SHOW_DOCS_IN:
-    app_kwargs["openapi_url"] = None    # disables /docs and /redoc
+    app_kwargs["openapi_url"] = None  # disables /docs and /redoc
 
 app = FastAPI(**app_kwargs)
 ```
@@ -384,8 +394,14 @@ router = APIRouter()
     description="Creates an item owned by the authenticated user.",
     tags=["items"],
     responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse, "description": "Validation error"},
-        status.HTTP_409_CONFLICT:    {"model": ErrorResponse, "description": "Slug already exists"},
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorResponse,
+            "description": "Validation error",
+        },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "Slug already exists",
+        },
     },
 )
 async def create_item(payload: ItemCreate) -> ItemResponse: ...
@@ -394,8 +410,8 @@ async def create_item(payload: ItemCreate) -> ItemResponse: ...
 ## Linting
 
 ```shell
-ruff check --fix src
-ruff format src
+ruff check --fix backend
+ruff format backend
 ```
 
 Add to a pre-commit hook or run in CI. Ruff replaces black + isort + autoflake + most of flake8.
@@ -420,7 +436,7 @@ seen agents introduce.
 | `BackgroundTasks` for anything you'd page on | No retry, dies with the worker. | Use Celery / Arq / RQ. |
 | Calling a sync ORM session inside `async def` | Blocks the loop, may deadlock the pool. | Use `AsyncSession`. |
 | Returning a Pydantic model and *also* setting `response_model=` to that same class | Model gets constructed twice (validate + serialize). | Either return a `dict`/ORM row and let `response_model` validate, or drop `response_model` and trust the return type. |
-| Importing across domains via deep paths (`from src.auth.service.user import ...`) | Tight coupling, hard to refactor. | `from src.auth import service as auth_service`. |
+| Importing across domains via deep paths (`from backend.auth.service.user import ...`) | Tight coupling, hard to refactor. | `from backend.auth import service as auth_service`. |
 | Reusing one `BaseSettings` for the whole app | Hard to reason about, every domain reads every var. | One `BaseSettings` per domain. |
 | Mocking the database in integration tests | Mock/prod divergence eventually fires in prod. | Use a real DB (testcontainers, ephemeral schema) and `dependency_overrides` for auth/external services. |
 

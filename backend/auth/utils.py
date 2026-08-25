@@ -4,8 +4,8 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
 
-from src.auth.config import auth_settings
-from src.auth.exceptions import InvalidCredentials
+from backend.auth.config import auth_settings
+from backend.auth.exceptions import InvalidCredentials
 
 _password_hash = PasswordHash.recommended()
 

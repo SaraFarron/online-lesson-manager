@@ -25,11 +25,11 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code and migration files
-COPY src/       ./src/
+COPY backend/       ./backend/
 COPY alembic/   ./alembic/
 COPY alembic.ini ./
 
 EXPOSE 8000
 
 # Apply pending migrations then start the server
-CMD ["sh", "-c", "alembic upgrade head && fastapi run src/main.py --port 8000 --host 0.0.0.0"]
+CMD ["sh", "-c", "alembic upgrade head && fastapi run backend/main.py --port 8000 --host 0.0.0.0"]

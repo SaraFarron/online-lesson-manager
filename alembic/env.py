@@ -13,11 +13,11 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from src.config import settings
-from src.models import Base  # noqa: F401 — registers the metadata
+from backend.config import settings
+from backend.models import Base  # noqa: F401 — registers the metadata
 
 # ── Import every model module so Alembic sees all tables ─────────────────────
-from src.auth import models as _auth_models  # noqa: F401
+from backend.auth import models as _auth_models  # noqa: F401
 
 # ─────────────────────────────────────────────────────────────────────────────
 config = context.config

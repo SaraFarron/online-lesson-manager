@@ -4,9 +4,9 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.models import User
-from src.auth.schemas import UserCreate
-from src.auth.utils import hash_password, verify_password
+from backend.auth.models import User
+from backend.auth.schemas import UserCreate
+from backend.auth.utils import hash_password, verify_password
 
 
 async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User | None:

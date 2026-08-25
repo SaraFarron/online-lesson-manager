@@ -4,10 +4,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from src.auth import service
-from src.auth.dependencies import CurrentUser, SessionDep, SuperUser
-from src.auth.exceptions import EmailAlreadyExists, UserNotFound
-from src.auth.schemas import (
+from backend.auth import service
+from backend.auth.dependencies import CurrentUser, SessionDep, SuperUser
+from backend.auth.exceptions import EmailAlreadyExists, UserNotFound
+from backend.auth.schemas import (
     Token,
     UserCreate,
     UserList,
@@ -15,7 +15,7 @@ from src.auth.schemas import (
     UserUpdate,
     UserUpdateMe,
 )
-from src.auth.utils import create_access_token
+from backend.auth.utils import create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
