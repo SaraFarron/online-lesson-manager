@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Sign in – {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="auth-form">
+    <h1>Sign in</h1>
+
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <!--
+    HTMX posts the form to the JSON API endpoint and handles the token in JS.
+    Alternatively wire hx-post to a server-side session endpoint.
+  -->
+    <form id="login-form">
+        <label for="email">Email</label>
+        <input id="email" name="username" type="email" required autocomplete="email" />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password" />
+
+        <button type="submit">Sign in</button>
+    </form>
+
+    <p>No account? <a href="/register">Register</a></p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const body = new URLSearchParams(new FormData(form));
+
+        const res = await fetch("/api/v1/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body,
+        });
+
+        if (res.ok) {
+            const { access_token } = await res.json();
+            localStorage.setItem("token", access_token);
+            window.location.href = "/";
+        } else {
+            const { detail } = await res.json();
+            document.querySelector(".error")?.remove();
+            const p = document.createElement("p");
+            p.className = "error";
+            p.textContent = detail;
+            form.before(p);
+        }
+    });
+</script>
+{% endblock %}

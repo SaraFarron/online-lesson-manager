@@ -1,0 +1,121 @@
+/* ── Reset ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Tokens ─────────────────────────────────────────────────────────────── */
+:root {
+  --color-bg:       #f9fafb;
+  --color-surface:  #ffffff;
+  --color-border:   #e5e7eb;
+  --color-text:     #111827;
+  --color-muted:    #6b7280;
+  --color-primary:  #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-error:    #dc2626;
+  --radius:         0.5rem;
+  --shadow:         0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1);
+  --font: system-ui, -apple-system, sans-serif;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+body {
+  font-family: var(--font);
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+a { color: var(--color-primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Nav ─────────────────────────────────────────────────────────────────── */
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow);
+}
+nav a { font-weight: 600; }
+
+/* ── Main ────────────────────────────────────────────────────────────────── */
+main {
+  flex: 1;
+  max-width: 56rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+footer {
+  text-align: center;
+  padding: 1rem;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+.hero { padding: 3rem 0; }
+.hero h1 { font-size: 2.25rem; font-weight: 700; margin-bottom: 0.75rem; }
+.hero p  { color: var(--color-muted); margin-bottom: 1.5rem; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn, button[type="submit"], button[hx-get] {
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn:hover, button[type="submit"]:hover, button[hx-get]:hover {
+  background: var(--color-primary-hover);
+  text-decoration: none;
+}
+
+/* ── Auth form ───────────────────────────────────────────────────────────── */
+.auth-form {
+  max-width: 28rem;
+  margin: 2rem auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  box-shadow: var(--shadow);
+}
+.auth-form h1 { margin-bottom: 1.5rem; font-size: 1.5rem; }
+.auth-form label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem; }
+.auth-form input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  font-size: 1rem;
+}
+.auth-form input:focus { outline: 2px solid var(--color-primary); outline-offset: -1px; }
+.auth-form button[type="submit"] { width: 100%; justify-content: center; }
+.auth-form p { margin-top: 1rem; font-size: 0.875rem; color: var(--color-muted); }
+
+/* ── Error ───────────────────────────────────────────────────────────────── */
+.error {
+  color: var(--color-error);
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+}
+
+/* ── HTMX loading indicator ──────────────────────────────────────────────── */
+.htmx-indicator { opacity: 0; transition: opacity 0.2s; }
+.htmx-request .htmx-indicator { opacity: 1; }

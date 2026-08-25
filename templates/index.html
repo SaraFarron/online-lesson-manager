@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Home – {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <h1>Welcome to {{ app_name }}</h1>
+    <p>A production-ready FastAPI template with HTMX.</p>
+    <a href="/login" class="btn">Sign in</a>
+</section>
+
+<!-- Example HTMX fragment: clicking the button swaps in server-rendered HTML -->
+<section>
+    <h2>Server time</h2>
+    <div id="server-time">
+        <button hx-get="/htmx/server-time" hx-target="#server-time" hx-swap="outerHTML">
+            Fetch server time
+        </button>
+    </div>
+</section>
+{% endblock %}

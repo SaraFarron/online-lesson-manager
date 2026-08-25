@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/main.css" />
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@2.0.4"
+        integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+"
+        crossorigin="anonymous"></script>
+    {% block head %}{% endblock %}
+</head>
+
+<body>
+    <nav>
+        <a href="/">{{ app_name }}</a>
+        <div id="nav-auth">
+            <!-- swap this fragment via HTMX once auth state is known -->
+            <a href="/login">Sign in</a>
+        </div>
+    </nav>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <small>{{ app_name }}</small>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>
