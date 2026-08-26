@@ -5,9 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from backend.auth import service
+from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser, SessionDep, SuperUser
 from backend.auth.exceptions import EmailAlreadyExists, UserNotFound
 from backend.auth.schemas import (
+    StudentProfileCreate,
+    StudentProfilePublic,
+    TeacherProfileCreate,
+    TeacherProfilePublic,
     Token,
     UserCreate,
     UserList,
@@ -98,7 +103,7 @@ async def update_me(
     "/users",
     response_model=UserList,
     summary="[Admin] List all users",
-    dependencies=[Depends(SuperUser)],
+    dependencies=[Depends(SuperUser)],  # ty: ignore[invalid-argument-type]
 )
 async def list_users(
     session: SessionDep,
@@ -176,3 +181,105 @@ async def delete_user_admin(
     if not user:
         raise UserNotFound()
     await service.delete_user(session, user)
+
+
+@router.post(
+    "/users/{user_id}/student-profile",
+    response_model=StudentProfilePublic,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_student_profile(
+    session: SessionDep,
+    _: CurrentUser,
+    user_id: uuid.UUID,
+    data: StudentProfileCreate,
+) -> Any:
+    user = await service.get_user_by_id(session, user_id)
+    if not user:
+        raise UserNotFound()
+    if user.student_profile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student profile already exists for this user",
+        )
+    if user.role != Roles.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not a student",
+        )
+    return await service.create_student_profile(
+        session,
+        student_profile_data=data,
+        user=user,
+    )
+
+
+@router.get(
+    "/users/{user_id}/student-profile",
+    response_model=StudentProfilePublic,
+)
+async def get_student_profile(
+    session: SessionDep,
+    _: CurrentUser,
+    user_id: uuid.UUID,
+) -> Any:
+    user = await service.get_user_by_id(session, user_id)
+    if not user:
+        raise UserNotFound()
+    if not user.student_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student profile does not exist for this user",
+        )
+    return user.student_profile
+
+
+@router.post(
+    "/users/{user_id}/teacher-profile",
+    response_model=TeacherProfilePublic,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_teacher_profile(
+    session: SessionDep,
+    _: CurrentUser,
+    user_id: uuid.UUID,
+    data: TeacherProfileCreate,
+) -> Any:
+    user = await service.get_user_by_id(session, user_id)
+    if not user:
+        raise UserNotFound()
+    if user.teacher_profile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Teacher profile already exists for this user",
+        )
+    if user.role != Roles.TEACHER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not a teacher",
+        )
+    return await service.create_teacher_profile(
+        session,
+        teacher_profile_data=data,
+        user=user,
+    )
+
+
+@router.get(
+    "/users/{user_id}/teacher-profile",
+    response_model=TeacherProfilePublic,
+)
+async def get_teacher_profile(
+    session: SessionDep,
+    _: CurrentUser,
+    user_id: uuid.UUID,
+) -> Any:
+    user = await service.get_user_by_id(session, user_id)
+    if not user:
+        raise UserNotFound()
+    if not user.teacher_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Teacher profile does not exist for this user",
+        )
+    return user.teacher_profile

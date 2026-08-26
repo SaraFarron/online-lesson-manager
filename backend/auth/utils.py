@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -48,3 +48,9 @@ def decode_access_token(token: str) -> str:
         return str(payload["sub"])
     except (InvalidTokenError, KeyError) as exc:
         raise InvalidCredentials() from exc
+
+
+def string_to_time(time_str: str) -> time:
+    """Convert a "HH:MM" string to a datetime.time object."""
+    hour, minute = map(int, time_str.split(":"))
+    return time(hour=hour, minute=minute)

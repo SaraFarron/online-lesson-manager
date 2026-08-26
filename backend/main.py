@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from backend.auth import models as auth_models  # noqa: F401
 from backend.auth.router import router as auth_router
 from backend.config import settings
+from backend.lessons import models as lessons_models  # noqa: F401
 from backend.pages.router import htmx_router
 from backend.pages.router import router as pages_router
 
