@@ -9,8 +9,10 @@ from backend.auth.models import StudentProfile, TeacherProfile, User
 from backend.auth.schemas import (
     StudentProfileCreate,
     StudentProfilePublic,
+    StudentProfileUpdate,
     TeacherProfileCreate,
     TeacherProfilePublic,
+    TeacherProfileUpdate,
     UserCreate,
 )
 from backend.auth.utils import hash_password, string_to_time, verify_password
@@ -110,6 +112,19 @@ async def create_student_profile(
     return StudentProfilePublic.model_validate(user.student_profile)
 
 
+async def update_student_profile(
+    session: AsyncSession, student_profile_data: StudentProfileUpdate, user: User
+) -> StudentProfilePublic:
+    if not user.student_profile:
+        raise ValueError("User does not have a student profile")
+    user.student_profile.notification_lesson = student_profile_data.notification_lesson  # ty: ignore[invalid-assignment]
+    user.student_profile.notification_homework = student_profile_data.notification_homework  # ty: ignore[invalid-assignment]
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return StudentProfilePublic.model_validate(user.student_profile)
+
+
 async def create_teacher_profile(
     session: AsyncSession, teacher_profile_data: TeacherProfileCreate, user: User
 ) -> TeacherProfilePublic:
@@ -124,4 +139,24 @@ async def create_teacher_profile(
     await session.commit()
     await session.refresh(user)
     return TeacherProfilePublic.model_validate(user.teacher_profile)
+
+
+async def update_teacher_profile(
+    session: AsyncSession, teacher_profile_data: TeacherProfileUpdate, user: User
+) -> TeacherProfilePublic:
+    if not user.teacher_profile:
+        raise ValueError("User does not have a teacher profile")
+    user.teacher_profile.code = teacher_profile_data.code  # ty: ignore[invalid-assignment]
+    user.teacher_profile.work_start = (  # ty: ignore[invalid-assignment]
+        string_to_time(teacher_profile_data.work_start) if teacher_profile_data.work_start else None
+    )
+    user.teacher_profile.work_end = (  # ty: ignore[invalid-assignment]
+        string_to_time(teacher_profile_data.work_end) if teacher_profile_data.work_end else None
+    )
+    user.teacher_profile.lesson_length = teacher_profile_data.lesson_length  # ty: ignore[invalid-assignment]
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return TeacherProfilePublic.model_validate(user.teacher_profile
+)
 

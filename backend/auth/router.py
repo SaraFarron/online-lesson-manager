@@ -11,8 +11,10 @@ from backend.auth.exceptions import EmailAlreadyExists, UserNotFound
 from backend.auth.schemas import (
     StudentProfileCreate,
     StudentProfilePublic,
+    StudentProfileUpdate,
     TeacherProfileCreate,
     TeacherProfilePublic,
+    TeacherProfileUpdate,
     Token,
     UserCreate,
     UserList,
@@ -33,10 +35,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     response_model=Token,
     summary="OAuth2 password login — returns a JWT access token",
 )
-async def login(
-    session: SessionDep,
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-) -> Any:
+async def login(session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Any:
     user = await service.authenticate(session, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -83,11 +82,7 @@ async def read_me(current_user: CurrentUser) -> Any:
     response_model=UserPublic,
     summary="Update the currently authenticated user's profile",
 )
-async def update_me(
-    session: SessionDep,
-    current_user: CurrentUser,
-    data: UserUpdateMe,
-) -> Any:
+async def update_me(session: SessionDep, current_user: CurrentUser, data: UserUpdateMe) -> Any:
     if data.email and data.email != current_user.email:
         if await service.get_user_by_email(session, data.email):
             raise EmailAlreadyExists()
@@ -103,7 +98,6 @@ async def update_me(
     "/users",
     response_model=UserList,
     summary="[Admin] List all users",
-    dependencies=[Depends(SuperUser)],  # ty: ignore[invalid-argument-type]
 )
 async def list_users(
     session: SessionDep,
@@ -136,11 +130,7 @@ async def create_user_admin(
     response_model=UserPublic,
     summary="[Admin] Get a user by ID",
 )
-async def get_user_admin(
-    session: SessionDep,
-    _: SuperUser,
-    user_id: uuid.UUID,
-) -> Any:
+async def get_user_admin(session: SessionDep, _: SuperUser, user_id: uuid.UUID) -> Any:
     user = await service.get_user_by_id(session, user_id)
     if not user:
         raise UserNotFound()
@@ -152,12 +142,7 @@ async def get_user_admin(
     response_model=UserPublic,
     summary="[Admin] Update any user",
 )
-async def update_user_admin(
-    session: SessionDep,
-    _: SuperUser,
-    user_id: uuid.UUID,
-    data: UserUpdate,
-) -> Any:
+async def update_user_admin(session: SessionDep, _: SuperUser, user_id: uuid.UUID, data: UserUpdate) -> Any:
     user = await service.get_user_by_id(session, user_id)
     if not user:
         raise UserNotFound()
@@ -172,11 +157,7 @@ async def update_user_admin(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="[Admin] Delete a user",
 )
-async def delete_user_admin(
-    session: SessionDep,
-    _: SuperUser,
-    user_id: uuid.UUID,
-) -> None:
+async def delete_user_admin(session: SessionDep, _: SuperUser, user_id: uuid.UUID) -> None:
     user = await service.get_user_by_id(session, user_id)
     if not user:
         raise UserNotFound()
@@ -207,11 +188,7 @@ async def create_student_profile(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User is not a student",
         )
-    return await service.create_student_profile(
-        session,
-        student_profile_data=data,
-        user=user,
-    )
+    return await service.create_student_profile(session, student_profile_data=data, user=user)
 
 
 @router.get(
@@ -232,6 +209,27 @@ async def get_student_profile(
             detail="Student profile does not exist for this user",
         )
     return user.student_profile
+
+
+@router.put(
+    "/users/{user_id}/student-profile",
+    response_model=StudentProfilePublic,
+)
+async def update_student_profile(
+    session: SessionDep,
+    _: CurrentUser,
+    user_id: uuid.UUID,
+    data: StudentProfileUpdate,
+) -> Any:
+    user = await service.get_user_by_id(session, user_id)
+    if not user:
+        raise UserNotFound()
+    if not user.student_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student profile does not exist for this user",
+        )
+    return await service.update_student_profile(session, student_profile_data=data, user=user)
 
 
 @router.post(
@@ -258,11 +256,7 @@ async def create_teacher_profile(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User is not a teacher",
         )
-    return await service.create_teacher_profile(
-        session,
-        teacher_profile_data=data,
-        user=user,
-    )
+    return await service.create_teacher_profile(session, teacher_profile_data=data, user=user)
 
 
 @router.get(
@@ -283,3 +277,24 @@ async def get_teacher_profile(
             detail="Teacher profile does not exist for this user",
         )
     return user.teacher_profile
+
+
+@router.put(
+    "/users/{user_id}/teacher-profile",
+    response_model=TeacherProfilePublic,
+)
+async def update_teacher_profile(
+    session: SessionDep,
+    _: CurrentUser,
+    user_id: uuid.UUID,
+    data: TeacherProfileUpdate,
+) -> Any:
+    user = await service.get_user_by_id(session, user_id)
+    if not user:
+        raise UserNotFound()
+    if not user.teacher_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Teacher profile does not exist for this user",
+        )
+    return await service.update_teacher_profile(session, teacher_profile_data=data, user=user)

@@ -2,7 +2,14 @@ import uuid
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_serializer,
+    field_validator,
+)
 
 from backend.auth.constants import Roles
 
@@ -88,6 +95,11 @@ class StudentProfilePublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class StudentProfileUpdate(BaseModel):
+    notification_lesson: int | None = None
+    notification_homework: int | None = None
+
+
 class TeacherProfileCreate(BaseModel):
     code: str
     work_start: str | None = None  # "HH:MM" format
@@ -117,3 +129,29 @@ class TeacherProfilePublic(BaseModel):
     lesson_length: int  # in minutes
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("work_start", "work_end")
+    def serialize_time_fields(self, value: time | None) -> str | None:
+        if value is None:
+            return None
+        return value.strftime("%H:%M")
+
+
+class TeacherProfileUpdate(BaseModel):
+    code: str | None = None
+    work_start: str | None = None  # "HH:MM" format
+    work_end: str | None = None  # "HH:MM" format
+    lesson_length: int | None = None  # in minutes
+
+    @field_validator("work_start", "work_end")
+    @classmethod
+    def validate_time_format(cls, v: str) -> str:
+        if v is None:
+            return v
+        try:
+            hour, minute = map(int, v.split(":"))
+            if not (0 <= hour < 24 and 0 <= minute < 60):
+                raise ValueError
+        except Exception:
+            raise ValueError(f"Invalid time format: {v}")
+        return v
