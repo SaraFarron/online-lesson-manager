@@ -105,6 +105,8 @@ class TeacherProfileCreate(BaseModel):
     work_start: str | None = None  # "HH:MM" format
     work_end: str | None = None  # "HH:MM" format
     lesson_length: int = 60  # in minutes
+    between_lessons_break: int = 0  # in minutes
+    max_lessons_per_day: int = 6
 
     @field_validator("work_start", "work_end")
     @classmethod
@@ -127,6 +129,8 @@ class TeacherProfilePublic(BaseModel):
     work_start: time | None = None  # "HH:MM" format
     work_end: time | None = None  # "HH:MM" format
     lesson_length: int  # in minutes
+    between_lessons_break: int = 0  # in minutes
+    max_lessons_per_day: int = 6
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -142,6 +146,8 @@ class TeacherProfileUpdate(BaseModel):
     work_start: str | None = None  # "HH:MM" format
     work_end: str | None = None  # "HH:MM" format
     lesson_length: int | None = None  # in minutes
+    between_lessons_break: int = 0  # in minutes
+    max_lessons_per_day: int = 6
 
     @field_validator("work_start", "work_end")
     @classmethod

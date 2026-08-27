@@ -134,6 +134,8 @@ async def create_teacher_profile(
         work_start=string_to_time(teacher_profile_data.work_start) if teacher_profile_data.work_start else None,
         work_end=string_to_time(teacher_profile_data.work_end) if teacher_profile_data.work_end else None,
         lesson_length=teacher_profile_data.lesson_length,
+        between_lessons_break=teacher_profile_data.between_lessons_break,
+        max_lessons_per_day=teacher_profile_data.max_lessons_per_day,
     )
     session.add(user)
     await session.commit()
@@ -146,7 +148,9 @@ async def update_teacher_profile(
 ) -> TeacherProfilePublic:
     if not user.teacher_profile:
         raise ValueError("User does not have a teacher profile")
-    user.teacher_profile.code = teacher_profile_data.code  # ty: ignore[invalid-assignment]
+    if not teacher_profile_data.code:
+        teacher_profile_data.code = uuid.uuid4().hex[:8]  # Generate a new code if not provided
+    user.teacher_profile.code = teacher_profile_data.code
     user.teacher_profile.work_start = (  # ty: ignore[invalid-assignment]
         string_to_time(teacher_profile_data.work_start) if teacher_profile_data.work_start else None
     )
@@ -154,6 +158,8 @@ async def update_teacher_profile(
         string_to_time(teacher_profile_data.work_end) if teacher_profile_data.work_end else None
     )
     user.teacher_profile.lesson_length = teacher_profile_data.lesson_length  # ty: ignore[invalid-assignment]
+    user.teacher_profile.between_lessons_break = teacher_profile_data.between_lessons_break
+    user.teacher_profile.max_lessons_per_day = teacher_profile_data.max_lessons_per_day
     session.add(user)
     await session.commit()
     await session.refresh(user)
