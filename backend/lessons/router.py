@@ -5,7 +5,7 @@ from fastapi import APIRouter, status
 
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.lessons import service
-from backend.lessons.dependencies import ValidatedLesson
+from backend.lessons.dependencies import ValidatedLesson, ValidatedLessonExists
 from backend.lessons.schemas import LessonCreate, LessonPublic, LessonUpdate
 
 router = APIRouter(prefix="/lessons", tags=["lessons"])
@@ -28,9 +28,17 @@ async def create_lesson(session: SessionDep, _: CurrentUser, data: LessonCreate,
     status_code=status.HTTP_200_OK,
     summary="Update an existing lesson",
 )
-async def update_lesson(session: SessionDep, _: CurrentUser, lesson_id: uuid.UUID, data: LessonUpdate, validator: ValidatedLesson) -> Any:
-    lesson = await service.update_lesson(session, lesson_id, data, validator)
-    return LessonPublic.model_validate(lesson)
+async def update_lesson(
+    session: SessionDep,
+    _: CurrentUser,
+    lesson_id: uuid.UUID,
+    data: LessonUpdate,
+    create_validator: ValidatedLesson,
+    exist_validator: ValidatedLessonExists,
+) -> Any:
+    lesson = await exist_validator.validate(session, lesson_id)
+    updated_lesson = await service.update_lesson(session, lesson, data, create_validator)
+    return LessonPublic.model_validate(updated_lesson)
 
 
 @router.delete(
@@ -38,5 +46,8 @@ async def update_lesson(session: SessionDep, _: CurrentUser, lesson_id: uuid.UUI
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an existing lesson",
 )
-async def delete_lesson(session: SessionDep, _: CurrentUser, lesson_id: uuid.UUID) -> None:
-    await service.delete_lesson(session, lesson_id)
+async def delete_lesson(
+    session: SessionDep, _: CurrentUser, lesson_id: uuid.UUID, validator: ValidatedLessonExists,
+) -> None:
+    lesson = await validator.validate(session, lesson_id)
+    await service.delete_lesson(session, lesson)
