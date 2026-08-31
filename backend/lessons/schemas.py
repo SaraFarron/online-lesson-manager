@@ -6,14 +6,16 @@ from pydantic import (
     ConfigDict,
 )
 
+from backend.constants import EventType
+
 
 class LessonCreate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     start: datetime
     end: datetime
-    student_id: uuid.UUID
-    teacher_id: uuid.UUID
+    user_id: uuid.UUID
+    event_type: EventType = EventType.LESSON
 
 
 class LessonPublic(BaseModel):
@@ -22,6 +24,5 @@ class LessonPublic(BaseModel):
     id: uuid.UUID
     start: datetime
     end: datetime
-    student_id: uuid.UUID
-    teacher_id: uuid.UUID
-
+    user_id: uuid.UUID
+    event_type: EventType

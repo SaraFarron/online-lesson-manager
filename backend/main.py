@@ -8,6 +8,7 @@ from backend.auth import models as auth_models  # noqa: F401
 from backend.auth.router import router as auth_router
 from backend.config import settings
 from backend.lessons import models as lessons_models  # noqa: F401
+from backend.lessons.router import router as lessons_router
 from backend.pages.router import htmx_router
 from backend.pages.router import router as pages_router
 
@@ -36,3 +37,4 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(pages_router)
 app.include_router(htmx_router)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(lessons_router, prefix=settings.API_V1_STR)

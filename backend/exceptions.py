@@ -20,3 +20,8 @@ class BadRequest(HTTPException):
 class Conflict(HTTPException):
     def __init__(self, detail: str = "Conflict") -> None:
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
+class ValidationError(HTTPException):
+    def __init__(self, detail: str = "Validation error") -> None:
+        super().__init__(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail)

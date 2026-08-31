@@ -2,14 +2,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.lessons.models import Event
 from backend.lessons.schemas import LessonCreate
+from backend.lessons.validators import LessonValidator
 
 
-async def create_lesson(session: AsyncSession, lesson_data: LessonCreate) -> Event:
+async def create_lesson(session: AsyncSession, lesson_data: LessonCreate, validator: LessonValidator) -> Event:
+    await validator.validate_all(session, lesson_data)
+
     lesson = Event(
         start=lesson_data.start,
         end=lesson_data.end,
-        student_id=lesson_data.student_id,
-        teacher_id=lesson_data.teacher_id,
+        user_id=lesson_data.user_id,
+        event_type=lesson_data.event_type,
     )
     session.add(lesson)
     await session.commit()
