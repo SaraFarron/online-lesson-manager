@@ -28,23 +28,27 @@ class TimeValidation(EventValidator):
 
 class UserExistsValidation(EventValidator):
     async def validate(self, session: AsyncSession, data: LessonCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
-        student = await get_user_by_id(session, data.user_id)
+        if user_id is None:
+            user_id = data.user_id
+        student = await get_user_by_id(session, user_id)
         if not student:
-            raise ValidationError(f"Student with ID {data.user_id} does not exist")
+            raise ValidationError(f"Student with ID {user_id} does not exist")
 
-        teacher = await get_user_by_id(session, data.user_id)
+        teacher = await get_user_by_id(session, user_id)
         if not teacher:
-            raise ValidationError(f"Teacher with ID {data.user_id} does not exist")
+            raise ValidationError(f"Teacher with ID {user_id} does not exist")
 
 
 class NoConflictValidation(EventValidator):
     async def validate(self, session: AsyncSession, data: LessonCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
+        if user_id is None:
+            user_id = data.user_id
         conflict = await session.scalar(
             select(Event).where(
                 and_(
                     or_(
-                        Event.user_id == data.user_id,
-                        Event.user_id == data.user_id,
+                        Event.user_id == user_id,
+                        Event.user_id == user_id,
                     ),
                     or_(
                         and_(Event.start < data.end, Event.start >= data.start),

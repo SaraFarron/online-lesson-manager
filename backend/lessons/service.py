@@ -1,7 +1,9 @@
+import uuid
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.lessons.models import Event
-from backend.lessons.schemas import LessonCreate
+from backend.lessons.schemas import LessonCreate, LessonUpdate
 from backend.lessons.validators import LessonValidator
 
 
@@ -18,3 +20,28 @@ async def create_lesson(session: AsyncSession, lesson_data: LessonCreate, valida
     await session.commit()
     await session.refresh(lesson)
     return lesson
+
+
+async def update_lesson(session: AsyncSession, lesson_id: uuid.UUID, lesson_data: LessonUpdate, validator: LessonValidator) -> Event:
+    lesson = await session.get(Event, lesson_id)
+    if not lesson:
+        raise ValueError("Lesson not found")
+
+    await validator.validate_all(session, lesson_data, user_id=lesson.user_id)
+
+    lesson.start = lesson_data.start
+    lesson.end = lesson_data.end
+
+    session.add(lesson)
+    await session.commit()
+    await session.refresh(lesson)
+    return lesson
+
+
+async def delete_lesson(session: AsyncSession, lesson_id: uuid.UUID) -> None:
+    lesson = await session.get(Event, lesson_id)
+    if not lesson:
+        raise ValueError("Lesson not found")
+
+    await session.delete(lesson)
+    await session.commit()

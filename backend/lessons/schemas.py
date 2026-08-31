@@ -26,3 +26,10 @@ class LessonPublic(BaseModel):
     end: datetime
     user_id: uuid.UUID
     event_type: EventType
+
+
+class LessonUpdate(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    start: datetime
+    end: datetime
