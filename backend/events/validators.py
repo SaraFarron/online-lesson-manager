@@ -6,9 +6,9 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.service import get_user_by_id
+from backend.events.models import Event
+from backend.events.schemas import EventCreate
 from backend.exceptions import ValidationError
-from backend.lessons.models import Event
-from backend.lessons.schemas import LessonCreate
 
 
 class EventValidator(ABC):
@@ -18,7 +18,7 @@ class EventValidator(ABC):
 
 
 class TimeValidation(EventValidator):
-    async def validate(self, session: AsyncSession, data: LessonCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
+    async def validate(self, session: AsyncSession, data: EventCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
         if data.start >= data.end:
             raise ValidationError("Lesson start time must be before end time")
 
@@ -27,7 +27,7 @@ class TimeValidation(EventValidator):
 
 
 class UserExistsValidation(EventValidator):
-    async def validate(self, session: AsyncSession, data: LessonCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
+    async def validate(self, session: AsyncSession, data: EventCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
         if user_id is None:
             user_id = data.user_id
         student = await get_user_by_id(session, user_id)
@@ -40,7 +40,7 @@ class UserExistsValidation(EventValidator):
 
 
 class NoConflictValidation(EventValidator):
-    async def validate(self, session: AsyncSession, data: LessonCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
+    async def validate(self, session: AsyncSession, data: EventCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
         if user_id is None:
             user_id = data.user_id
         conflict = await session.scalar(
@@ -60,3 +60,29 @@ class NoConflictValidation(EventValidator):
         )
         if conflict:
             raise ValidationError("Scheduling conflict")
+
+
+class EventValidator:
+    def __init__(self):
+        self.validators = [
+            TimeValidation(),
+            UserExistsValidation(),
+            NoConflictValidation(),
+        ]
+
+    async def validate_all(self, session, data, user_id=None):
+        for validator in self.validators:
+            await validator.validate(session, data, user_id)
+
+
+class EventExistsValidator:
+    async def validate(self, session, event_id):
+        event = await session.get(Event, event_id)
+        if not event:
+            raise ValidationError("Event not found")
+        return event
+
+
+default_event_validator = EventValidator()
+exists_event_validator = EventExistsValidator()
+

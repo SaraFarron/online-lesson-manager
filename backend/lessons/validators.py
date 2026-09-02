@@ -1,10 +1,10 @@
-from backend.exceptions import ValidationError
-from backend.lessons.models import Event
-from backend.validators import (
+from backend.events.models import Event
+from backend.events.validators import (
     NoConflictValidation,
     TimeValidation,
     UserExistsValidation,
 )
+from backend.exceptions import ValidationError
 
 
 class LessonValidator:

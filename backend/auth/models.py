@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.models import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    from backend.lessons.models import Event, RecurrentEvent
+    from backend.events.models import Event, RecurrentEvent
 
 
 class User(Base, TimestampMixin):

@@ -1,35 +1,14 @@
-import uuid
-from datetime import datetime
-
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-)
-
 from backend.constants import EventType
+from backend.events.schemas import EventCreate, EventPublic, EventUpdate
 
 
-class LessonCreate(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    start: datetime
-    end: datetime
-    user_id: uuid.UUID
+class LessonCreate(EventCreate):
     event_type: EventType = EventType.LESSON
 
 
-class LessonPublic(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    start: datetime
-    end: datetime
-    user_id: uuid.UUID
-    event_type: EventType
+class LessonPublic(EventPublic):
+    event_type: EventType = EventType.LESSON
 
 
-class LessonUpdate(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    start: datetime
-    end: datetime
+class LessonUpdate(EventUpdate):
+    pass
