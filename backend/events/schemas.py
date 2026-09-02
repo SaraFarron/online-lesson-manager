@@ -31,5 +31,9 @@ class EventPublic(BaseModel):
 class EventUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    user_id: uuid.UUID
     start: datetime
     end: datetime
+
+
+EventWrite = EventCreate | EventUpdate

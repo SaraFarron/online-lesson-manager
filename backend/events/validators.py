@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -7,27 +8,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.service import get_user_by_id
 from backend.events.models import Event
-from backend.events.schemas import EventCreate
+from backend.events.schemas import EventWrite
 from backend.exceptions import ValidationError
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class EventValidator(ABC):
+    def __init__(self, event_type: str = "Event"):
+        self.EVENT_TYPE = event_type
+
     @abstractmethod
-    async def validate(self, session: AsyncSession, data: BaseModel, user_id: UUID | None = None) -> None:
+    async def validate(self, session: AsyncSession, data: T, user_id: UUID | None = None) -> None:
         pass
 
 
 class TimeValidation(EventValidator):
-    async def validate(self, session: AsyncSession, data: EventCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
+    async def validate(self, session: AsyncSession, data: EventWrite, user_id: UUID | None = None) -> None:
         if data.start >= data.end:
-            raise ValidationError("Lesson start time must be before end time")
+            raise ValidationError(f"{self.EVENT_TYPE} start time must be before end time")
 
         if (data.end - data.start).total_seconds() <= 60:
-            raise ValidationError("Lesson duration must be greater than one minute")
+            raise ValidationError(f"{self.EVENT_TYPE} duration must be greater than one minute")
 
 
 class UserExistsValidation(EventValidator):
-    async def validate(self, session: AsyncSession, data: EventCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
+    async def validate(self, session: AsyncSession, data: EventWrite, user_id: UUID | None = None) -> None:
         if user_id is None:
             user_id = data.user_id
         student = await get_user_by_id(session, user_id)
@@ -40,7 +46,7 @@ class UserExistsValidation(EventValidator):
 
 
 class NoConflictValidation(EventValidator):
-    async def validate(self, session: AsyncSession, data: EventCreate, user_id: UUID | None = None) -> None:  # ty: ignore[invalid-method-override]
+    async def validate(self, session: AsyncSession, data: EventWrite, user_id: UUID | None = None) -> None:
         if user_id is None:
             user_id = data.user_id
         conflict = await session.scalar(
@@ -63,23 +69,26 @@ class NoConflictValidation(EventValidator):
 
 
 class EventValidator:
-    def __init__(self):
+    def __init__(self, event_type: str = "Event"):
         self.validators = [
-            TimeValidation(),
-            UserExistsValidation(),
-            NoConflictValidation(),
+            TimeValidation(event_type=event_type),
+            UserExistsValidation(event_type=event_type),
+            NoConflictValidation(event_type=event_type),
         ]
 
-    async def validate_all(self, session, data, user_id=None):
+    async def validate_all(self, session: AsyncSession, data: EventWrite, user_id: UUID | None = None):
         for validator in self.validators:
             await validator.validate(session, data, user_id)
 
 
 class EventExistsValidator:
-    async def validate(self, session, event_id):
+    def __init__(self, event_type: str = "Event"):
+        self.EVENT_TYPE = event_type
+
+    async def validate(self, session: AsyncSession, event_id: UUID):
         event = await session.get(Event, event_id)
         if not event:
-            raise ValidationError("Event not found")
+            raise ValidationError(f"{self.EVENT_TYPE} not found")
         return event
 
 
