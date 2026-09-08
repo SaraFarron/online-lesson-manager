@@ -17,8 +17,9 @@ router = APIRouter(prefix="/lessons", tags=["lessons"])
     status_code=status.HTTP_201_CREATED,
     summary="Create a new lesson",
 )
-async def create_lesson(session: SessionDep, _: CurrentUser, data: LessonCreate, validator: ValidatedEvent) -> Any:
-    lesson = await service.create_event(session, data, validator)
+async def create_lesson(session: SessionDep, user: CurrentUser, data: LessonCreate, validator: ValidatedEvent) -> Any:
+    teacher_id = user.teacher_id
+    lesson = await service.create_event(session, data, validator, teacher_id=teacher_id)
     return LessonPublic.model_validate(lesson)
 
 
@@ -30,14 +31,15 @@ async def create_lesson(session: SessionDep, _: CurrentUser, data: LessonCreate,
 )
 async def update_lesson(
     session: SessionDep,
-    _: CurrentUser,
+    user: CurrentUser,
     lesson_id: uuid.UUID,
     data: LessonUpdate,
     create_validator: ValidatedEvent,
     exist_validator: ValidatedEventExists,
 ) -> Any:
     lesson = await exist_validator.validate(session, lesson_id)
-    updated_lesson = await service.update_event(session, lesson, data, create_validator)
+    teacher_id = user.teacher_id
+    updated_lesson = await service.update_event(session, lesson, data, create_validator, teacher_id=teacher_id)
     return LessonPublic.model_validate(updated_lesson)
 
 

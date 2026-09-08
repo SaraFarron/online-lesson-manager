@@ -33,8 +33,10 @@ class User(Base, TimestampMixin):
     teacher_profile: Mapped[TeacherProfile | None] = relationship(
         "TeacherProfile", back_populates="teacher", foreign_keys="[TeacherProfile.teacher_id]",
     )
-    events: Mapped[list[Event]] = relationship("Event", back_populates="user")
-    recurrent_events: Mapped[list[RecurrentEvent]] = relationship("RecurrentEvent", back_populates="user")
+    created_events: Mapped[list[Event]] = relationship("Event", back_populates="user", foreign_keys="[Event.user_id]")
+    taught_events: Mapped[list[Event]] = relationship("Event", back_populates="teacher", foreign_keys="[Event.teacher_id]")
+    created_recurrent_events: Mapped[list[RecurrentEvent]] = relationship("RecurrentEvent", back_populates="user", foreign_keys="[RecurrentEvent.user_id]")
+    taught_recurrent_events: Mapped[list[RecurrentEvent]] = relationship("RecurrentEvent", back_populates="teacher", foreign_keys="[RecurrentEvent.teacher_id]")
 
 
 class StudentProfile(Base, TimestampMixin):

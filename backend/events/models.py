@@ -14,8 +14,10 @@ class Event(Base, TimestampMixin):
     __tablename__ = "event"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    teacher_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("user.id"), nullable=False)
+    teacher: Mapped[User] = relationship("User", back_populates="taught_events", foreign_keys=[teacher_id])
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("user.id"), nullable=False)
-    user: Mapped[User] = relationship("User", back_populates="events", foreign_keys=[user_id])
+    user: Mapped[User] = relationship("User", back_populates="created_events", foreign_keys=[user_id])
     event_type: Mapped[str] = mapped_column(String, nullable=False)
     start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -25,8 +27,10 @@ class RecurrentEvent(Base, TimestampMixin):
     __tablename__ = "recurrent_event"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    teacher_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("user.id"), nullable=False)
+    teacher: Mapped[User] = relationship("User", back_populates="taught_recurrent_events", foreign_keys=[teacher_id])
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("user.id"), nullable=False)
-    user: Mapped[User] = relationship("User", back_populates="recurrent_events", foreign_keys=[user_id])
+    user: Mapped[User] = relationship("User", back_populates="created_recurrent_events", foreign_keys=[user_id])
     event_type: Mapped[str] = mapped_column(String, nullable=False)
     start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end: Mapped[datetime] = mapped_column(DateTime, nullable=False)

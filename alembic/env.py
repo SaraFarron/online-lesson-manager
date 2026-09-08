@@ -18,6 +18,8 @@ from backend.models import Base  # noqa: F401 — registers the metadata
 
 # ── Import every model module so Alembic sees all tables ─────────────────────
 from backend.auth import models as _auth_models  # noqa: F401
+from backend.events import models as _events_models  # noqa: F401
+from backend.notifications import models as _notifications_models  # noqa: F401
 
 # ─────────────────────────────────────────────────────────────────────────────
 config = context.config
