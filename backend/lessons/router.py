@@ -6,7 +6,14 @@ from fastapi import APIRouter, status
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.events import service
 from backend.events.dependencies import ValidatedEvent, ValidatedEventExists
-from backend.lessons.schemas import LessonCreate, LessonPublic, LessonUpdate
+from backend.lessons.schemas import (
+    LessonCreate,
+    LessonPublic,
+    LessonUpdate,
+    RecurrentLessonCreate,
+    RecurrentLessonPublic,
+    RecurrentLessonUpdate,
+)
 
 router = APIRouter(prefix="/lessons", tags=["lessons"])
 
@@ -52,4 +59,53 @@ async def delete_lesson(
     session: SessionDep, _: CurrentUser, lesson_id: uuid.UUID, validator: ValidatedEventExists,
 ) -> None:
     lesson = await validator.validate(session, lesson_id)
+    await service.delete_event(session, lesson)
+
+
+recurrent_router = APIRouter(prefix="/recurrent-lessons", tags=["lessons"])
+
+
+@recurrent_router.post(
+    "/",
+    response_model=RecurrentLessonPublic,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new recurring lesson",
+)
+async def create_recurrent_lesson(
+    session: SessionDep, user: CurrentUser, data: RecurrentLessonCreate, validator: ValidatedEvent
+) -> Any:
+    teacher_id = user.teacher_id
+    lesson = await service.create_recurrent_event(session, data, validator, teacher_id=teacher_id)
+    return RecurrentLessonPublic.model_validate(lesson)
+
+
+@recurrent_router.put(
+    "/{lesson_id}",
+    response_model=RecurrentLessonPublic,
+    status_code=status.HTTP_200_OK,
+    summary="Update an existing recurring lesson",
+)
+async def update_recurrent_lesson(
+    session: SessionDep,
+    user: CurrentUser,
+    lesson_id: uuid.UUID,
+    data: RecurrentLessonUpdate,
+    create_validator: ValidatedEvent,
+    exist_validator: ValidatedEventExists,
+) -> Any:
+    lesson = await exist_validator.validate(session, lesson_id)
+    teacher_id = user.teacher_id
+    updated_lesson = await service.update_recurrent_event(session, lesson, data, create_validator, teacher_id=teacher_id)
+    return RecurrentLessonPublic.model_validate(updated_lesson)
+
+
+@recurrent_router.delete(
+    "/{lesson_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an existing recurring lesson",
+)
+async def delete_recurrent_lesson(
+    session: SessionDep, _: CurrentUser, lesson_id: uuid.UUID, validator: ValidatedEventExists,
+) -> None:
+    lesson = await validator.validate_recurrent(session, lesson_id)
     await service.delete_event(session, lesson)

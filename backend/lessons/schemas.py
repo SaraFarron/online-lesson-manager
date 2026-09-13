@@ -1,5 +1,12 @@
 from backend.constants import EventType
-from backend.events.schemas import EventCreate, EventPublic, EventUpdate
+from backend.events.schemas import (
+    EventCreate,
+    EventPublic,
+    EventUpdate,
+    RecurrentEventCreate,
+    RecurrentEventPublic,
+    RecurrentEventUpdate,
+)
 
 
 class LessonCreate(EventCreate):
@@ -11,4 +18,16 @@ class LessonPublic(EventPublic):
 
 
 class LessonUpdate(EventUpdate):
+    pass
+
+
+class RecurrentLessonCreate(RecurrentEventCreate):
+    event_type: EventType = EventType.LESSON
+
+
+class RecurrentLessonPublic(RecurrentEventPublic):
+    event_type: EventType = EventType.LESSON
+
+
+class RecurrentLessonUpdate(RecurrentEventUpdate):
     pass

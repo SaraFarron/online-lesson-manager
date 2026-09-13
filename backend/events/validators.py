@@ -146,7 +146,7 @@ class EventValidator:
     ):
         for validator in self.validators:
             if isinstance(data, RecurrentEventWrite) and hasattr(validator, "validate_recurrent"):
-                await validator.validate_recurrent(session, data, teacher_id=teacher_id, user_id=user_id)
+                await validator.validate_recurrent(session, data, teacher_id=teacher_id, user_id=user_id)  # ty: ignore[call-non-callable]
             else:
                 await validator.validate(session, data, teacher_id=teacher_id, user_id=user_id)  # ty: ignore[invalid-argument-type]
 
@@ -160,6 +160,12 @@ class EventExistsValidator:
         if not event:
             raise ValidationError(f"{self.EVENT_TYPE} not found")
         return event
+
+    async def validate_recurrent(self, session: AsyncSession, event_id: UUID):
+        recurrent_event = await session.get(RecurrentEvent, event_id)
+        if not recurrent_event:
+            raise ValidationError(f"{self.EVENT_TYPE} not found")
+        return recurrent_event
 
 
 default_event_validator = EventValidator()

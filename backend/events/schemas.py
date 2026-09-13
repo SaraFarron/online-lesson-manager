@@ -62,6 +62,13 @@ class RecurrentEventPublic(BaseModel):
     interval_end: datetime  # when the recurrence ends
 
 
+class RecurrentCancel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    start: datetime
+    end: datetime
+
+
 class RecurrentEventUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -70,6 +77,7 @@ class RecurrentEventUpdate(BaseModel):
     end: datetime
     interval: int  # in days
     interval_end: datetime  # when the recurrence ends
+    cancels: list[RecurrentCancel] | None = None
 
 
 RecurrentEventWrite = RecurrentEventCreate | RecurrentEventUpdate
