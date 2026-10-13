@@ -40,3 +40,27 @@ class UserNotFound(HTTPException):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
+
+
+class TeacherCodeNotFound(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Teacher code not found",
+        )
+
+
+class NotAStudent(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not a student",
+        )
+
+
+class StudentAlreadyLinked(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student is already linked to a teacher",
+        )

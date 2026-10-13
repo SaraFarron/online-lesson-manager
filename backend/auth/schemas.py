@@ -81,6 +81,10 @@ class TokenPayload(BaseModel):
     exp: int | None = None
 
 
+class StudentJoinTeacher(BaseModel):
+    teacher_code: str
+
+
 class StudentProfileCreate(BaseModel):
     notification_lesson: int | None = None
     notification_homework: int | None = None

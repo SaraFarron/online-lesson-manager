@@ -5,6 +5,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.auth.constants import Roles
+from backend.auth.exceptions import (
+    NotAStudent,
+    StudentAlreadyLinked,
+    TeacherCodeNotFound,
+)
 from backend.auth.models import StudentProfile, TeacherProfile, User
 from backend.auth.schemas import (
     StudentProfileCreate,
@@ -33,6 +39,28 @@ async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User | No
 async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
     result = await session.execute(select(User).where(User.email == email))
     return result.scalar_one_or_none()
+
+
+async def link_student_to_teacher(
+    session: AsyncSession, student: User, teacher_code: str
+) -> User:
+    if student.role != Roles.STUDENT:
+        raise NotAStudent()
+    if student.teacher_id is not None:
+        raise StudentAlreadyLinked()
+
+    result = await session.execute(
+        select(TeacherProfile).where(TeacherProfile.code == teacher_code)
+    )
+    teacher_profile = result.scalar_one_or_none()
+    if not teacher_profile:
+        raise TeacherCodeNotFound()
+
+    student.teacher_id = teacher_profile.teacher_id
+    session.add(student)
+    await session.commit()
+    await session.refresh(student)
+    return student
 
 
 async def get_users(
@@ -118,7 +146,9 @@ async def update_student_profile(
     if not user.student_profile:
         raise ValueError("User does not have a student profile")
     user.student_profile.notification_lesson = student_profile_data.notification_lesson  # ty: ignore[invalid-assignment]
-    user.student_profile.notification_homework = student_profile_data.notification_homework  # ty: ignore[invalid-assignment]
+    user.student_profile.notification_homework = (
+        student_profile_data.notification_homework
+    )  # ty: ignore[invalid-assignment]
     session.add(user)
     await session.commit()
     await session.refresh(user)
@@ -131,8 +161,12 @@ async def create_teacher_profile(
     user.teacher_profile = TeacherProfile(
         teacher=user,
         code=teacher_profile_data.code,
-        work_start=string_to_time(teacher_profile_data.work_start) if teacher_profile_data.work_start else None,
-        work_end=string_to_time(teacher_profile_data.work_end) if teacher_profile_data.work_end else None,
+        work_start=string_to_time(teacher_profile_data.work_start)
+        if teacher_profile_data.work_start
+        else None,
+        work_end=string_to_time(teacher_profile_data.work_end)
+        if teacher_profile_data.work_end
+        else None,
         lesson_length=teacher_profile_data.lesson_length,
         between_lessons_break=teacher_profile_data.between_lessons_break,
         max_lessons_per_day=teacher_profile_data.max_lessons_per_day,
@@ -149,20 +183,26 @@ async def update_teacher_profile(
     if not user.teacher_profile:
         raise ValueError("User does not have a teacher profile")
     if not teacher_profile_data.code:
-        teacher_profile_data.code = uuid.uuid4().hex[:8]  # Generate a new code if not provided
+        teacher_profile_data.code = uuid.uuid4().hex[
+            :8
+        ]  # Generate a new code if not provided
     user.teacher_profile.code = teacher_profile_data.code
     user.teacher_profile.work_start = (  # ty: ignore[invalid-assignment]
-        string_to_time(teacher_profile_data.work_start) if teacher_profile_data.work_start else None
+        string_to_time(teacher_profile_data.work_start)
+        if teacher_profile_data.work_start
+        else None
     )
     user.teacher_profile.work_end = (  # ty: ignore[invalid-assignment]
-        string_to_time(teacher_profile_data.work_end) if teacher_profile_data.work_end else None
+        string_to_time(teacher_profile_data.work_end)
+        if teacher_profile_data.work_end
+        else None
     )
     user.teacher_profile.lesson_length = teacher_profile_data.lesson_length  # ty: ignore[invalid-assignment]
-    user.teacher_profile.between_lessons_break = teacher_profile_data.between_lessons_break
+    user.teacher_profile.between_lessons_break = (
+        teacher_profile_data.between_lessons_break
+    )
     user.teacher_profile.max_lessons_per_day = teacher_profile_data.max_lessons_per_day
     session.add(user)
     await session.commit()
     await session.refresh(user)
-    return TeacherProfilePublic.model_validate(user.teacher_profile
-)
-
+    return TeacherProfilePublic.model_validate(user.teacher_profile)

@@ -13,6 +13,3 @@ class Roles(StrEnum):
     ADMIN = "ADMIN"
     TEACHER = "TEACHER"
     STUDENT = "STUDENT"
-
-
-
