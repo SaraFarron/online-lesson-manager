@@ -22,4 +22,6 @@ async def validated_break_data(
 
 
 ValidatedBreak = Annotated[EventValidator, Depends(validated_break_data)]
-ValidatedBreakExists = Annotated[EventExistsValidator, Depends(lambda: exists_break_validator)]
+ValidatedBreakExists = Annotated[
+    EventExistsValidator, Depends(lambda: exists_break_validator)
+]

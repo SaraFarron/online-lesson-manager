@@ -20,4 +20,6 @@ async def validated_lesson_data(
 
 
 ValidatedLesson = Annotated[LessonValidator, Depends(validated_lesson_data)]
-ValidatedLessonExists = Annotated[LessonExistsValidator, Depends(lambda: exists_lesson_validator)]
+ValidatedLessonExists = Annotated[
+    LessonExistsValidator, Depends(lambda: exists_lesson_validator)
+]

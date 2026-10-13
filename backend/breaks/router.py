@@ -14,6 +14,7 @@ from backend.breaks.schemas import (
     RecurrentBreakUpdate,
 )
 from backend.events import service
+from backend.events.utils import resolve_teacher_id
 
 router = APIRouter(prefix="/breaks", tags=["breaks"])
 
@@ -24,8 +25,10 @@ router = APIRouter(prefix="/breaks", tags=["breaks"])
     status_code=status.HTTP_201_CREATED,
     summary="Create a new break",
 )
-async def create_break(session: SessionDep, user: CurrentUser, data: BreakCreate, validator: ValidatedBreak) -> Any:
-    teacher_id = user.teacher_id
+async def create_break(
+    session: SessionDep, user: CurrentUser, data: BreakCreate, validator: ValidatedBreak
+) -> Any:
+    teacher_id = resolve_teacher_id(user)
     brk = await service.create_event(session, data, validator, teacher_id=teacher_id)
     return BreakPublic.model_validate(brk)
 
@@ -45,8 +48,10 @@ async def update_break(
     exist_validator: ValidatedBreakExists,
 ) -> Any:
     brk = await exist_validator.validate(session, break_id)
-    teacher_id = user.teacher_id
-    updated_brk = await service.update_event(session, brk, data, create_validator, teacher_id=teacher_id)
+    teacher_id = resolve_teacher_id(user)
+    updated_brk = await service.update_event(
+        session, brk, data, create_validator, teacher_id=teacher_id
+    )
     return BreakPublic.model_validate(updated_brk)
 
 
@@ -56,7 +61,10 @@ async def update_break(
     summary="Delete an existing break",
 )
 async def delete_break(
-    session: SessionDep, _: CurrentUser, break_id: uuid.UUID, validator: ValidatedBreakExists,
+    session: SessionDep,
+    _: CurrentUser,
+    break_id: uuid.UUID,
+    validator: ValidatedBreakExists,
 ) -> None:
     brk = await validator.validate(session, break_id)
     await service.delete_event(session, brk)
@@ -72,10 +80,15 @@ recurrent_router = APIRouter(prefix="/recurrent-breaks", tags=["breaks"])
     summary="Create a new recurring break",
 )
 async def create_recurrent_break(
-    session: SessionDep, user: CurrentUser, data: RecurrentBreakCreate, validator: ValidatedBreak
+    session: SessionDep,
+    user: CurrentUser,
+    data: RecurrentBreakCreate,
+    validator: ValidatedBreak,
 ) -> Any:
-    teacher_id = user.teacher_id
-    brk = await service.create_recurrent_event(session, data, validator, teacher_id=teacher_id)
+    teacher_id = resolve_teacher_id(user)
+    brk = await service.create_recurrent_event(
+        session, data, validator, teacher_id=teacher_id
+    )
     return RecurrentBreakPublic.model_validate(brk)
 
 
@@ -94,8 +107,10 @@ async def update_recurrent_break(
     exist_validator: ValidatedBreakExists,
 ) -> Any:
     brk = await exist_validator.validate(session, break_id)
-    teacher_id = user.teacher_id
-    updated_brk = await service.update_recurrent_event(session, brk, data, create_validator, teacher_id=teacher_id)
+    teacher_id = resolve_teacher_id(user)
+    updated_brk = await service.update_recurrent_event(
+        session, brk, data, create_validator, teacher_id=teacher_id
+    )
     return RecurrentBreakPublic.model_validate(updated_brk)
 
 
@@ -105,7 +120,10 @@ async def update_recurrent_break(
     summary="Delete an existing recurring break",
 )
 async def delete_recurrent_break(
-    session: SessionDep, _: CurrentUser, break_id: uuid.UUID, validator: ValidatedBreakExists,
+    session: SessionDep,
+    _: CurrentUser,
+    break_id: uuid.UUID,
+    validator: ValidatedBreakExists,
 ) -> None:
     brk = await validator.validate_recurrent(session, break_id)
     await service.delete_event(session, brk)
