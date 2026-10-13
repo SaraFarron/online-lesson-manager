@@ -19,5 +19,9 @@
     "files.watcherExclude": {
         "**/__pycache__/**": true,
         "**/.venv/**": true
+    },
+    "chat.tools.terminal.autoApprove": {
+        "git stash": true,
+        "uv": true
     }
 }

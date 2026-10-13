@@ -1,18 +1,122 @@
-# FastAPI Best Practices for AI Agents
+# Online Lesson Manager — Agent Instructions
 
-A machine-readable companion to [README.md](./README.md) for AI coding agents
-working in FastAPI projects. Same rules, restructured for fast pattern matching:
-version pins, Do/Don't blocks, anti-patterns, and a quick-reference table.
+Scheduling backend for online tutors (teachers/students), with a planned
+Telegram bot and HTMX frontend as separate clients. Full product spec
+(roles, scheduling rules, notifications) lives in [README.md](./README.md)
+(written in Russian) — read it before implementing scheduling/notification
+features.
+
+## Running, linting, migrations
+
+- Package manager: **uv** (`uv.lock` present). Install deps: `uv sync`.
+- Run dev server: `fastapi run backend/main.py` (uses SQLite `dev.db` via
+  `DATABASE_URL` in `.env`). Full stack incl. Postgres: `docker compose up`.
+- Apply migrations: `alembic upgrade head` (runs automatically in Docker
+  entrypoint). New migration file names follow `YYYY-MM-DD_slug.py`
+  (configured in `alembic.ini` via `file_template`).
+- Lint/format/typecheck before considering a change done:
+  ```shell
+  ruff check --fix backend
+  ruff format backend
+  mypy backend   # strict mode, alembic/ excluded
+  ```
+- **No test suite exists yet.** Don't assume `pytest` tests exist or can be
+  run; if asked to add tests, set up the `httpx.AsyncClient` fixture pattern
+  from the Testing section below as the first one.
+
+For writing release plans, decomposing a README.md feature into small tasks,
+or drafting a task description for an AI agent or human, use the
+[plan-feature skill](.github/skills/plan-feature/SKILL.md).
+
+## Architecture
+
+- `backend/main.py` wires routers under `/api/v1/...` (auth, lessons,
+  recurrent-lessons, breaks, recurrent-breaks, vacations) plus `pages`
+  (server-rendered HTML via Jinja2) and an `htmx` router for fragments.
+- Domain packages follow the structure in the Project Structure section
+  below. **Events are the core abstraction**: `backend/events/` defines
+  `Event`/`RecurrentEvent`/`RecurrentCancels` models and composable
+  `EventValidator` classes (time overlap, user existence, teacher conflict
+  checks). `lessons/`, `breaks/`, and `vacations/` each reuse
+  `events` validators/schemas and specialize `event_type`
+  (`EventType` enum: `LESSON`, `BREAK`, `VACATION`) — follow this
+  compose-don't-duplicate pattern for any new event-like domain.
+- Recurring events (`RecurrentEvent`) have an `interval`/`interval_end`;
+  individual skipped occurrences are stored as rows in `RecurrentCancels`
+  rather than mutating the series.
+- Auth: roles are `ADMIN` / `TEACHER` / `STUDENT` (StrEnum on `User.role`);
+  students link to a teacher via `User.teacher_id`. JWT via PyJWT,
+  passwords via `pwdlib[argon2,bcrypt]`.
+- **Stub/unimplemented packages** — don't assume behavior exists just
+  because the package exists: `backend/homework/` (empty), `backend/telegram/`
+  and top-level `telegram/` (empty), `backend/schedule/router.py` (empty).
+  `backend/notifications/` has only an ORM model, no router/service yet.
+- Config is split per-domain (`BaseSettings` subclasses), e.g.
+  `backend/config.py` (`Settings`, no prefix) and `backend/auth/config.py`
+  (`AuthConfig`, `env_prefix="AUTH_"`). Add new env vars to the owning
+  domain's config, not the global one.
+
+## Feature Status (vs product spec)
+
+[README.md](./README.md) (Russian) is the full product spec. This table maps
+it to what's actually implemented, so planning/coding tasks don't redo
+finished work or assume unbuilt features exist. Keep it updated when you ship
+a README-described feature.
+
+| README section | Status | Notes |
+|---|---|---|
+| Teacher/student registration (`/auth/register`, `/auth/login`) | **Done** | Email+password + JWT, not the Telegram `/start` flow described in README — that's bot work, not started. |
+| Teacher settings (work hours, lesson length, break, max/day) | **Partial** | `TeacherProfile` has `work_start/end`, `lesson_length`, `between_lessons_break`, `max_lessons_per_day`. Missing: max *consecutive* lessons ("уроков подряд"), working-days-of-week field, settings aren't enforced by any validator yet. |
+| Student settings (notifications) | **Partial** | `StudentProfile.notification_lesson` / `notification_homework` columns exist; nothing reads or acts on them. |
+| Lessons / breaks / vacations CRUD (one-off + recurring) | **Partial** | Routers + `events` validators/service work for create/update/delete. Missing: enforcing teacher work hours/days, max-per-day, max-consecutive, and the vacation/lesson priority rules from README. See Known Issues below for a routing bug in vacations. |
+| Schedule viewing (day/week, timeline, teacher sees student names) | **Not started** | No endpoint computes a day/week schedule; `backend/schedule/router.py` is empty. |
+| Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
+| Homework (assign/submit/mark done) | **Not started** | `backend/homework/` is an empty package. |
+| Student profile view for teacher (history, delete w/ confirm) | **Not started** | No action-log table or endpoint. |
+| Telegram bot | **Not started** | `backend/telegram/` and top-level `telegram/` are empty packages. |
+| HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |
+
+## Known Issues / Tech Debt
+
+Found during codebase exploration — be aware of these before touching the
+affected code, and don't build new work on top of the dead code paths:
+
+- **`vacations/router.py` is missing `teacher_id`.** It calls
+  `service.create_event(session, data, validator)` /
+  `service.update_event(session, vacation, data, create_validator)`, but both
+  functions require a `teacher_id` keyword arg. This will raise `TypeError` at
+  runtime. Compare with `breaks/router.py`, which correctly passes
+  `teacher_id=user.teacher_id`. Needs a product decision (README says students
+  can create their own vacations) before fixing.
+- **Dead per-domain validator/dependency files.** `backend/lessons/validators.py`
+  + `backend/lessons/dependencies.py` and `backend/vacations/dependencies.py`
+  define `LessonValidator`/`ValidatedLesson`/`ValidatedVacation` etc., but the
+  actual routers (`lessons/router.py`, `vacations/router.py`) import
+  `ValidatedEvent`/`ValidatedEventExists` from `backend.events.dependencies`
+  directly instead. Only `backend/breaks/` correctly uses its own
+  `breaks/dependencies.py`. Don't extend the lessons/vacations-local files
+  expecting them to run — check what the router actually imports first.
+- **Duplicate `EventValidator` class in `backend/events/validators.py`.** An
+  abstract-base-class version is defined first, then a second, unrelated
+  `EventValidator` (list-of-validators composite) is defined later in the same
+  file with the same name — the second silently shadows the first. The
+  shadowing one is the one in use; the ABC one is dead.
+- **`Event.start`/`Event.end` are naive `DateTime`** (no `timezone=True`),
+  unlike `TimestampMixin`'s tz-aware columns. README requires the DB to have
+  a single consistent timezone while each user sees their own — decide and
+  document the storage convention (likely "always UTC, naive") before building
+  schedule-viewing/timezone-conversion features.
 
 ## Compatibility Matrix
 
-Pin to these versions or newer. Examples in this file assume them.
+Versions actually pinned in `pyproject.toml` for this repo (examples in this
+file assume these or newer):
 
-| Dependency       | Minimum   | Notes                                                |
+| Dependency       | Pinned    | Notes                                                |
 |------------------|-----------|------------------------------------------------------|
-| Python           | 3.11      | Required for `StrEnum` and `X \| Y` union syntax     |
-| FastAPI          | 0.115     | `Annotated[T, Depends(...)]` is the idiomatic form   |
-| Pydantic         | 2.7       | v1 APIs (`json_encoders`, `.dict()`) are removed     |
+| Python           | 3.14      | Required for `StrEnum` and `X \| Y` union syntax     |
+| FastAPI          | 0.141     | `Annotated[T, Depends(...)]` is the idiomatic form   |
+| Pydantic         | 2.4+      | v1 APIs (`json_encoders`, `.dict()`) are removed     |
 | pydantic-settings| 2.4       | Lives in a separate package since Pydantic v2        |
 | SQLAlchemy       | 2.0       | Use the async API (`AsyncSession`, `async_sessionmaker`) |
 | Alembic          | 1.13      | Async-aware migrations                               |
