@@ -4,9 +4,11 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.events.validators import (
+    EventExistsValidator,
+    EventValidator,
+)
 from backend.lessons.validators import (
-    LessonExistsValidator,
-    LessonValidator,
     default_lesson_validator,
     exists_lesson_validator,
 )
@@ -14,12 +16,12 @@ from backend.lessons.validators import (
 
 async def validated_lesson_data(
     session: Annotated[AsyncSession, Depends(get_db)],  # noqa: ARG001
-    validator: Annotated[LessonValidator, Depends(lambda: default_lesson_validator)],
-):
+    validator: Annotated[EventValidator, Depends(lambda: default_lesson_validator)],
+) -> EventValidator:
     return validator
 
 
-ValidatedLesson = Annotated[LessonValidator, Depends(validated_lesson_data)]
+ValidatedLesson = Annotated[EventValidator, Depends(validated_lesson_data)]
 ValidatedLessonExists = Annotated[
-    LessonExistsValidator, Depends(lambda: exists_lesson_validator)
+    EventExistsValidator, Depends(lambda: exists_lesson_validator)
 ]

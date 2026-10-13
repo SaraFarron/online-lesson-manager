@@ -14,7 +14,11 @@ from backend.breaks.schemas import (
     RecurrentBreakUpdate,
 )
 from backend.events import service
-from backend.events.utils import resolve_teacher_id
+from backend.events.utils import (
+    assert_can_assign_user,
+    assert_owns_event,
+    resolve_teacher_id,
+)
 
 router = APIRouter(prefix="/breaks", tags=["breaks"])
 
@@ -29,6 +33,7 @@ async def create_break(
     session: SessionDep, user: CurrentUser, data: BreakCreate, validator: ValidatedBreak
 ) -> Any:
     teacher_id = resolve_teacher_id(user)
+    await assert_can_assign_user(session, user, data.user_id)
     brk = await service.create_event(session, data, validator, teacher_id=teacher_id)
     return BreakPublic.model_validate(brk)
 
@@ -49,6 +54,8 @@ async def update_break(
 ) -> Any:
     brk = await exist_validator.validate(session, break_id)
     teacher_id = resolve_teacher_id(user)
+    assert_owns_event(teacher_id, brk)
+    await assert_can_assign_user(session, user, data.user_id)
     updated_brk = await service.update_event(
         session, brk, data, create_validator, teacher_id=teacher_id
     )
@@ -62,11 +69,13 @@ async def update_break(
 )
 async def delete_break(
     session: SessionDep,
-    _: CurrentUser,
+    user: CurrentUser,
     break_id: uuid.UUID,
     validator: ValidatedBreakExists,
 ) -> None:
     brk = await validator.validate(session, break_id)
+    teacher_id = resolve_teacher_id(user)
+    assert_owns_event(teacher_id, brk)
     await service.delete_event(session, brk)
 
 
@@ -86,6 +95,7 @@ async def create_recurrent_break(
     validator: ValidatedBreak,
 ) -> Any:
     teacher_id = resolve_teacher_id(user)
+    await assert_can_assign_user(session, user, data.user_id)
     brk = await service.create_recurrent_event(
         session, data, validator, teacher_id=teacher_id
     )
@@ -108,6 +118,8 @@ async def update_recurrent_break(
 ) -> Any:
     brk = await exist_validator.validate_recurrent(session, break_id)
     teacher_id = resolve_teacher_id(user)
+    assert_owns_event(teacher_id, brk)
+    await assert_can_assign_user(session, user, data.user_id)
     updated_brk = await service.update_recurrent_event(
         session, brk, data, create_validator, teacher_id=teacher_id
     )
@@ -121,9 +133,11 @@ async def update_recurrent_break(
 )
 async def delete_recurrent_break(
     session: SessionDep,
-    _: CurrentUser,
+    user: CurrentUser,
     break_id: uuid.UUID,
     validator: ValidatedBreakExists,
 ) -> None:
     brk = await validator.validate_recurrent(session, break_id)
+    teacher_id = resolve_teacher_id(user)
+    assert_owns_event(teacher_id, brk)
     await service.delete_event(session, brk)

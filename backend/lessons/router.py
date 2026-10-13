@@ -5,8 +5,12 @@ from fastapi import APIRouter, status
 
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.events import service
-from backend.events.dependencies import ValidatedEvent, ValidatedEventExists
-from backend.events.utils import resolve_teacher_id
+from backend.events.utils import (
+    assert_can_assign_user,
+    assert_owns_event,
+    resolve_teacher_id,
+)
+from backend.lessons.dependencies import ValidatedLesson, ValidatedLessonExists
 from backend.lessons.schemas import (
     LessonCreate,
     LessonPublic,
@@ -29,9 +33,10 @@ async def create_lesson(
     session: SessionDep,
     user: CurrentUser,
     data: LessonCreate,
-    validator: ValidatedEvent,
+    validator: ValidatedLesson,
 ) -> Any:
     teacher_id = resolve_teacher_id(user)
+    await assert_can_assign_user(session, user, data.user_id)
     lesson = await service.create_event(session, data, validator, teacher_id=teacher_id)
     return LessonPublic.model_validate(lesson)
 
@@ -47,11 +52,13 @@ async def update_lesson(
     user: CurrentUser,
     lesson_id: uuid.UUID,
     data: LessonUpdate,
-    create_validator: ValidatedEvent,
-    exist_validator: ValidatedEventExists,
+    create_validator: ValidatedLesson,
+    exist_validator: ValidatedLessonExists,
 ) -> Any:
     lesson = await exist_validator.validate(session, lesson_id)
     teacher_id = resolve_teacher_id(user)
+    assert_owns_event(teacher_id, lesson)
+    await assert_can_assign_user(session, user, data.user_id)
     updated_lesson = await service.update_event(
         session, lesson, data, create_validator, teacher_id=teacher_id
     )
@@ -65,11 +72,13 @@ async def update_lesson(
 )
 async def delete_lesson(
     session: SessionDep,
-    _: CurrentUser,
+    user: CurrentUser,
     lesson_id: uuid.UUID,
-    validator: ValidatedEventExists,
+    validator: ValidatedLessonExists,
 ) -> None:
     lesson = await validator.validate(session, lesson_id)
+    teacher_id = resolve_teacher_id(user)
+    assert_owns_event(teacher_id, lesson)
     await service.delete_event(session, lesson)
 
 
@@ -86,9 +95,10 @@ async def create_recurrent_lesson(
     session: SessionDep,
     user: CurrentUser,
     data: RecurrentLessonCreate,
-    validator: ValidatedEvent,
+    validator: ValidatedLesson,
 ) -> Any:
     teacher_id = resolve_teacher_id(user)
+    await assert_can_assign_user(session, user, data.user_id)
     lesson = await service.create_recurrent_event(
         session, data, validator, teacher_id=teacher_id
     )
@@ -106,11 +116,13 @@ async def update_recurrent_lesson(
     user: CurrentUser,
     lesson_id: uuid.UUID,
     data: RecurrentLessonUpdate,
-    create_validator: ValidatedEvent,
-    exist_validator: ValidatedEventExists,
+    create_validator: ValidatedLesson,
+    exist_validator: ValidatedLessonExists,
 ) -> Any:
     lesson = await exist_validator.validate_recurrent(session, lesson_id)
     teacher_id = resolve_teacher_id(user)
+    assert_owns_event(teacher_id, lesson)
+    await assert_can_assign_user(session, user, data.user_id)
     updated_lesson = await service.update_recurrent_event(
         session, lesson, data, create_validator, teacher_id=teacher_id
     )
@@ -124,9 +136,11 @@ async def update_recurrent_lesson(
 )
 async def delete_recurrent_lesson(
     session: SessionDep,
-    _: CurrentUser,
+    user: CurrentUser,
     lesson_id: uuid.UUID,
-    validator: ValidatedEventExists,
+    validator: ValidatedLessonExists,
 ) -> None:
     lesson = await validator.validate_recurrent(session, lesson_id)
+    teacher_id = resolve_teacher_id(user)
+    assert_owns_event(teacher_id, lesson)
     await service.delete_event(session, lesson)
