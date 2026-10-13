@@ -106,7 +106,7 @@ async def update_recurrent_break(
     create_validator: ValidatedBreak,
     exist_validator: ValidatedBreakExists,
 ) -> Any:
-    brk = await exist_validator.validate(session, break_id)
+    brk = await exist_validator.validate_recurrent(session, break_id)
     teacher_id = resolve_teacher_id(user)
     updated_brk = await service.update_recurrent_event(
         session, brk, data, create_validator, teacher_id=teacher_id

@@ -20,4 +20,6 @@ async def validated_event_data(
 
 
 ValidatedEvent = Annotated[EventValidator, Depends(validated_event_data)]
-ValidatedEventExists = Annotated[EventExistsValidator, Depends(lambda: exists_event_validator)]
+ValidatedEventExists = Annotated[
+    EventExistsValidator, Depends(lambda: exists_event_validator)
+]

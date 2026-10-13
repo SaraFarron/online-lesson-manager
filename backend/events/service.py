@@ -15,9 +15,14 @@ from backend.events.validators import EventValidator
 
 
 async def create_event(
-    session: AsyncSession, event_data: EventCreate, validator: EventValidator, teacher_id: uuid.UUID
+    session: AsyncSession,
+    event_data: EventCreate,
+    validator: EventValidator,
+    teacher_id: uuid.UUID,
 ) -> Event:
-    await validator.validate_all(session, event_data, teacher_id=teacher_id, user_id=event_data.user_id)
+    await validator.validate_all(
+        session, event_data, teacher_id=teacher_id, user_id=event_data.user_id
+    )
 
     event = Event(
         start=event_data.start,
@@ -33,9 +38,19 @@ async def create_event(
 
 
 async def update_event(
-    session: AsyncSession, event: Event, event_data: EventUpdate, validator: EventValidator, teacher_id: uuid.UUID
+    session: AsyncSession,
+    event: Event,
+    event_data: EventUpdate,
+    validator: EventValidator,
+    teacher_id: uuid.UUID,
 ) -> Event:
-    await validator.validate_all(session, event_data, teacher_id=teacher_id, user_id=event.user_id)
+    await validator.validate_all(
+        session,
+        event_data,
+        teacher_id=teacher_id,
+        user_id=event.user_id,
+        exclude_event_id=event.id,
+    )
 
     event.start = event_data.start
     event.end = event_data.end
@@ -54,9 +69,12 @@ async def delete_event(session: AsyncSession, event: Event | RecurrentEvent) -> 
 async def create_recurrent_event(
     session: AsyncSession,
     event_data: RecurrentEventCreate | RecurrentBreakCreate,
-    validator: EventValidator, teacher_id: uuid.UUID,
- ) -> RecurrentEvent:
-    await validator.validate_all(session, event_data, teacher_id=teacher_id, user_id=event_data.user_id)
+    validator: EventValidator,
+    teacher_id: uuid.UUID,
+) -> RecurrentEvent:
+    await validator.validate_all(
+        session, event_data, teacher_id=teacher_id, user_id=event_data.user_id
+    )
 
     recurrent_event = RecurrentEvent(
         start=event_data.start,
@@ -80,7 +98,13 @@ async def update_recurrent_event(
     validator: EventValidator,
     teacher_id: uuid.UUID,
 ) -> RecurrentEvent:
-    await validator.validate_all(session, event_data, teacher_id=teacher_id, user_id=recurrent_event.user_id)
+    await validator.validate_all(
+        session,
+        event_data,
+        teacher_id=teacher_id,
+        user_id=recurrent_event.user_id,
+        exclude_event_id=recurrent_event.id,
+    )
 
     recurrent_event.start = event_data.start
     recurrent_event.end = event_data.end
@@ -89,7 +113,9 @@ async def update_recurrent_event(
     # Overwrite the existing cancels with the new ones
     if event_data.cancels is not None:
         await session.execute(
-            delete(RecurrentCancels).where(RecurrentCancels.recurrent_event_id == recurrent_event.id)
+            delete(RecurrentCancels).where(
+                RecurrentCancels.recurrent_event_id == recurrent_event.id
+            )
         )
         for cancel in event_data.cancels:
             new_cancel = RecurrentCancels(

@@ -109,7 +109,7 @@ async def update_recurrent_lesson(
     create_validator: ValidatedEvent,
     exist_validator: ValidatedEventExists,
 ) -> Any:
-    lesson = await exist_validator.validate(session, lesson_id)
+    lesson = await exist_validator.validate_recurrent(session, lesson_id)
     teacher_id = resolve_teacher_id(user)
     updated_lesson = await service.update_recurrent_event(
         session, lesson, data, create_validator, teacher_id=teacher_id

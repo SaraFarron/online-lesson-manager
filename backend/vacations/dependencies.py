@@ -22,4 +22,6 @@ async def validated_vacation_data(
 
 
 ValidatedVacation = Annotated[EventValidator, Depends(validated_vacation_data)]
-ValidatedVacationExists = Annotated[EventExistsValidator, Depends(lambda: exists_vacation_validator)]
+ValidatedVacationExists = Annotated[
+    EventExistsValidator, Depends(lambda: exists_vacation_validator)
+]
