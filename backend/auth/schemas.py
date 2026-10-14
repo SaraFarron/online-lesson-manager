@@ -17,13 +17,13 @@ from backend.auth.constants import Roles
 
 
 class UserBase(BaseModel):
-    email: EmailStr
     full_name: str | None = Field(default=None, max_length=256)
     is_active: bool = True
     is_superuser: bool = False
 
 
 class UserCreate(UserBase):
+    email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     role: Roles
     timezone: str
@@ -56,6 +56,7 @@ class UserUpdateMe(BaseModel):
 
 
 class UserPublic(UserBase):
+    email: EmailStr | None
     id: uuid.UUID
     timezone: str
     created_at: datetime

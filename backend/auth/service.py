@@ -23,6 +23,11 @@ from backend.auth.schemas import (
 )
 from backend.auth.utils import hash_password, string_to_time, verify_password
 
+DUMMY_PASSWORD_HASH = (
+    "$argon2id$v=19$m=65536,t=3,p=4$H7HFOyCv3KslcnJb9IzN6w$"
+    "QIK1TR87Xy+3SbsJzNUK3BwbAEgQeFmsIj3XLeWmQSw"
+)
+
 
 async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User | None:
     result = await session.execute(
@@ -118,10 +123,13 @@ async def authenticate(session: AsyncSession, email: str, password: str) -> User
     timing-based email enumeration.
     """
     user = await get_user_by_email(session, email)
-    # Constant-time path: always verify even if user is missing
-    dummy_hash = "$argon2id$v=19$m=65536,t=3,p=4$dummy$dummy"
-    check_hash = user.hashed_password if user else dummy_hash
-    if not verify_password(password, check_hash):
+    check_hash = (
+        user.hashed_password
+        if user is not None and user.hashed_password is not None
+        else DUMMY_PASSWORD_HASH
+    )
+    valid = verify_password(password, check_hash)
+    if not valid or user is None or user.hashed_password is None:
         return None
     return user
 
