@@ -46,7 +46,23 @@ class TeacherCodeNotFound(HTTPException):
     def __init__(self) -> None:
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Teacher code not found",
+            detail="teacher_code_not_found",
+        )
+
+
+class TeacherCodeAlreadyExists(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Teacher code already in use",
+        )
+
+
+class TeacherCodeGenerationFailed(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="teacher_code_generation_failed",
         )
 
 

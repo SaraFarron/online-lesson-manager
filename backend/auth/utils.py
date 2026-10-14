@@ -3,6 +3,7 @@ from datetime import UTC, datetime, time, timedelta
 import jwt
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
+from sqlalchemy.exc import IntegrityError
 
 from backend.auth.config import auth_settings
 from backend.auth.exceptions import InvalidCredentials
@@ -19,6 +20,14 @@ def hash_password(plain: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return _password_hash.verify(plain, hashed)
+
+
+def is_teacher_code_conflict(error: IntegrityError) -> bool:
+    diagnostic = getattr(error.orig, "diag", None)
+    return (
+        getattr(diagnostic, "constraint_name", None) == "teacher_profile_code_key"
+        or str(error.orig) == "UNIQUE constraint failed: teacher_profile.code"
+    )
 
 
 # ── JWT ───────────────────────────────────────────────────────────────────────

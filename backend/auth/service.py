@@ -1,7 +1,11 @@
 import uuid
 from typing import Any
 
+from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -9,6 +13,8 @@ from backend.auth.constants import Roles
 from backend.auth.exceptions import (
     NotAStudent,
     StudentAlreadyLinked,
+    TeacherCodeAlreadyExists,
+    TeacherCodeGenerationFailed,
     TeacherCodeNotFound,
 )
 from backend.auth.models import StudentProfile, TeacherProfile, User
@@ -16,12 +22,18 @@ from backend.auth.schemas import (
     StudentProfileCreate,
     StudentProfilePublic,
     StudentProfileUpdate,
+    TeacherPreferences,
     TeacherProfileCreate,
     TeacherProfilePublic,
     TeacherProfileUpdate,
     UserCreate,
 )
-from backend.auth.utils import hash_password, string_to_time, verify_password
+from backend.auth.utils import (
+    hash_password,
+    is_teacher_code_conflict,
+    string_to_time,
+    verify_password,
+)
 
 DUMMY_PASSWORD_HASH = (
     "$argon2id$v=19$m=65536,t=3,p=4$H7HFOyCv3KslcnJb9IzN6w$"
@@ -54,18 +66,34 @@ async def link_student_to_teacher(
     if student.teacher_id is not None:
         raise StudentAlreadyLinked()
 
-    result = await session.execute(
-        select(TeacherProfile).where(TeacherProfile.code == teacher_code)
-    )
-    teacher_profile = result.scalar_one_or_none()
-    if not teacher_profile:
-        raise TeacherCodeNotFound()
-
-    student.teacher_id = teacher_profile.teacher_id
+    teacher = await resolve_teacher_code(session, teacher_code)
+    student.teacher_id = teacher.id
     session.add(student)
     await session.commit()
     await session.refresh(student)
     return student
+
+
+async def resolve_teacher_code(session: AsyncSession, teacher_code: str) -> User:
+    result = await session.execute(
+        select(User)
+        .join(TeacherProfile, TeacherProfile.teacher_id == User.id)
+        .where(
+            TeacherProfile.code == teacher_code,
+            User.role == Roles.TEACHER,
+            User.is_active.is_(True),
+        )
+    )
+    teacher = result.scalar_one_or_none()
+    if teacher is None:
+        raise TeacherCodeNotFound()
+    return teacher
+
+
+async def add_user(session: AsyncSession, user: User) -> User:
+    session.add(user)
+    await session.flush()
+    return user
 
 
 async def get_users(
@@ -89,7 +117,7 @@ async def create_user(session: AsyncSession, data: UserCreate) -> User:
         role=data.role.value,
         timezone=data.timezone,
     )
-    session.add(user)
+    await add_user(session, user)
     await session.commit()
     await session.refresh(user)
     return user
@@ -97,12 +125,21 @@ async def create_user(session: AsyncSession, data: UserCreate) -> User:
 
 async def update_user(session: AsyncSession, user: User, data: dict[str, Any]) -> User:
     if "password" in data and data["password"] is not None:
+        if user.telegram_user_id is not None and user.hashed_password is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Password credentials are not supported for Telegram-only accounts",
+            )
         data["hashed_password"] = hash_password(data.pop("password"))
     else:
         data.pop("password", None)
 
     for key, value in data.items():
-        if value is not None:
+        if value is not None or key in {
+            "email",
+            "full_name",
+            "notification_lessons_today",
+        }:
             setattr(user, key, value)
 
     session.add(user)
@@ -137,15 +174,19 @@ async def authenticate(session: AsyncSession, email: str, password: str) -> User
 async def create_student_profile(
     session: AsyncSession, student_profile_data: StudentProfileCreate, user: User
 ) -> StudentProfilePublic:
-    user.student_profile = StudentProfile(
-        student=user,
-        notification_lesson=student_profile_data.notification_lesson,
-        notification_homework=student_profile_data.notification_homework,
-    )
-    session.add(user)
+    profile = await add_student_profile(session, student_profile_data, user)
     await session.commit()
-    await session.refresh(user)
-    return StudentProfilePublic.model_validate(user.student_profile)
+    await session.refresh(profile)
+    return StudentProfilePublic.model_validate(profile)
+
+
+async def add_student_profile(
+    session: AsyncSession, data: StudentProfileCreate, user: User
+) -> StudentProfile:
+    profile = StudentProfile(student_id=user.id, **data.model_dump())
+    session.add(profile)
+    await session.flush()
+    return profile
 
 
 async def update_student_profile(
@@ -153,10 +194,8 @@ async def update_student_profile(
 ) -> StudentProfilePublic:
     if not user.student_profile:
         raise ValueError("User does not have a student profile")
-    user.student_profile.notification_lesson = student_profile_data.notification_lesson  # ty: ignore[invalid-assignment]
-    user.student_profile.notification_homework = (
-        student_profile_data.notification_homework
-    )  # ty: ignore[invalid-assignment]
+    for key, value in student_profile_data.model_dump(exclude_unset=True).items():
+        setattr(user.student_profile, key, value)
     session.add(user)
     await session.commit()
     await session.refresh(user)
@@ -166,23 +205,43 @@ async def update_student_profile(
 async def create_teacher_profile(
     session: AsyncSession, teacher_profile_data: TeacherProfileCreate, user: User
 ) -> TeacherProfilePublic:
-    user.teacher_profile = TeacherProfile(
-        teacher=user,
-        code=teacher_profile_data.code,
-        work_start=string_to_time(teacher_profile_data.work_start)
-        if teacher_profile_data.work_start
-        else None,
-        work_end=string_to_time(teacher_profile_data.work_end)
-        if teacher_profile_data.work_end
-        else None,
-        lesson_length=teacher_profile_data.lesson_length,
-        between_lessons_break=teacher_profile_data.between_lessons_break,
-        max_lessons_per_day=teacher_profile_data.max_lessons_per_day,
+    profile = await add_teacher_profile(
+        session, teacher_profile_data, user, code=teacher_profile_data.code
     )
-    session.add(user)
     await session.commit()
-    await session.refresh(user)
-    return TeacherProfilePublic.model_validate(user.teacher_profile)
+    await session.refresh(profile)
+    return TeacherProfilePublic.model_validate(profile)
+
+
+def generate_teacher_code() -> str:
+    return uuid.uuid4().hex
+
+
+async def add_teacher_profile(
+    session: AsyncSession,
+    data: TeacherPreferences,
+    user: User,
+    *,
+    code: str | None = None,
+) -> TeacherProfile:
+    values = data.model_dump(exclude={"code"})
+    values["work_start"] = string_to_time(data.work_start)
+    values["work_end"] = string_to_time(data.work_end)
+    for _ in range(5):
+        try:
+            async with session.begin_nested():
+                profile = TeacherProfile(
+                    teacher_id=user.id, code=code or generate_teacher_code(), **values
+                )
+                session.add(profile)
+                await session.flush()
+            return profile
+        except IntegrityError as exc:
+            if not is_teacher_code_conflict(exc):
+                raise
+            if code is not None:
+                raise TeacherCodeAlreadyExists() from exc
+    raise TeacherCodeGenerationFailed()
 
 
 async def update_teacher_profile(
@@ -190,27 +249,26 @@ async def update_teacher_profile(
 ) -> TeacherProfilePublic:
     if not user.teacher_profile:
         raise ValueError("User does not have a teacher profile")
-    if not teacher_profile_data.code:
-        teacher_profile_data.code = uuid.uuid4().hex[
-            :8
-        ]  # Generate a new code if not provided
-    user.teacher_profile.code = teacher_profile_data.code
-    user.teacher_profile.work_start = (  # ty: ignore[invalid-assignment]
-        string_to_time(teacher_profile_data.work_start)
-        if teacher_profile_data.work_start
-        else None
+    profile = user.teacher_profile
+    saved = TeacherProfilePublic.model_validate(profile).model_dump(
+        mode="json", exclude={"id", "teacher_id"}
     )
-    user.teacher_profile.work_end = (  # ty: ignore[invalid-assignment]
-        string_to_time(teacher_profile_data.work_end)
-        if teacher_profile_data.work_end
-        else None
-    )
-    user.teacher_profile.lesson_length = teacher_profile_data.lesson_length  # ty: ignore[invalid-assignment]
-    user.teacher_profile.between_lessons_break = (
-        teacher_profile_data.between_lessons_break
-    )
-    user.teacher_profile.max_lessons_per_day = teacher_profile_data.max_lessons_per_day
+    saved.update(teacher_profile_data.model_dump(exclude_unset=True))
+    try:
+        merged = TeacherProfileCreate.model_validate(saved)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors(include_context=False)) from exc
+    for key, value in merged.model_dump().items():
+        if key in {"work_start", "work_end"}:
+            value = string_to_time(value)
+        setattr(profile, key, value)
     session.add(user)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        if is_teacher_code_conflict(exc):
+            raise TeacherCodeAlreadyExists() from exc
+        raise
     await session.refresh(user)
     return TeacherProfilePublic.model_validate(user.teacher_profile)

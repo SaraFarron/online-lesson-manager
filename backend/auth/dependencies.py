@@ -10,6 +10,7 @@ from backend.auth.exceptions import (
     InactiveUser,
     InsufficientPermissions,
     InvalidCredentials,
+    UserNotFound,
 )
 from backend.auth.models import User
 from backend.auth.utils import decode_access_token
@@ -54,3 +55,17 @@ async def get_current_superuser(
 # Convenience type aliases for use in route signatures
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 SuperUser = Annotated[User, Depends(get_current_superuser)]
+
+
+async def get_owned_profile_user(
+    user_id: uuid.UUID, current_user: CurrentUser, session: SessionDep
+) -> User:
+    if current_user.id != user_id and not current_user.is_superuser:
+        raise InsufficientPermissions()
+    user = await service.get_user_by_id(session, user_id)
+    if user is None:
+        raise UserNotFound()
+    return user
+
+
+OwnedProfileUser = Annotated[User, Depends(get_owned_profile_user)]

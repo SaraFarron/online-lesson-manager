@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +14,7 @@ from backend.lessons.router import recurrent_router as recurrent_lessons_router
 from backend.lessons.router import router as lessons_router
 from backend.pages.router import htmx_router
 from backend.pages.router import router as pages_router
+from backend.telegram.router import router as telegram_router
 from backend.vacations.router import router as vacations_router
 
 SHOW_DOCS_IN = {"local", "staging"}
@@ -25,7 +27,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     # ── Shutdown ─────────────────────────────────────────────────────────────
 
 
-app_kwargs: dict = {
+app_kwargs: dict[str, Any] = {
     "title": settings.PROJECT_NAME,
     "lifespan": lifespan,
     "docs_url": "/docs" if settings.ENVIRONMENT in SHOW_DOCS_IN else None,
@@ -40,6 +42,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(pages_router)
 app.include_router(htmx_router)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(telegram_router, prefix=settings.API_V1_STR)
 app.include_router(lessons_router, prefix=settings.API_V1_STR)
 app.include_router(recurrent_lessons_router, prefix=settings.API_V1_STR)
 app.include_router(breaks_router, prefix=settings.API_V1_STR)

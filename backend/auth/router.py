@@ -6,7 +6,12 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from backend.auth import service
 from backend.auth.constants import Roles
-from backend.auth.dependencies import CurrentUser, SessionDep, SuperUser
+from backend.auth.dependencies import (
+    CurrentUser,
+    OwnedProfileUser,
+    SessionDep,
+    SuperUser,
+)
 from backend.auth.exceptions import EmailAlreadyExists, UserNotFound
 from backend.auth.schemas import (
     StudentJoinTeacher,
@@ -20,12 +25,23 @@ from backend.auth.schemas import (
     UserCreate,
     UserList,
     UserPublic,
+    UserRegister,
     UserUpdate,
     UserUpdateMe,
 )
 from backend.auth.utils import create_access_token
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(
+    prefix="/auth",
+    tags=["auth"],
+    responses={
+        401: {"description": "Missing or invalid user authentication"},
+        403: {"description": "Profile access requires ownership or superuser"},
+        404: {"description": "Account, profile or invitation not found"},
+        409: {"description": "Email or invitation code already in use"},
+        422: {"description": "Invalid preferences or forbidden input fields"},
+    },
+)
 
 
 # ── Authentication ────────────────────────────────────────────────────────────
@@ -60,12 +76,10 @@ async def login(
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user account",
 )
-async def register(session: SessionDep, data: UserCreate) -> Any:
+async def register(session: SessionDep, data: UserRegister) -> Any:
     if await service.get_user_by_email(session, data.email):
         raise EmailAlreadyExists()
-    # Prevent self-elevating to superuser via the public endpoint
-    data.is_superuser = False
-    return await service.create_user(session, data)
+    return await service.create_user(session, UserCreate(**data.model_dump()))
 
 
 # ── Current user (self-service) ───────────────────────────────────────────────
@@ -83,7 +97,8 @@ async def read_me(current_user: CurrentUser) -> Any:
 @router.patch(
     "/me",
     response_model=UserPublic,
-    summary="Update the currently authenticated user's profile",
+    summary="Update own profile, timezone and local daily-digest preference",
+    description="Omitted fields are unchanged; null disables the digest. Privilege fields are forbidden.",
 )
 async def update_me(
     session: SessionDep, current_user: CurrentUser, data: UserUpdateMe
@@ -124,7 +139,7 @@ async def list_users(
     limit: int = 100,
 ) -> Any:
     users, total = await service.get_users(session, skip=skip, limit=limit)
-    return UserList(items=users, total=total)
+    return {"items": users, "total": total}
 
 
 @router.post(
@@ -193,13 +208,9 @@ async def delete_user_admin(
 )
 async def create_student_profile(
     session: SessionDep,
-    _: CurrentUser,
-    user_id: uuid.UUID,
+    user: OwnedProfileUser,
     data: StudentProfileCreate,
 ) -> Any:
-    user = await service.get_user_by_id(session, user_id)
-    if not user:
-        raise UserNotFound()
     if user.student_profile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -220,13 +231,8 @@ async def create_student_profile(
     response_model=StudentProfilePublic,
 )
 async def get_student_profile(
-    session: SessionDep,
-    _: CurrentUser,
-    user_id: uuid.UUID,
+    user: OwnedProfileUser,
 ) -> Any:
-    user = await service.get_user_by_id(session, user_id)
-    if not user:
-        raise UserNotFound()
     if not user.student_profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -241,13 +247,9 @@ async def get_student_profile(
 )
 async def update_student_profile(
     session: SessionDep,
-    _: CurrentUser,
-    user_id: uuid.UUID,
+    user: OwnedProfileUser,
     data: StudentProfileUpdate,
 ) -> Any:
-    user = await service.get_user_by_id(session, user_id)
-    if not user:
-        raise UserNotFound()
     if not user.student_profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -265,13 +267,9 @@ async def update_student_profile(
 )
 async def create_teacher_profile(
     session: SessionDep,
-    _: CurrentUser,
-    user_id: uuid.UUID,
+    user: OwnedProfileUser,
     data: TeacherProfileCreate,
 ) -> Any:
-    user = await service.get_user_by_id(session, user_id)
-    if not user:
-        raise UserNotFound()
     if user.teacher_profile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -292,13 +290,8 @@ async def create_teacher_profile(
     response_model=TeacherProfilePublic,
 )
 async def get_teacher_profile(
-    session: SessionDep,
-    _: CurrentUser,
-    user_id: uuid.UUID,
+    user: OwnedProfileUser,
 ) -> Any:
-    user = await service.get_user_by_id(session, user_id)
-    if not user:
-        raise UserNotFound()
     if not user.teacher_profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -313,13 +306,9 @@ async def get_teacher_profile(
 )
 async def update_teacher_profile(
     session: SessionDep,
-    _: CurrentUser,
-    user_id: uuid.UUID,
+    user: OwnedProfileUser,
     data: TeacherProfileUpdate,
 ) -> Any:
-    user = await service.get_user_by_id(session, user_id)
-    if not user:
-        raise UserNotFound()
     if not user.teacher_profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
