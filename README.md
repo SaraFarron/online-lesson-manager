@@ -6,6 +6,101 @@
 
 ## Архитектура
 
+### Authentication implementation
+
+Accounts share the `user` table. Telegram-only accounts have nullable email/password
+and a unique 64-bit `telegram_user_id`; `telegram_private_chat_id` is delivery routing,
+not identity. Password registration still requires email and password. Telegram-only
+accounts cannot use password login; adding credentials or merging accounts is not supported.
+
+The Telegram-identity migration refuses downgrade while any account lacks credentials
+or retains a Telegram binding. Export/migrate affected accounts and explicitly clear
+bindings before retrying. Downgrade never deletes accounts or invents credentials.
+
+New teacher preferences default to 09:00–18:00, ISO weekdays 1–5, 60-minute
+lessons, 5-minute breaks, 4 consecutive lessons, and 6 lessons/day. Existing
+work-hour/break settings are not overwritten by migrations. Invitation codes
+are unique and deep-link-safe; duplicate/invalid existing codes stop migration
+for explicit remediation.
+
+Notification units: daily digest = local minutes since midnight (0–1439),
+lesson reminder = minutes before lesson (1–600), homework = positive days
+before lesson; null disables any notification. Telegram onboarding defaults
+are 540 / 15 / 2. The owner-approved onboarding migration resets existing
+notification preferences to these values; downgrade removes new schema fields
+but does not restore the former notification values. Preferences are saved only:
+notification delivery and scheduling enforcement are not implemented here.
+
+Profile PUT endpoints use partial-update semantics: omitted fields preserve saved
+values and invitation codes; explicit null disables notification preferences only.
+Teacher preferences are validated against the merged saved/requested state. API
+work times use `HH:MM`; lesson-reminder UI must explicitly ask for hours or minutes
+and convert the answer to backend minutes.
+
+All teacher/student profile create/read/update routes require the profile owner
+or an existing superuser. Teacher role alone does not grant access to other users'
+profiles. `/api/v1/auth/me` includes role, teacher linkage, timezone and digest
+preference; PATCH accepts only self-service fields. Public password registration
+accepts TEACHER/STUDENT, not ADMIN or privilege flags.
+
+The trusted adapter uses `POST /api/v1/telegram/session` with JSON
+`{"telegram_user_id": 5000000000, "telegram_private_chat_id": 5000000000}`.
+Configure backend `TELEGRAM_SERVICE_CREDENTIAL` to an independently generated
+secret of at least 32 characters, and send it in `X-Bot-Service-Key`.
+Never reuse the Bot API token, JWT signing key, or a user JWT as this credential.
+Missing configuration disables adapter access (503); absent/wrong keys return 401.
+Unknown senders return 404 with `detail: telegram_identity_not_found`; inactive
+accounts return 400. Success returns `access_token` and `token_type: bearer`,
+usable with existing user endpoints.
+
+Use HTTPS between servers. The backend verifies the bot credential, not the
+Telegram update itself: the bot must derive identity from the real update sender,
+never callback data or user input. Never log credentials, tokens, or full payloads.
+
+`POST /api/v1/telegram/register` requires the same service header. Teacher example:
+```json
+{
+  "telegram_user_id": 5000000000,
+  "telegram_private_chat_id": 5000000000,
+  "role": "TEACHER",
+  "timezone": "Asia/Bangkok",
+  "full_name": "Example Teacher",
+  "notification_lessons_today": 540,
+  "profile": {
+    "work_start": "09:00",
+    "work_end": "18:00",
+    "working_days": [1, 2, 3, 4, 5],
+    "lesson_length": 60,
+    "between_lessons_break": 5,
+    "max_consecutive_lessons": 4,
+    "max_lessons_per_day": 6
+  }
+}
+```
+Student input uses `role: STUDENT`, required `teacher_code`, and an optional
+`profile` containing `notification_lesson` (default 15) and
+`notification_homework` (default 2). Both roles require an explicit valid IANA
+timezone. Omitted profiles use defaults; explicit null notification values disable
+them. Do not send email/password, backend IDs, active/superuser flags, or teacher codes
+inside a teacher profile.
+
+Registration returns 201 and the normal token shape only after commit. Repeat or
+concurrent registration returns 409 with `detail: telegram_already_registered`;
+recover uncertain/lost responses through `/session`, not blind registration retries.
+Read `/auth/me` with the JWT, then the owner's teacher/student profile. Teacher
+profiles expose the server-generated invitation code.
+
+`POST /api/v1/telegram/teacher-code/resolve` accepts `{"teacher_code": "CODE"}`
+and returns only `teacher_id` / `full_name` for confirmation. Unknown, inactive
+or non-teacher invitations return 404 with `detail: teacher_code_not_found`.
+Registration checks the invitation again; bad settings return 422 and cannot
+leave a partial account. Existing accounts are never reassigned by registration.
+
+Apply schema changes using `uv run alembic upgrade head` before using these routes.
+For local manual checks, run `uv run fastapi dev backend/main.py` and use `/docs`;
+authorize Telegram routes with the service key and user routes with a user JWT.
+The separate bot UI/deployment is not implemented by backend Tasks 00–07.
+
 Интерфейс бота является отдельным сервисом от бекенда. Он должен иметь свой кеш для read only операций. В случае, если бекенд недоступен пользователь все еще должен иметь возможность посмотреть расписание уроков. Восстановление соединения должно идти по паттерну circuit breaker. Пердполагается, что телеграм бот и бекенд запускаются на разных серверах, но для разработки и дебага должна быть возможность запустить их на одной машине. Предполагается, что в будущем будут добавляться новые интерфейсы - фронтенд, другие мессенджеры, интеграции с календарями. Бекенд должен быть универсальным и единственной точкой истины.
 
 ## Фронтенд
@@ -96,5 +191,3 @@
 статусе выполнения домашних работ
 истории последних 10 действий
 кнопку удаления ученика (с подтверждением)
-
-

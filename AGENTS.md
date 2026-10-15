@@ -20,9 +20,9 @@ features.
   ruff format backend
   mypy backend   # strict mode, alembic/ excluded
   ```
-- **No test suite exists yet.** Don't assume `pytest` tests exist or can be
-  run; if asked to add tests, set up the `httpx.AsyncClient` fixture pattern
-  from the Testing section below as the first one.
+- Existing tests use `httpx.AsyncClient` / `ASGITransport`, an isolated real
+  SQLite database, and dependency overrides in `tests/conftest.py`.
+  Run the relevant smoke test with `uv run pytest -q tests/test_smoke.py`.
 
 For writing release plans, decomposing a README.md feature into small tasks,
 or drafting a task description for an AI agent or human, use the
@@ -47,9 +47,16 @@ or drafting a task description for an AI agent or human, use the
 - Auth: roles are `ADMIN` / `TEACHER` / `STUDENT` (StrEnum on `User.role`);
   students link to a teacher via `User.teacher_id`. JWT via PyJWT,
   passwords via `pwdlib[argon2,bcrypt]`.
+  Telegram identity lives directly on `User` (`telegram_user_id`, unique
+  64-bit; private chat ID is routing only). Telegram-only users have no
+  email/password and cannot use password login or add password credentials.
+  `backend/telegram/` provides trusted session/registration/invitation routes
+  using a dedicated `TELEGRAM_SERVICE_CREDENTIAL` / `X-Bot-Service-Key`.
+  Registration owns one transaction; `auth.service.add_*` helpers flush only.
+  Profile routes require owner or superuser; profile PUT is a partial update.
 - **Stub/unimplemented packages** — don't assume behavior exists just
-  because the package exists: `backend/homework/` (empty), `backend/telegram/`
-  and top-level `telegram/` (empty), `backend/schedule/router.py` (empty).
+  because the package exists:   `backend/homework/` (empty), top-level `telegram/` (empty),
+  `backend/schedule/router.py` (empty).
   `backend/notifications/` has only an ORM model, no router/service yet.
 - Config is split per-domain (`BaseSettings` subclasses), e.g.
   `backend/config.py` (`Settings`, no prefix) and `backend/auth/config.py`
@@ -65,15 +72,15 @@ a README-described feature.
 
 | README section | Status | Notes |
 |---|---|---|
-| Teacher/student registration (`/auth/register`, `/auth/login`) | **Done** | Email+password + JWT, not the Telegram `/start` flow described in README — that's bot work, not started. |
-| Teacher settings (work hours, lesson length, break, max/day) | **Partial** | `TeacherProfile` has `work_start/end`, `lesson_length`, `between_lessons_break`, `max_lessons_per_day`. Missing: max *consecutive* lessons ("уроков подряд"), working-days-of-week field, settings aren't enforced by any validator yet. |
-| Student settings (notifications) | **Partial** | `StudentProfile.notification_lesson` / `notification_homework` columns exist; nothing reads or acts on them. |
+| Teacher/student registration (`/auth/register`, `/auth/login`) | **Done (backend)** | Password auth retained; trusted Telegram session/register/invitation API implemented. Bot `/start` UI is not started. No account merging/password addition for Telegram-only users. |
+| Teacher settings (work hours, lesson length, break, max/day) | **Partial** | Validated work hours, JSON ISO weekdays, lesson length, break, max/day and max consecutive preferences are persisted with README defaults. Settings are not enforced by scheduling validators yet. |
+| Student settings (notifications) | **Partial** | Validated digest minutes-of-local-day, lesson reminder minutes (1–600), homework days; null disables. Safe partial updates implemented. Notification delivery is not implemented. |
 | Lessons / breaks / vacations CRUD (one-off + recurring) | **Partial** | Routers + `events` validators/service work for create/update/delete. Missing: enforcing teacher work hours/days, max-per-day, max-consecutive, and the vacation/lesson priority rules from README. See Known Issues below for a routing bug in vacations. |
 | Schedule viewing (day/week, timeline, teacher sees student names) | **Not started** | No endpoint computes a day/week schedule; `backend/schedule/router.py` is empty. |
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
 | Homework (assign/submit/mark done) | **Not started** | `backend/homework/` is an empty package. |
 | Student profile view for teacher (history, delete w/ confirm) | **Not started** | No action-log table or endpoint. |
-| Telegram bot | **Not started** | `backend/telegram/` and top-level `telegram/` are empty packages. |
+| Telegram bot | **Backend adapter done; bot not started** | `backend/telegram/` has service-authenticated APIs; top-level `telegram/` remains empty. |
 | HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |
 
 ## Known Issues / Tech Debt
