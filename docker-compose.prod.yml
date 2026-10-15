@@ -32,9 +32,23 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       AUTH_JWT_EXP_MINUTES: ${AUTH_JWT_EXP_MINUTES:-30}
+      TELEGRAM_SERVICE_CREDENTIAL: ${TELEGRAM_SERVICE_CREDENTIAL:?Set TELEGRAM_SERVICE_CREDENTIAL}
     depends_on:
       db:
         condition: service_healthy
+
+  bot:
+    build: .
+    restart: unless-stopped
+    profiles: ["bot"]
+    command: ["python", "-m", "telegram"]
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?Set BOT_TOKEN}
+      BOT_BACKEND_URL: ${BOT_COMPOSE_BACKEND_URL:-http://app:8000}
+      BOT_SERVICE_CREDENTIAL: ${TELEGRAM_SERVICE_CREDENTIAL:?Set TELEGRAM_SERVICE_CREDENTIAL}
+      BOT_REQUEST_TIMEOUT: ${BOT_REQUEST_TIMEOUT:-10}
+      BOT_RECOVERY_SECONDS: ${BOT_RECOVERY_SECONDS:-15}
+      BOT_FAILURE_THRESHOLD: ${BOT_FAILURE_THRESHOLD:-3}
 
 volumes:
   postgres_data:

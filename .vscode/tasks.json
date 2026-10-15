@@ -1,0 +1,34 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Backend dev server",
+			"type": "shell",
+			"command": "uv",
+			"args": [
+				"run",
+				"uvicorn",
+				"backend.main:app",
+				"--host",
+				"127.0.0.1",
+				"--port",
+				"8093"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Telegram bot",
+			"type": "shell",
+			"command": "uv",
+			"args": [
+				"run",
+				"python",
+				"-m",
+				"telegram"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}

@@ -26,10 +26,13 @@ COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code and migration files
 COPY backend/       ./backend/
+COPY telegram/      ./telegram/
+COPY templates/     ./templates/
+COPY static/        ./static/
 COPY alembic/   ./alembic/
 COPY alembic.ini ./
 
 EXPOSE 8000
 
 # Apply pending migrations then start the server
-CMD ["sh", "-c", "alembic upgrade head && fastapi run backend/main.py --port 8000 --host 0.0.0.0"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn backend.main:app --port 8000 --host 0.0.0.0"]
