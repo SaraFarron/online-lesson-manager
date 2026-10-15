@@ -1,7 +1,7 @@
 # Online Lesson Manager — Agent Instructions
 
-Scheduling backend for online tutors (teachers/students), with a planned
-Telegram bot and HTMX frontend as separate clients. Full product spec
+Scheduling backend for online tutors (teachers/students), with a Telegram
+onboarding bot and a planned HTMX frontend as separate clients. Full product spec
 (roles, scheduling rules, notifications) lives in [README.md](./README.md)
 (written in Russian) — read it before implementing scheduling/notification
 features.
@@ -11,6 +11,11 @@ features.
 - Package manager: **uv** (`uv.lock` present). Install deps: `uv sync`.
 - Run dev server: `fastapi run backend/main.py` (uses SQLite `dev.db` via
   `DATABASE_URL` in `.env`). Full stack incl. Postgres: `docker compose up`.
+- Run the separate bot: `uv run python -m telegram`, or opt in with
+  `docker compose --profile bot up --build`. Configure `BOT_TOKEN`,
+  `BOT_BACKEND_URL`, and `BOT_SERVICE_CREDENTIAL` in ignored `.env`; the service
+  credential must match backend `TELEGRAM_SERVICE_CREDENTIAL`. Run one poller
+  per token. See [README.md](./README.md) for local/remote deployment.
 - Apply migrations: `alembic upgrade head` (runs automatically in Docker
   entrypoint). New migration file names follow `YYYY-MM-DD_slug.py`
   (configured in `alembic.ini` via `file_template`).
@@ -23,6 +28,10 @@ features.
 - Existing tests use `httpx.AsyncClient` / `ASGITransport`, an isolated real
   SQLite database, and dependency overrides in `tests/conftest.py`.
   Run the relevant smoke test with `uv run pytest -q tests/test_smoke.py`.
+  Bot tests feed simulated aiogram updates through a recording Bot API
+  transport and the real backend; run `uv run pytest -q tests` for all checks.
+  Validate bot changes with `uv run ruff check telegram tests`,
+  `uv run ruff format --check telegram tests`, and `uv run mypy telegram`.
 
 For writing release plans, decomposing a README.md feature into small tasks,
 or drafting a task description for an AI agent or human, use the
@@ -54,8 +63,15 @@ or drafting a task description for an AI agent or human, use the
   using a dedicated `TELEGRAM_SERVICE_CREDENTIAL` / `X-Bot-Service-Key`.
   Registration owns one transaction; `auth.service.add_*` helpers flush only.
   Profile routes require owner or superuser; profile PUT is a partial update.
+- Top-level `telegram/` is a separate aiogram 3 / aiogram-dialog 2 client,
+  not the backend adapter package. It uses typed async HTTP calls, memory-only
+  drafts/JWT cache, a bounded circuit breaker, and per-user update isolation.
+  Normal inline and text-input transitions edit the active screen. Completed
+  users recover through `/start` after restart; incomplete drafts restart.
+  Never import backend models/settings/services into the bot or start polling
+  inside FastAPI.
 - **Stub/unimplemented packages** — don't assume behavior exists just
-  because the package exists:   `backend/homework/` (empty), top-level `telegram/` (empty),
+  because the package exists: `backend/homework/` (empty),
   `backend/schedule/router.py` (empty).
   `backend/notifications/` has only an ORM model, no router/service yet.
 - Config is split per-domain (`BaseSettings` subclasses), e.g.
@@ -72,7 +88,7 @@ a README-described feature.
 
 | README section | Status | Notes |
 |---|---|---|
-| Teacher/student registration (`/auth/register`, `/auth/login`) | **Done (backend)** | Password auth retained; trusted Telegram session/register/invitation API implemented. Bot `/start` UI is not started. No account merging/password addition for Telegram-only users. |
+| Teacher/student registration (`/auth/register`, `/auth/login`) | **Done** | Password auth retained; trusted Telegram API and private-chat `/start` teacher/student wizards implemented. Invitations use `/start teacher_<code>`. No account merging/password addition for Telegram-only users. |
 | Teacher settings (work hours, lesson length, break, max/day) | **Partial** | Validated work hours, JSON ISO weekdays, lesson length, break, max/day and max consecutive preferences are persisted with README defaults. Settings are not enforced by scheduling validators yet. |
 | Student settings (notifications) | **Partial** | Validated digest minutes-of-local-day, lesson reminder minutes (1–600), homework days; null disables. Safe partial updates implemented. Notification delivery is not implemented. |
 | Lessons / breaks / vacations CRUD (one-off + recurring) | **Partial** | Routers + `events` validators/service work for create/update/delete. Missing: enforcing teacher work hours/days, max-per-day, max-consecutive, and the vacation/lesson priority rules from README. See Known Issues below for a routing bug in vacations. |
@@ -80,7 +96,7 @@ a README-described feature.
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
 | Homework (assign/submit/mark done) | **Not started** | `backend/homework/` is an empty package. |
 | Student profile view for teacher (history, delete w/ confirm) | **Not started** | No action-log table or endpoint. |
-| Telegram bot | **Backend adapter done; bot not started** | `backend/telegram/` has service-authenticated APIs; top-level `telegram/` remains empty. |
+| Telegram bot | **Auth/onboarding done** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, retry/recovery and edit-in-place screens. Schedule/homework actions, notification delivery, offline schedule cache and post-onboarding settings UI are not implemented. |
 | HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |
 
 ## Known Issues / Tech Debt

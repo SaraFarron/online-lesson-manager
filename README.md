@@ -99,7 +99,90 @@ leave a partial account. Existing accounts are never reassigned by registration.
 Apply schema changes using `uv run alembic upgrade head` before using these routes.
 For local manual checks, run `uv run fastapi dev backend/main.py` and use `/docs`;
 authorize Telegram routes with the service key and user routes with a user JWT.
-The separate bot UI/deployment is not implemented by backend Tasks 00–07.
+The bot is a separate process: `uv run python -m telegram`. It uses aiogram 3 /
+aiogram-dialog 2, private chats, in-memory drafts, per-user update isolation,
+and inline editing. Initial screens send a message; normal callback/text input
+transitions edit it. A deleted/uneditable screen permits one replacement.
+Other Telegram errors are not converted into new sends.
+
+Bot settings use `BOT_TOKEN`, `BOT_BACKEND_URL` and `BOT_SERVICE_CREDENTIAL`;
+the last must match backend `TELEGRAM_SERVICE_CREDENTIAL`. Incomplete drafts
+restart after process restart; completed accounts remain in the backend.
+Run a single polling process per Bot API token.
+
+### Implemented Telegram flows and limits
+
+In a private chat, `/start` opens the saved role-specific home for existing
+accounts; unknown senders choose teacher or student registration. Both wizards
+require explicit timezone confirmation, show defaults, and support Back,
+Cancel, and review edits before submitting. Invalid input edits the active
+prompt and preserves the draft.
+
+Teacher signup returns a server-generated code and invitation:
+`https://t.me/<bot_username>?start=teacher_<code>`. Telegram delivers this as
+`/start teacher_<code>` (not the descriptive `/start?teacher_code=...` below).
+Unknown invited students confirm the teacher; students without a link enter
+the code manually. Lesson reminders explicitly offer hours or minutes and
+store canonical minutes. Existing accounts opening an invitation retain their
+role and teacher.
+
+Backend outages show an unavailable/retry screen, never offline login or
+successful local signup. If a registration response is lost, the bot checks
+the backend session before resubmitting. Notification preferences and teacher
+limits are persisted only: notification delivery, scheduling enforcement,
+schedule viewing/offline cache, homework actions, account linking/transfers,
+and post-onboarding settings UI remain unimplemented.
+
+Verification: `uv run pytest -q tests` covers simulated Telegram updates with
+recorded Bot API calls, the real ASGI backend, and an isolated SQLite database,
+including password/scheduling smoke behavior. Real teacher signup, invitation
+student signup (including an hours-based reminder), and returning `/start`
+were also manually confirmed. Disposable SQLite/PostgreSQL migration checks
+and image/Compose configuration checks passed; a full Compose stack startup
+and separate-server HTTPS deployment have not been exercised.
+
+### Running backend and bot
+
+Copy `.env.example` to the ignored `.env` and replace every placeholder.
+Generate separate random signing/service secrets (for example `openssl rand -hex 32`).
+Get the bot token from BotFather. For local processes, `BOT_SERVICE_CREDENTIAL`
+must equal `TELEGRAM_SERVICE_CREDENTIAL`.
+
+```shell
+uv sync
+uv run alembic upgrade head
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8093
+# In a separate terminal:
+uv run python -m telegram
+```
+
+Local Compose (PostgreSQL + backend + opt-in bot):
+```shell
+docker compose --profile bot up --build
+```
+Production Compose:
+```shell
+docker compose -f docker-compose.prod.yml --profile bot up -d --build
+```
+To use another interpolation file, add `--env-file .env.docker`. Compose passes
+only explicitly listed settings to each service: only backend gets the database
+URL/JWT signing secret, only bot gets `BOT_TOKEN`, and both get the service
+credential. `.env` is excluded from image builds and is never copied into images.
+The bot has no database volume/access and runs no migrations; it can start while
+the backend is unavailable. Send `/start` to retry after recovery.
+
+For separate servers, set `BOT_BACKEND_URL=https://your-backend.example` for a
+local bot process, or `BOT_COMPOSE_BACKEND_URL=https://your-backend.example` for
+the bot container. Start only the bot remotely with `docker compose --profile bot
+up -d --no-deps bot`; it does not require the backend/database containers locally.
+Plain HTTP is allowed only for localhost or the private Compose `app` hostname.
+
+Keep exactly one poller per bot token across machines/containers. Stop with Ctrl+C
+or `docker compose stop bot` before launching a replacement; do not scale the bot.
+Drafts and JWT cache are memory-only. After restart, `/start` verifies completed
+accounts against the backend; incomplete wizards restart. To rotate the service
+credential, generate a new value, update both services and restart both; an
+intermediate mismatch returns authentication errors, not offline success.
 
 Интерфейс бота является отдельным сервисом от бекенда. Он должен иметь свой кеш для read only операций. В случае, если бекенд недоступен пользователь все еще должен иметь возможность посмотреть расписание уроков. Восстановление соединения должно идти по паттерну circuit breaker. Пердполагается, что телеграм бот и бекенд запускаются на разных серверах, но для разработки и дебага должна быть возможность запустить их на одной машине. Предполагается, что в будущем будут добавляться новые интерфейсы - фронтенд, другие мессенджеры, интеграции с календарями. Бекенд должен быть универсальным и единственной точкой истины.
 
