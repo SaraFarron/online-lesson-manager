@@ -52,7 +52,7 @@ async def update_vacation(
 ) -> Any:
     vacation = await exist_validator.validate(session, vacation_id)
     teacher_id = resolve_teacher_id(user)
-    assert_owns_event(teacher_id, vacation)
+    assert_owns_event(user, vacation)
     await assert_can_assign_user(session, user, data.user_id)
     updated_vacation = await service.update_event(
         session, vacation, data, create_validator, teacher_id=teacher_id
@@ -72,6 +72,5 @@ async def delete_vacation(
     validator: ValidatedVacationExists,
 ) -> None:
     vacation = await validator.validate(session, vacation_id)
-    teacher_id = resolve_teacher_id(user)
-    assert_owns_event(teacher_id, vacation)
+    assert_owns_event(user, vacation)
     await service.delete_event(session, vacation)

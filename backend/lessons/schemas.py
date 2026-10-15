@@ -1,3 +1,5 @@
+from typing import Literal
+
 from backend.constants import EventType
 from backend.events.schemas import (
     EventCreate,
@@ -10,24 +12,24 @@ from backend.events.schemas import (
 
 
 class LessonCreate(EventCreate):
-    event_type: EventType = EventType.LESSON
+    event_type: Literal[EventType.LESSON] = EventType.LESSON
 
 
 class LessonPublic(EventPublic):
-    event_type: EventType = EventType.LESSON
+    event_type: Literal[EventType.LESSON] = EventType.LESSON
 
 
 class LessonUpdate(EventUpdate):
-    pass
+    event_type: Literal[EventType.LESSON] | None = None
 
 
 class RecurrentLessonCreate(RecurrentEventCreate):
-    event_type: EventType = EventType.LESSON
+    event_type: Literal[EventType.LESSON] = EventType.LESSON
 
 
 class RecurrentLessonPublic(RecurrentEventPublic):
-    event_type: EventType = EventType.LESSON
+    event_type: Literal[EventType.LESSON] = EventType.LESSON
 
 
 class RecurrentLessonUpdate(RecurrentEventUpdate):
-    pass
+    event_type: Literal[EventType.LESSON] | None = None

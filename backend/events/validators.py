@@ -7,6 +7,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.service import get_user_by_id
+from backend.constants import EventType
 from backend.events.models import Event, RecurrentEvent
 from backend.events.schemas import EventWrite, RecurrentEventWrite
 from backend.events.time_utils import to_storage_utc
@@ -191,18 +192,29 @@ class EventValidator:
 
 
 class EventExistsValidator:
-    def __init__(self, event_type: str = "Event"):
+    def __init__(
+        self,
+        event_type: str = "Event",
+        expected_event_type: EventType | None = None,
+    ):
         self.EVENT_TYPE = event_type
+        self.expected_event_type = expected_event_type
 
     async def validate(self, session: AsyncSession, event_id: UUID):
         event = await session.get(Event, event_id)
-        if not event:
+        if event is None or (
+            self.expected_event_type is not None
+            and event.event_type != self.expected_event_type.value
+        ):
             raise ValidationError(f"{self.EVENT_TYPE} not found")
         return event
 
     async def validate_recurrent(self, session: AsyncSession, event_id: UUID):
         recurrent_event = await session.get(RecurrentEvent, event_id)
-        if not recurrent_event:
+        if recurrent_event is None or (
+            self.expected_event_type is not None
+            and recurrent_event.event_type != self.expected_event_type.value
+        ):
             raise ValidationError(f"{self.EVENT_TYPE} not found")
         return recurrent_event
 

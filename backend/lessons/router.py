@@ -57,7 +57,7 @@ async def update_lesson(
 ) -> Any:
     lesson = await exist_validator.validate(session, lesson_id)
     teacher_id = resolve_teacher_id(user)
-    assert_owns_event(teacher_id, lesson)
+    assert_owns_event(user, lesson)
     await assert_can_assign_user(session, user, data.user_id)
     updated_lesson = await service.update_event(
         session, lesson, data, create_validator, teacher_id=teacher_id
@@ -77,8 +77,7 @@ async def delete_lesson(
     validator: ValidatedLessonExists,
 ) -> None:
     lesson = await validator.validate(session, lesson_id)
-    teacher_id = resolve_teacher_id(user)
-    assert_owns_event(teacher_id, lesson)
+    assert_owns_event(user, lesson)
     await service.delete_event(session, lesson)
 
 
@@ -121,7 +120,7 @@ async def update_recurrent_lesson(
 ) -> Any:
     lesson = await exist_validator.validate_recurrent(session, lesson_id)
     teacher_id = resolve_teacher_id(user)
-    assert_owns_event(teacher_id, lesson)
+    assert_owns_event(user, lesson)
     await assert_can_assign_user(session, user, data.user_id)
     updated_lesson = await service.update_recurrent_event(
         session, lesson, data, create_validator, teacher_id=teacher_id
@@ -141,6 +140,5 @@ async def delete_recurrent_lesson(
     validator: ValidatedLessonExists,
 ) -> None:
     lesson = await validator.validate_recurrent(session, lesson_id)
-    teacher_id = resolve_teacher_id(user)
-    assert_owns_event(teacher_id, lesson)
+    assert_owns_event(user, lesson)
     await service.delete_event(session, lesson)

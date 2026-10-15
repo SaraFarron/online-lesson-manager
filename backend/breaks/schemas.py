@@ -1,3 +1,5 @@
+from typing import Literal
+
 from backend.constants import EventType
 from backend.events.schemas import (
     EventCreate,
@@ -10,24 +12,24 @@ from backend.events.schemas import (
 
 
 class BreakCreate(EventCreate):
-    event_type: EventType = EventType.BREAK
+    event_type: Literal[EventType.BREAK] = EventType.BREAK
 
 
 class BreakPublic(EventPublic):
-    event_type: EventType = EventType.BREAK
+    event_type: Literal[EventType.BREAK] = EventType.BREAK
 
 
 class BreakUpdate(EventUpdate):
-    pass
+    event_type: Literal[EventType.BREAK] | None = None
 
 
 class RecurrentBreakCreate(RecurrentEventCreate):
-    event_type: EventType = EventType.BREAK
+    event_type: Literal[EventType.BREAK] = EventType.BREAK
 
 
 class RecurrentBreakPublic(RecurrentEventPublic):
-    event_type: EventType = EventType.BREAK
+    event_type: Literal[EventType.BREAK] = EventType.BREAK
 
 
 class RecurrentBreakUpdate(RecurrentEventUpdate):
-    pass
+    event_type: Literal[EventType.BREAK] | None = None

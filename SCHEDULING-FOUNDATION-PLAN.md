@@ -502,10 +502,17 @@ AI agent after the approved semantics in Task 00.
 
 ### Acceptance Criteria
 
-- [ ] Same-teacher student A cannot update/delete/cancel/reassign student B's events.
-- [ ] Teacher can manage own students; unrelated teacher cannot; student can manage own permitted event types.
-- [ ] Lesson IDs cannot be edited/deleted through break/vacation routes, and payloads cannot spoof event type.
-- [ ] One-off and recurring surfaces both have real API tests; common checks pass.
+- [x] Same-teacher student A cannot update/delete/cancel/reassign student B's events.
+- [x] Teacher can manage own students; unrelated teacher cannot; student can manage own permitted event types.
+- [x] Lesson IDs cannot be edited/deleted through break/vacation routes, and payloads cannot spoof event type.
+- [x] One-off and recurring surfaces both have real API tests; common checks pass.
+
+### Verification
+
+- Ownership checks now compare actor role, teacher scope, and the existing event subject before reassignment. Students can manage only their own lessons/vacations; break routes reject non-teachers. Assignment validation permits teachers to target only themselves or their linked students.
+- Domain schemas constrain event types to their event kind (while allowing a matching type assertion on updates), reject unknown request fields, and domain existence validators reject cross-kind IDs for both one-off and recurring rows.
+- Real API tests cover same-teacher student IDOR attempts including cancellation-list updates, teacher reassignments, unrelated teachers, student-owned lesson/vacation flows, teacher-only one-off/recurring breaks, cross-domain update/delete attempts, and spoofed event-type payloads.
+- `uv run pytest -q`: 98 passed. `uv run ruff check backend tests`, touched-file formatting, and targeted route/schema mypy pass.
 
 ### Out of scope
 

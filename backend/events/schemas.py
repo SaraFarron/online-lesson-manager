@@ -44,7 +44,7 @@ def _validate_time_range(
 
 
 class EventCreate(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
     start: UtcTimestamp
     end: UtcTimestamp
@@ -72,7 +72,7 @@ class EventPublic(BaseModel):
 
 
 class EventUpdate(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
     user_id: uuid.UUID
     start: UtcTimestamp
@@ -88,7 +88,7 @@ EventWrite = EventCreate | EventUpdate
 
 
 class RecurrentEventCreate(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
     start: UtcTimestamp
     end: UtcTimestamp
@@ -132,7 +132,7 @@ class RecurrentCancel(BaseModel):
 
 
 class RecurrentEventUpdate(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
     user_id: uuid.UUID
     start: UtcTimestamp
