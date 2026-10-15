@@ -64,7 +64,7 @@ Approved by the product owner on 2026-10-15. Update downstream tasks if these de
 - Retain `RecurrentCancels` rather than mutating/deleting a recurring series to skip a date. Each row identifies **one full generated occurrence** using matching UTC start/end, not an arbitrary partial blackout interval.
 - Reject invalid, duplicate, off-grid, or out-of-series cancellation rows. Preserve stored cancellation identities through viewing.
 - For series edits, omitted cancellation lists preserve cancellations for non-recurrence edits. Changing a recurrence-defining field (start, end, interval, cutoff, or recurrence timezone) clears existing cancellations unless a valid replacement list is supplied. An explicit empty list clears; a supplied list replaces after validation. Invalid, duplicate, partial, off-grid, or out-of-series entries reject the whole update.
-- On series deletion, remove its cancellation rows within the same transaction. Define DB constraints/FK behavior portably.
+- On series deletion, remove its cancellation rows within the same transaction; do not rely on database-specific cascade behavior.
 
 ### 4. Vacation visibility and break displacement
 
@@ -233,11 +233,18 @@ AI agent after Task 00.
 
 ### Acceptance Criteria
 
-- [ ] Upgrade preserves existing UTC instants and UTC-stepping behavior without relying on mutable teacher timezones.
-- [ ] Invalid intervals/duplicate cancellations have explicit preflight/remediation behavior.
-- [ ] ORM annotations and schema defaults match actual DB nullability/constraints.
-- [ ] Disposable SQLite/PostgreSQL upgrade/downgrade tests pass, including safe refusal of lossy downgrade.
-- [ ] Common checks pass.
+- [x] Upgrade preserves existing UTC instants and UTC-stepping behavior without relying on mutable teacher timezones.
+- [x] Invalid intervals/duplicate cancellations have explicit preflight/remediation behavior.
+- [x] ORM annotations and schema defaults match actual DB nullability/constraints; Alembic reports no schema drift on SQLite or PostgreSQL.
+- [x] Disposable SQLite/PostgreSQL upgrade/downgrade round trips pass, including safe refusal of lossy downgrade.
+- [x] Full tests (51 passed) and Ruff pass; touched-file mypy passes. Full backend mypy retains the nine unrelated baseline errors recorded under Task 01.
+
+### Verification
+
+- Legacy UTC series and a cancellation were seeded at the previous revision on SQLite and PostgreSQL. Upgrade preserved their timestamps and cancellation identity and assigned `UTC_STEP` with no timezone.
+- Migration preflight rejected a non-positive interval and duplicate cancellation start before changing the schema; database constraints reject those writes after upgrade.
+- Downgrade refused teacher-local recurrence metadata and succeeded after restoring `UTC_STEP`, preserving legacy series/cancellation data.
+- `uv run alembic check` reported no new operations on both disposable databases.
 
 ### Out of scope
 
@@ -245,7 +252,7 @@ Materialized occurrences, general RRULE support, creator tracking unless separat
 
 ### Suitable for
 
-AI agent; legacy conversion may require human data approval.
+AI agent.
 
 ## Task 03: Normalize timestamps across every existing event API
 

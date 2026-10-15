@@ -2,9 +2,18 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Uuid
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.events.constants import RecurrenceMode
 from backend.models import Base, TimestampMixin
 
 if TYPE_CHECKING:
@@ -36,6 +45,21 @@ class Event(Base, TimestampMixin):
 
 class RecurrentEvent(Base, TimestampMixin):
     __tablename__ = "recurrent_event"
+    __table_args__ = (
+        CheckConstraint("interval > 0", name="interval_positive"),
+        CheckConstraint('"end" > start', name="start_before_end"),
+        CheckConstraint("interval_end > start", name="interval_end_after_start"),
+        CheckConstraint(
+            "recurrence_mode IN ('UTC_STEP', 'TEACHER_LOCAL')",
+            name="recurrence_mode_valid",
+        ),
+        CheckConstraint(
+            "(recurrence_mode = 'UTC_STEP' AND recurrence_timezone IS NULL) OR "
+            "(recurrence_mode = 'TEACHER_LOCAL' AND recurrence_timezone IS NOT NULL "
+            "AND length(trim(recurrence_timezone)) > 0)",
+            name="recurrence_timezone_consistent",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -59,10 +83,24 @@ class RecurrentEvent(Base, TimestampMixin):
     interval_end: Mapped[datetime] = mapped_column(
         DateTime, nullable=False
     )  # when the recurrence ends
+    recurrence_mode: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=RecurrenceMode.UTC_STEP.value,
+        server_default=RecurrenceMode.UTC_STEP.value,
+    )
+    recurrence_timezone: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class RecurrentCancels(Base, TimestampMixin):
     __tablename__ = "recurrent_cancels"
+    __table_args__ = (
+        UniqueConstraint(
+            "recurrent_event_id",
+            "start",
+            name="recurrent_cancels_recurrent_event_id_start_key",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
