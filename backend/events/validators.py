@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth.service import get_user_by_id
 from backend.events.models import Event, RecurrentEvent
 from backend.events.schemas import EventWrite, RecurrentEventWrite
+from backend.events.time_utils import to_storage_utc
 from backend.exceptions import ValidationError
 
 T = TypeVar("T", bound=BaseModel)
@@ -81,12 +82,14 @@ class NoConflictValidation(EventSubValidator):
     ) -> None:
         if user_id is None:
             user_id = data.user_id
+        start = to_storage_utc(data.start)
+        end = to_storage_utc(data.end)
         conditions = [
             Event.teacher_id == teacher_id,
             or_(
-                and_(Event.start < data.end, Event.start >= data.start),
-                and_(Event.end > data.start, Event.end <= data.end),
-                and_(Event.start <= data.start, Event.end >= data.end),
+                and_(Event.start < end, Event.start >= start),
+                and_(Event.end > start, Event.end <= end),
+                and_(Event.start <= start, Event.end >= end),
             ),
         ]
         if exclude_event_id is not None:
@@ -97,15 +100,11 @@ class NoConflictValidation(EventSubValidator):
 
         recurrent_conditions = [
             RecurrentEvent.teacher_id == teacher_id,
-            RecurrentEvent.interval_end >= data.start,
+            RecurrentEvent.interval_end >= start,
             or_(
-                and_(
-                    RecurrentEvent.start < data.end, RecurrentEvent.start >= data.start
-                ),
-                and_(RecurrentEvent.end > data.start, RecurrentEvent.end <= data.end),
-                and_(
-                    RecurrentEvent.start <= data.start, RecurrentEvent.end >= data.end
-                ),
+                and_(RecurrentEvent.start < end, RecurrentEvent.start >= start),
+                and_(RecurrentEvent.end > start, RecurrentEvent.end <= end),
+                and_(RecurrentEvent.start <= start, RecurrentEvent.end >= end),
             ),
         ]
         if exclude_event_id is not None:
@@ -128,20 +127,22 @@ class NoConflictValidation(EventSubValidator):
     ) -> None:
         if user_id is None:
             user_id = data.user_id
+        start = to_storage_utc(data.start)
+        interval_end = to_storage_utc(data.interval_end)
         conditions = [
             RecurrentEvent.teacher_id == teacher_id,
             or_(
                 and_(
-                    RecurrentEvent.start < data.interval_end,
-                    RecurrentEvent.start >= data.start,
+                    RecurrentEvent.start < interval_end,
+                    RecurrentEvent.start >= start,
                 ),
                 and_(
-                    RecurrentEvent.end > data.start,
-                    RecurrentEvent.end <= data.interval_end,
+                    RecurrentEvent.end > start,
+                    RecurrentEvent.end <= interval_end,
                 ),
                 and_(
-                    RecurrentEvent.start <= data.start,
-                    RecurrentEvent.end >= data.interval_end,
+                    RecurrentEvent.start <= start,
+                    RecurrentEvent.end >= interval_end,
                 ),
             ),
         ]

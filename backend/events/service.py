@@ -3,7 +3,9 @@ import uuid
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth.service import get_user_by_id
 from backend.breaks.schemas import RecurrentBreakCreate
+from backend.events.constants import RecurrenceMode
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from backend.events.schemas import (
     EventCreate,
@@ -11,7 +13,9 @@ from backend.events.schemas import (
     RecurrentEventCreate,
     RecurrentEventUpdate,
 )
+from backend.events.time_utils import to_storage_utc
 from backend.events.validators import EventValidator
+from backend.exceptions import ValidationError
 
 
 async def create_event(
@@ -25,8 +29,8 @@ async def create_event(
     )
 
     event = Event(
-        start=event_data.start,
-        end=event_data.end,
+        start=to_storage_utc(event_data.start),
+        end=to_storage_utc(event_data.end),
         user_id=event_data.user_id,
         teacher_id=teacher_id,
         event_type=event_data.event_type,
@@ -52,8 +56,8 @@ async def update_event(
         exclude_event_id=event.id,
     )
 
-    event.start = event_data.start
-    event.end = event_data.end
+    event.start = to_storage_utc(event_data.start)
+    event.end = to_storage_utc(event_data.end)
     event.teacher_id = teacher_id
     session.add(event)
     await session.commit()
@@ -76,14 +80,20 @@ async def create_recurrent_event(
         session, event_data, teacher_id=teacher_id, user_id=event_data.user_id
     )
 
+    teacher = await get_user_by_id(session, teacher_id)
+    if teacher is None:
+        raise ValidationError(f"Teacher with ID {teacher_id} does not exist")
+
     recurrent_event = RecurrentEvent(
-        start=event_data.start,
-        end=event_data.end,
+        start=to_storage_utc(event_data.start),
+        end=to_storage_utc(event_data.end),
         user_id=event_data.user_id,
         teacher_id=teacher_id,
         event_type=event_data.event_type,
         interval=event_data.interval,
-        interval_end=event_data.interval_end,
+        interval_end=to_storage_utc(event_data.interval_end),
+        recurrence_mode=RecurrenceMode.TEACHER_LOCAL.value,
+        recurrence_timezone=teacher.timezone,
     )
     session.add(recurrent_event)
     await session.commit()
@@ -106,8 +116,8 @@ async def update_recurrent_event(
         exclude_event_id=recurrent_event.id,
     )
 
-    recurrent_event.start = event_data.start
-    recurrent_event.end = event_data.end
+    recurrent_event.start = to_storage_utc(event_data.start)
+    recurrent_event.end = to_storage_utc(event_data.end)
     recurrent_event.teacher_id = teacher_id
 
     # Overwrite the existing cancels with the new ones
@@ -120,8 +130,8 @@ async def update_recurrent_event(
         for cancel in event_data.cancels:
             new_cancel = RecurrentCancels(
                 recurrent_event_id=recurrent_event.id,
-                start=cancel.start,
-                end=cancel.end,
+                start=to_storage_utc(cancel.start),
+                end=to_storage_utc(cancel.end),
             )
             session.add(new_cancel)
 

@@ -278,11 +278,18 @@ All event-like domains inherit [shared schemas](./backend/events/schemas.py) and
 
 ### Acceptance Criteria
 
-- [ ] All existing event domains normalize offset input, persist UTC, and return explicit UTC offsets consistently.
-- [ ] Legacy naive input behaves exactly as approved; never depends on process timezone.
-- [ ] Offset-equivalent requests produce the same stored instant and conflicts.
-- [ ] Teacher display-zone changes do not move one-off instants or silently change existing series recurrence zones.
-- [ ] Existing auth/onboarding and lesson lifecycle remain valid; common checks pass.
+- [x] All existing event domains normalize offset input, persist UTC, and return explicit UTC offsets consistently.
+- [x] Legacy naive input behaves exactly as approved; never depends on process timezone.
+- [x] Offset-equivalent requests produce the same stored instant and conflicts.
+- [x] Teacher display-zone changes do not move one-off instants or silently change existing series recurrence zones.
+- [x] Existing auth/onboarding and lesson lifecycle remain valid; common checks pass.
+
+### Verification
+
+- Three API/schema tests cover UTC input documentation, offset and naive input normalization across lessons, breaks, and vacations, UTC-naive DB persistence, offset-equivalent conflict detection, recurrence timezone snapshots, profile timezone changes, and cancellation normalization.
+- `uv run pytest -q`: 54 passed. Ruff check and formatting passed for all changed Python files. Targeted mypy for the changed schemas/service passed.
+- Full `uv run mypy backend` retains the same nine baseline errors recorded under Task 01; no new type errors were reported.
+- The recurring update schema normalizes submitted interval/cutoff fields, but persistence of recurrence interval/cutoff edits remains assigned to Task 06.
 
 ### Out of scope
 
