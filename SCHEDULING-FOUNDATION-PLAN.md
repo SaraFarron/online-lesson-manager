@@ -413,11 +413,18 @@ AI agent.
 
 ### Acceptance Criteria
 
-- [ ] Interval/cutoff and permitted subject edits are reflected in persisted rows and subsequent expansion.
-- [ ] Invalid cancellation replacement leaves original series and cancellation rows unchanged.
-- [ ] Omitted, empty, and replacement lists have distinct tested behavior.
-- [ ] Recurrence-defining edits clear old cancellations unless a valid replacement list is supplied; non-recurrence edits preserve them.
-- [ ] Deletion leaves no cancellation orphans on both supported DBs; common checks pass.
+- [x] Interval/cutoff and permitted subject edits are reflected in persisted rows and subsequent expansion.
+- [x] Invalid cancellation replacement leaves original series and cancellation rows unchanged.
+- [x] Omitted, empty, and replacement lists have distinct tested behavior.
+- [x] Recurrence-defining edits clear old cancellations unless a valid replacement list is supplied; non-recurrence edits preserve them.
+- [x] Deletion leaves no cancellation orphans on both supported DBs; common checks pass.
+
+### Verification
+
+- Recurring updates now persist subject, interval, cutoff, and times; validate cancellations against the proposed series before mutation; preserve omitted cancellations for non-recurrence edits; clear them on recurrence edits; and replace them only with a valid supplied list. The recurrence timezone snapshot is unchanged. One-off updates now also persist the validated submitted subject.
+- Series deletion explicitly removes cancellation rows before deleting the series in the same transaction.
+- Real SQLite tests cover omission/clear/replacement semantics, valid replacements under changed recurrence settings, duplicate/partial/off-grid/out-of-series rejection with unchanged stored state, persisted subject/recurrence data and expansion, deletion cleanup, and the Swagger schema description. A temporary isolated PostgreSQL 17 database also verified deletion with its foreign key enabled.
+- Targeted tests: 14 passed. `uv run ruff check backend tests` and touched-file format checks pass; the repository-wide format check still flags pre-existing formatting in `backend/notifications/models.py`. Targeted mypy passes; full backend mypy retains the same nine baseline errors.
 
 ### Out of scope
 

@@ -139,7 +139,15 @@ class RecurrentEventUpdate(BaseModel):
     end: UtcTimestamp
     interval: PositiveInterval
     interval_end: UtcTimestamp
-    cancels: list[RecurrentCancel] | None = None
+    cancels: list[RecurrentCancel] | None = Field(
+        default=None,
+        description=(
+            "Each item must match a full generated occurrence. Omit this field to "
+            "preserve cancellations when recurrence fields are unchanged; omission "
+            "clears them when start, end, interval, or cutoff changes. An empty "
+            "list clears cancellations; a supplied list replaces them."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_time_range(self) -> Self:
