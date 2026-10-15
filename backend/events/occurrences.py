@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -129,8 +130,11 @@ def expand_recurrence(
             max_occurrences,
         )
 
-    occurrences.sort(key=_occurrence_sort_key)
-    return occurrences
+    return sort_occurrences(occurrences)
+
+
+def sort_occurrences(occurrences: Iterable[Occurrence]) -> list[Occurrence]:
+    return sorted(occurrences, key=_occurrence_sort_key)
 
 
 def _expand_utc_step(

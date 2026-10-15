@@ -369,11 +369,17 @@ Schedule views and conflicts need all relevant one-off events, series, and cance
 
 ### Acceptance Criteria
 
-- [ ] Real-DB tests cover one-off + recurring + cancelled occurrences, including intervals crossing both query edges.
-- [ ] A second matching series is never missed because a first candidate was selected.
-- [ ] Teacher scopes remain isolated; student policy retains necessary teacher blockers without exposing other students' personal data.
-- [ ] Fixed query-count tests demonstrate bulk loading, not per-occurrence/per-student queries.
-- [ ] Read results do not mutate stored rows; common checks pass.
+- [x] Real-DB tests cover one-off + recurring + cancelled occurrences, including intervals crossing both query edges.
+- [x] A second matching series is never missed because a first candidate was selected.
+- [x] Teacher scopes remain isolated; the raw service retains teacher blockers and other students' event subjects for internal policy without returning other teachers' schedules.
+- [x] Fixed query-count tests demonstrate bulk loading, not per-occurrence/per-student queries.
+- [x] Read results do not mutate stored rows; common checks pass.
+
+### Verification
+
+- Added `load_raw_occurrences`, which validates a finite, half-open UTC range of at most 31 days; bulk-loads overlapping one-offs, conservatively selected recurring series, and only cancellations overlapping that range; then expands, filters, validates, and deterministically sorts raw active occurrences without committing.
+- SQLite integration tests cover teacher isolation, all teacher-owned event types and student subjects, multiple recurring series, both query edges, cancellation filtering and malformed data, cutoff-crossing final occurrences, read-only behavior, and a fixed three-query count.
+- `uv run pytest -q`: 80 passed. Ruff and targeted mypy pass for the range service and recurrence utility.
 
 ### Out of scope
 
