@@ -4,7 +4,9 @@ from backend.events.validators import (
     EventValidator,
 )
 
-default_break_validator = EventValidator(event_type="Break")
+default_break_validator = EventValidator(
+    event_type="Break", expected_event_type=EventType.BREAK
+)
 exists_break_validator = EventExistsValidator(
     event_type="Break", expected_event_type=EventType.BREAK
 )

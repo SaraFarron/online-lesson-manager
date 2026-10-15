@@ -4,7 +4,9 @@ from backend.events.validators import (
     EventValidator,
 )
 
-default_vacation_validator = EventValidator(event_type="Vacation")
+default_vacation_validator = EventValidator(
+    event_type="Vacation", expected_event_type=EventType.VACATION
+)
 exists_vacation_validator = EventExistsValidator(
     event_type="Vacation", expected_event_type=EventType.VACATION
 )

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.constants import EventType
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from backend.events.occurrences import (
+    MAX_OCCURRENCES_PER_QUERY,
     Occurrence,
     OccurrenceSource,
     OccurrenceSourceKind,
@@ -28,6 +29,30 @@ async def load_raw_occurrences(
     range_end: datetime,
 ) -> list[Occurrence]:
     """Load active occurrences for one teacher over a half-open UTC range."""
+    start, end = _normalize_range(range_start, range_end)
+    if end - start > MAX_RANGE_DURATION:
+        raise ValidationError("Occurrence query range cannot exceed 31 days")
+    return await _load_raw_occurrences(session, teacher_id, start, end)
+
+
+async def load_raw_occurrences_for_validation(
+    session: AsyncSession,
+    teacher_id: UUID,
+    range_start: datetime,
+    range_end: datetime,
+    *,
+    max_occurrences: int = MAX_OCCURRENCES_PER_QUERY,
+) -> list[Occurrence]:
+    """Load a finite validation horizon without the schedule-view range limit."""
+    start, end = _normalize_range(range_start, range_end)
+    return await _load_raw_occurrences(
+        session, teacher_id, start, end, max_occurrences=max_occurrences
+    )
+
+
+def _normalize_range(
+    range_start: datetime, range_end: datetime
+) -> tuple[datetime, datetime]:
     try:
         start = normalize_utc(range_start)
         end = normalize_utc(range_end)
@@ -35,9 +60,21 @@ async def load_raw_occurrences(
         raise ValidationError("Invalid occurrence query range") from exc
     if start >= end:
         raise ValidationError("Range start time must be before range end time")
-    if end - start > MAX_RANGE_DURATION:
-        raise ValidationError("Occurrence query range cannot exceed 31 days")
+    return start, end
 
+
+async def _load_raw_occurrences(
+    session: AsyncSession,
+    teacher_id: UUID,
+    start: datetime,
+    end: datetime,
+    *,
+    max_occurrences: int = MAX_OCCURRENCES_PER_QUERY,
+) -> list[Occurrence]:
+    if not 0 <= max_occurrences <= MAX_OCCURRENCES_PER_QUERY:
+        raise ValidationError(
+            f"Occurrence limit must be between 0 and {MAX_OCCURRENCES_PER_QUERY}"
+        )
     stored_start = to_storage_utc(start)
     stored_end = to_storage_utc(end)
     events = (
@@ -49,6 +86,10 @@ async def load_raw_occurrences(
             )
         )
     ).all()
+    if len(events) > max_occurrences:
+        raise ValidationError(
+            f"Occurrence query exceeds the {MAX_OCCURRENCES_PER_QUERY} occurrence limit"
+        )
 
     # Without a duration limit, even a series cutoff before range_start may have a
     # last full occurrence crossing the range. Load earlier anchors and let expansion
@@ -80,6 +121,7 @@ async def load_raw_occurrences(
     cancellations_by_series = _index_cancellations(cancellations)
 
     occurrences = [_one_off_occurrence(event) for event in events]
+    generated_count = len(occurrences)
     for recurrent_event in recurrent_events:
         source = OccurrenceSource(
             kind=OccurrenceSourceKind.RECURRENT_EVENT,
@@ -97,7 +139,18 @@ async def load_raw_occurrences(
             recurrence_mode=recurrent_event.recurrence_mode,
             recurrence_timezone=recurrent_event.recurrence_timezone,
         )
-        series_occurrences = expand_recurrence(series, start, end)
+        remaining = max_occurrences - generated_count
+        series_occurrences = expand_recurrence(
+            series,
+            start,
+            end,
+            max_occurrences=max(1, remaining),
+        )
+        generated_count += len(series_occurrences)
+        if generated_count > max_occurrences:
+            raise ValidationError(
+                f"Occurrence query exceeds the {MAX_OCCURRENCES_PER_QUERY} occurrence limit"
+            )
         occurrence_by_start = {
             occurrence.start: occurrence for occurrence in series_occurrences
         }

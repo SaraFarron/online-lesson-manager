@@ -549,14 +549,22 @@ The existing `NoConflictValidation` is anchor-only and cannot supply correct tem
 
 ### Acceptance Criteria
 
-- [ ] Later recurring occurrence conflicts are detected; adjacent events and cancelled occurrences do not falsely conflict.
-- [ ] Recurring writes detect both one-off and other recurring conflicts over the full accepted horizon.
-- [ ] Multiple candidates, different anchors/intervals, DST changes, overnight intervals, and self-excluded edits are tested.
-- [ ] Vacation create/update changes visibility only; one-off admission rejects any applicable vacation overlap, while recurring checks remain vacation-blind.
-- [ ] Break conflict preview is non-mutating; confirmed retry rechecks and atomically cancels only lesson events.
-- [ ] Removing a break does not restore permanently canceled lessons.
-- [ ] No booking race-protection claim is made; teacher limits/automatic breaks remain explicitly unimplemented.
-- [ ] Existing API/auth smoke behavior and common checks pass.
+- [x] Later recurring occurrence conflicts are detected; adjacent events and cancelled occurrences do not falsely conflict.
+- [x] Recurring writes detect both one-off and other recurring conflicts over the full accepted horizon.
+- [x] Multiple candidates, different anchors/intervals, DST changes, overnight intervals, and self-excluded edits are tested.
+- [x] Vacation create/update changes visibility only; one-off admission rejects any applicable vacation overlap, while recurring checks remain vacation-blind.
+- [x] Break conflict preview is non-mutating; confirmed retry rechecks and atomically cancels only lesson events.
+- [x] Removing a break does not restore permanently canceled lessons.
+- [x] No booking race-protection claim is made; teacher limits/automatic breaks remain explicitly unimplemented.
+- [x] Existing API/auth smoke behavior and common checks pass.
+
+### Verification
+
+- Replaced anchor-only conflict checks with active occurrence expansion over complete proposed series horizons. New and updated series are limited to ten calendar years; validation shares the 10,000-occurrence budget and fails explicitly if the full check would exceed it.
+- One-off overlaps use half-open intervals, ignore holidays when checking recurring series, and reject applicable existing teacher/student vacation overlaps for one-off admission. Vacation creation/update can hide already-scheduled events without mutating them.
+- One-off and recurring teacher-break create/update endpoints expose `confirm_displacement`. Conflicts return a non-mutating `409` preview; confirmed retries revalidate, then atomically delete one-off lessons or add exact recurring cancellations with the break write.
+- Added real-API tests for later and far-horizon conflicts, cancellation/adjacency behavior, exact and excessive horizons, aggregate budget refusal, self-overlap, overnight and different-interval overlaps, DST shifts, vacation scope, all four break preview/confirmation routes, mixed one-off/recurring displacement, and non-restoration after break deletion.
+- `uv run pytest -q`: 106 passed. `uv run ruff check backend tests`, touched-file formatting, and targeted mypy pass. Repository-wide mypy still reports three unrelated baseline errors in `backend/auth/config.py`, `backend/database.py`, and `backend/events/dependencies.py`.
 
 ### Out of scope
 

@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.breaks.dependencies import ValidatedBreak, ValidatedBreakExists
@@ -29,14 +29,35 @@ router = APIRouter(prefix="/breaks", tags=["breaks"])
     response_model=BreakPublic,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new break",
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Non-mutating preview of lesson occurrences. Retry with "
+                "confirm_displacement=true to apply the break and cancellations."
+            )
+        }
+    },
 )
 async def create_break(
-    session: SessionDep, user: CurrentUser, data: BreakCreate, validator: ValidatedBreak
+    session: SessionDep,
+    user: CurrentUser,
+    data: BreakCreate,
+    validator: ValidatedBreak,
+    confirm_displacement: bool = Query(
+        default=False,
+        description="Confirm cancellation of overlapping lesson occurrences.",
+    ),
 ) -> Any:
     assert_teacher_actor(user)
     teacher_id = resolve_teacher_id(user)
     await assert_can_assign_user(session, user, data.user_id)
-    brk = await service.create_event(session, data, validator, teacher_id=teacher_id)
+    brk = await service.create_event(
+        session,
+        data,
+        validator,
+        teacher_id=teacher_id,
+        confirm_displacement=confirm_displacement,
+    )
     return BreakPublic.model_validate(brk)
 
 
@@ -45,6 +66,14 @@ async def create_break(
     response_model=BreakPublic,
     status_code=status.HTTP_200_OK,
     summary="Update an existing break",
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Non-mutating preview of lesson occurrences. Retry with "
+                "confirm_displacement=true to apply the update and cancellations."
+            )
+        }
+    },
 )
 async def update_break(
     session: SessionDep,
@@ -53,6 +82,10 @@ async def update_break(
     data: BreakUpdate,
     create_validator: ValidatedBreak,
     exist_validator: ValidatedBreakExists,
+    confirm_displacement: bool = Query(
+        default=False,
+        description="Confirm cancellation of overlapping lesson occurrences.",
+    ),
 ) -> Any:
     assert_teacher_actor(user)
     brk = await exist_validator.validate(session, break_id)
@@ -60,7 +93,12 @@ async def update_break(
     assert_owns_event(user, brk)
     await assert_can_assign_user(session, user, data.user_id)
     updated_brk = await service.update_event(
-        session, brk, data, create_validator, teacher_id=teacher_id
+        session,
+        brk,
+        data,
+        create_validator,
+        teacher_id=teacher_id,
+        confirm_displacement=confirm_displacement,
     )
     return BreakPublic.model_validate(updated_brk)
 
@@ -90,18 +128,34 @@ recurrent_router = APIRouter(prefix="/recurrent-breaks", tags=["breaks"])
     response_model=RecurrentBreakPublic,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new recurring break",
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Non-mutating preview of lesson occurrences. Retry with "
+                "confirm_displacement=true to apply the break and cancellations."
+            )
+        }
+    },
 )
 async def create_recurrent_break(
     session: SessionDep,
     user: CurrentUser,
     data: RecurrentBreakCreate,
     validator: ValidatedBreak,
+    confirm_displacement: bool = Query(
+        default=False,
+        description="Confirm cancellation of overlapping lesson occurrences.",
+    ),
 ) -> Any:
     assert_teacher_actor(user)
     teacher_id = resolve_teacher_id(user)
     await assert_can_assign_user(session, user, data.user_id)
     brk = await service.create_recurrent_event(
-        session, data, validator, teacher_id=teacher_id
+        session,
+        data,
+        validator,
+        teacher_id=teacher_id,
+        confirm_displacement=confirm_displacement,
     )
     return RecurrentBreakPublic.model_validate(brk)
 
@@ -111,6 +165,14 @@ async def create_recurrent_break(
     response_model=RecurrentBreakPublic,
     status_code=status.HTTP_200_OK,
     summary="Update an existing recurring break",
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Non-mutating preview of lesson occurrences. Retry with "
+                "confirm_displacement=true to apply the update and cancellations."
+            )
+        }
+    },
 )
 async def update_recurrent_break(
     session: SessionDep,
@@ -119,6 +181,10 @@ async def update_recurrent_break(
     data: RecurrentBreakUpdate,
     create_validator: ValidatedBreak,
     exist_validator: ValidatedBreakExists,
+    confirm_displacement: bool = Query(
+        default=False,
+        description="Confirm cancellation of overlapping lesson occurrences.",
+    ),
 ) -> Any:
     assert_teacher_actor(user)
     brk = await exist_validator.validate_recurrent(session, break_id)
@@ -126,7 +192,12 @@ async def update_recurrent_break(
     assert_owns_event(user, brk)
     await assert_can_assign_user(session, user, data.user_id)
     updated_brk = await service.update_recurrent_event(
-        session, brk, data, create_validator, teacher_id=teacher_id
+        session,
+        brk,
+        data,
+        create_validator,
+        teacher_id=teacher_id,
+        confirm_displacement=confirm_displacement,
     )
     return RecurrentBreakPublic.model_validate(updated_brk)
 

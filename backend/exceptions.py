@@ -23,7 +23,7 @@ class BadRequest(HTTPException):
 
 
 class Conflict(HTTPException):
-    def __init__(self, detail: str = "Conflict") -> None:
+    def __init__(self, detail: str | dict[str, object] = "Conflict") -> None:
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
