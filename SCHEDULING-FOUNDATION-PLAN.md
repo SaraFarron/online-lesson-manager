@@ -195,11 +195,11 @@ Python `datetime`/`zoneinfo`, shared event schemas, repository validation except
 
 ### Acceptance Criteria
 
-- [ ] Two offset-bearing representations of the same instant normalize identically; approved naive compatibility is explicit.
-- [ ] Adjacent intervals do not overlap; invalid/reversed ranges fail.
-- [ ] Local days around both DST transitions map to correct 23/25-hour UTC ranges; week starts Monday in the viewer zone.
-- [ ] Gap/fold inputs match approved UTC examples, including an explicitly selected fold.
-- [ ] Common checks pass.
+- [x] Two offset-bearing representations of the same instant normalize identically; approved naive compatibility is explicit.
+- [x] Adjacent intervals do not overlap; invalid/reversed ranges fail.
+- [x] Local days around both DST transitions map to correct 23/25-hour UTC ranges; week starts Monday in the viewer zone.
+- [x] Gap/fold inputs match approved UTC examples, including an explicitly selected fold.
+- [x] Focused tests, Ruff, and touched-file mypy pass. Full `mypy backend` was run and reports nine unrelated existing errors in `backend/auth/config.py`, `backend/database.py`, `backend/events/validators.py`, and `backend/events/dependencies.py`.
 
 ### Out of scope
 
