@@ -458,11 +458,17 @@ Task 05 raw range service, Task 01 overlap, `EventType`, existing teacher/subjec
 
 ### Acceptance Criteria
 
-- [ ] Teacher vacation hides all displayed event types for the teacher; student vacation hides only that student's events.
-- [ ] Boundary adjacency and partial vacation overlap follow approved half-open/whole-occurrence rules.
-- [ ] Removing a vacation makes the same source identity visible again without database reconstruction or conflict-calendar changes.
-- [ ] Break displacement and recurring cancellations produce distinct, correct effects.
-- [ ] Vacation visibility filtering never changes the conflict candidate set; common checks pass.
+- [x] Teacher vacation hides all displayed event types for the teacher; student vacation hides only that student's events.
+- [x] Boundary adjacency and partial vacation overlap follow approved half-open/whole-occurrence rules.
+- [x] Removing a vacation makes the same source identity visible again without database reconstruction or conflict-calendar changes.
+- [x] Break displacement and recurring cancellations produce distinct, correct effects.
+- [x] Vacation visibility filtering never changes the conflict candidate set; common checks pass.
+
+### Verification
+
+- Added a pure, typed visibility filter that classifies teacher/student vacation reasons, hides whole overlapping occurrences, preserves identities, and rejects occurrences from another teacher. Sorted interval indexes keep overlap checks bounded without changing raw inputs; unresolved lesson/break overlaps remain together for the separate approved displacement workflow.
+- SQLite integration tests cover teacher-wide hiding across event types, subject-only student vacation behavior, adjacency and partial overlap, reappearing identity after vacation removal, no source-row mutation, and cancellation-versus-break behavior.
+- `uv run pytest -q`: 95 passed. `uv run ruff check backend tests`, touched-file formatting, and targeted mypy pass.
 
 ### Out of scope
 
