@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -12,6 +12,20 @@ from backend.events import models as events_models  # noqa: F401
 from backend.main import app
 from backend.models import Base
 from backend.notifications import models as notifications_models  # noqa: F401
+from backend.telegram.config import TelegramConfig
+from backend.telegram.dependencies import get_telegram_settings
+
+
+@pytest.fixture
+def bot_service_key() -> Generator[str]:
+    key = "test-service-key-for-bot-client-32-characters"
+    app.dependency_overrides[get_telegram_settings] = lambda: TelegramConfig(
+        SERVICE_CREDENTIAL=key
+    )
+    try:
+        yield key
+    finally:
+        app.dependency_overrides.pop(get_telegram_settings, None)
 
 
 @pytest.fixture
