@@ -1,14 +1,27 @@
 import asyncio
+import re
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from sqlalchemy import func, select
 
-from backend.auth.models import User
+from backend.auth.models import TeacherProfile, User
 from telegram.api import BackendClient, Registration
 from telegram.inputs import parse_clock
+from telegram.onboarding import STUDENT_STEPS, TEACHER_STEPS, Step
 from telegram.runtime import build_dispatcher
 from tests.bot_support import BotDriver
+
+
+def assert_review_keyboard(driver: BotDriver, titles: tuple[Step, ...]) -> None:
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    edit_rows = markup.inline_keyboard[: len(titles)]
+    assert [row[0].text for row in edit_rows] == [step.title for step in titles]
+    assert all(len(row) == 1 for row in edit_rows)
+    assert [
+        button.text for row in markup.inline_keyboard[len(titles) :] for button in row
+    ] == ["Register", "Back", "Cancel"]
 
 
 async def teacher_defaults(driver: BotDriver) -> None:
@@ -30,7 +43,8 @@ async def test_teacher_defaults_edit_double_submit_and_invitation(
         await driver.text("/start")
         first_id = driver.session.last_message.message_id
         await teacher_defaults(driver)
-        await driver.click("Edit Lesson length")
+        assert_review_keyboard(driver, TEACHER_STEPS)
+        await driver.click("Lesson length")
         await driver.text("45")
         assert "Lesson length: 45" in driver.session.last_message.text
         submit = driver.callback_data("Register")
@@ -45,7 +59,8 @@ async def test_teacher_defaults_edit_double_submit_and_invitation(
         assert view.account.notification_lessons_today == 540
         invitation = driver.session.last_message.text.split("Student invitation: ")[1]
         payload = parse_qs(urlsplit(invitation).query)["start"][0]
-        assert payload == "teacher_" + view.teacher.code and len(payload) <= 64
+        assert re.fullmatch(r"t_[A-Z0-9]{6}", view.teacher.code)
+        assert payload == view.teacher.code
     finally:
         await driver.close()
 
@@ -133,7 +148,7 @@ async def test_student_deep_link_hours_and_existing_invitation(
     teacher = await registered_teacher(api)
     driver = BotDriver(build_dispatcher(api))
     try:
-        await driver.text("/start teacher_" + teacher.teacher.code)
+        await driver.text("/start " + teacher.teacher.code)
         first_id = driver.session.last_message.message_id
         assert "&lt;Teacher&gt;" in driver.session.last_message.text
         await driver.click("Confirm teacher")
@@ -144,9 +159,10 @@ async def test_student_deep_link_hours_and_existing_invitation(
         assert "between 1 and 10" in driver.session.last_message.text
         await driver.text("2")
         await driver.click("Disable")
-        await driver.click("Edit Timezone")
+        await driver.click("Timezone")
         await driver.text("UTC")
         assert "Review" in driver.session.last_message.text
+        assert_review_keyboard(driver, STUDENT_STEPS)
         await driver.click("Register")
         view = await api.view(driver.user_id, driver.user_id)
         assert (
@@ -164,7 +180,7 @@ async def test_student_deep_link_hours_and_existing_invitation(
         assert driver.session.last_message.message_id == first_id
         assert sum(c.__api_method__ == "sendMessage" for c in driver.session.calls) == 1
         other = await registered_teacher(api, 6000000001)
-        await driver.text("/start teacher_" + other.teacher.code)
+        await driver.text("/start " + other.teacher.code)
         assert "did not change" in driver.session.last_message.text
         view = await api.view(driver.user_id, driver.user_id)
         assert view.account.teacher_id == teacher.account.id
@@ -192,9 +208,9 @@ async def test_student_manual_code_disabled_and_minute_bounds(
         assert "between 1 and 600" in driver.session.last_message.text
         await driver.text("600")
         await driver.text("3")
-        await driver.click("Edit Lesson reminder")
+        await driver.click("Lesson reminder")
         await driver.click("Disable")
-        await driver.click("Edit Daily digest")
+        await driver.click("Daily digest")
         await driver.click("Use current/default")
         await driver.click("Register")
         view = await api.view(driver.user_id, driver.user_id)
@@ -203,6 +219,32 @@ async def test_student_manual_code_disabled_and_minute_bounds(
             view.student.notification_lesson is None
             and view.student.notification_homework == 3
         )
+        assert view.account.teacher_id == teacher.account.id
+    finally:
+        await driver.close()
+
+
+async def test_returning_teacher_gets_refreshed_short_invitation(
+    client, db_session, bot_service_key
+) -> None:
+    api = BackendClient(client, bot_service_key)
+    driver = BotDriver(build_dispatcher(api))
+    try:
+        await driver.text("/start")
+        await teacher_defaults(driver)
+        await driver.click("Register")
+        view = await api.view(driver.user_id, driver.user_id)
+        profile = await db_session.scalar(
+            select(TeacherProfile).where(TeacherProfile.teacher_id == view.account.id)
+        )
+        assert profile is not None
+        profile.code = "t_NEW123"
+        await db_session.commit()
+
+        await driver.text("/start")
+        assert "Teacher code: t_NEW123" in driver.session.last_message.text
+        invitation = driver.session.last_message.text.split("Student invitation: ")[1]
+        assert parse_qs(urlsplit(invitation).query)["start"] == ["t_NEW123"]
     finally:
         await driver.close()
 
@@ -217,7 +259,7 @@ async def test_malformed_and_inactive_invitation_recovery(
     await db_session.commit()
     driver = BotDriver(build_dispatcher(api))
     try:
-        await driver.text("/start teacher_bad?payload")
+        await driver.text("/start t_bad?payload")
         assert "Invalid invitation" in driver.session.last_message.text
         await driver.text(teacher.teacher.code)
         assert "not found" in driver.session.last_message.text

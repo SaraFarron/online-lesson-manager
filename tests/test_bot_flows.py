@@ -138,7 +138,7 @@ async def test_invitation_revalidated_at_submit(
         await teacher_defaults(teacher)
         await teacher.click("Register")
         view = await api.view(teacher.user_id, teacher.user_id)
-        await student.text("/start teacher_" + view.teacher.code)
+        await student.text("/start " + view.teacher.code)
         await student.click("Confirm teacher")
         await student.click("Use current/default")
         await student.click("Use current/default")

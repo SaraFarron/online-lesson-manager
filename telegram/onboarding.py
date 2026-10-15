@@ -5,15 +5,15 @@ from typing import Any
 
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
-from aiogram.utils.deep_linking import create_start_link
 from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Multiselect, Row, Select
+from aiogram_dialog.widgets.kbd import Button, Column, Multiselect, Row, Select
 from aiogram_dialog.widgets.kbd.select import ManagedMultiselect
 from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import BackendClient, BackendError, BackendUnavailable, Registration
 from telegram.inputs import digest_clock, parse_clock, parse_integer, parse_timezone
+from telegram.invitations import create_teacher_invitation
 
 
 class Wizard(StatesGroup):
@@ -438,8 +438,8 @@ async def submit(
     manager.dialog_data["submitted"] = True
     invitation = ""
     if view.teacher is not None:
-        invitation = await create_start_link(
-            manager.middleware_data["bot"], f"teacher_{view.teacher.code}"
+        invitation = await create_teacher_invitation(
+            manager.middleware_data["bot"], view.teacher.code
         )
     await manager.done(
         result={"view": view.model_dump(mode="json"), "invitation": invitation},
@@ -513,14 +513,16 @@ def build_wizard() -> Dialog:
         ),
         Window(
             Format(
-                "Review\n{summary}\n{error}\nPreferences are saved only. Notifications and schedule enforcement are not active."
+                "Review\n{summary}\nSelect a setting to edit.\n{error}\nPreferences are saved only. Notifications and schedule enforcement are not active."
             ),
-            Select(
-                Format("Edit {item[0]}"),
-                id="edit",
-                item_id_getter=lambda item: item[1],
-                items="edits",
-                on_click=edit_setting,
+            Column(
+                Select(
+                    Format("{item[0]}"),
+                    id="edit",
+                    item_id_getter=lambda item: item[1],
+                    items="edits",
+                    on_click=edit_setting,
+                ),
             ),
             Button(Const("Register"), id="submit", on_click=submit),
             navigation(),

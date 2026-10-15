@@ -1,17 +1,16 @@
 import logging
-import re
 from typing import Any
 
 from aiogram import BaseMiddleware, Dispatcher, F, Router
 from aiogram.filters import CommandObject, CommandStart, ExceptionTypeFilter
 from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiogram.types import CallbackQuery, ErrorEvent, Message, TelegramObject
-from aiogram.utils.deep_linking import create_start_link
 from aiogram_dialog import DialogManager, ShowMode, StartMode, setup_dialogs
 from aiogram_dialog.api.exceptions import OutdatedIntent, UnknownIntent
 
 from telegram.api import BackendClient, BackendError, BackendUnavailable
 from telegram.dialogs import Screens, build_dialog
+from telegram.invitations import create_teacher_invitation, parse_teacher_start_payload
 from telegram.onboarding import Wizard, build_wizard
 
 logger = logging.getLogger(__name__)
@@ -47,19 +46,19 @@ async def start(
         dialog_manager.dialog_data["view"] = view.model_dump(mode="json")
         dialog_manager.dialog_data["existing_invitation"] = bool(command.args)
         if view.teacher is not None:
-            dialog_manager.dialog_data["invitation"] = await create_start_link(
-                dialog_manager.middleware_data["bot"], f"teacher_{view.teacher.code}"
+            dialog_manager.dialog_data["invitation"] = await create_teacher_invitation(
+                dialog_manager.middleware_data["bot"], view.teacher.code
             )
         await dialog_manager.switch_to(Screens.home, show_mode=ShowMode.EDIT)
         await dialog_manager.show(show_mode=ShowMode.EDIT)
     elif command.args:
-        match = re.fullmatch(r"teacher_([A-Za-z0-9_-]{1,56})", command.args)
+        teacher_code = parse_teacher_start_payload(command.args)
         await dialog_manager.start(
             Wizard.code,
             data={
                 "role": "STUDENT",
-                "teacher_code": match.group(1) if match else None,
-                "invalid_invitation": match is None,
+                "teacher_code": teacher_code,
+                "invalid_invitation": teacher_code is None,
             },
             show_mode=ShowMode.EDIT,
         )

@@ -1,3 +1,6 @@
+import re
+import secrets
+import string
 import uuid
 from typing import Any
 
@@ -39,6 +42,7 @@ DUMMY_PASSWORD_HASH = (
     "$argon2id$v=19$m=65536,t=3,p=4$H7HFOyCv3KslcnJb9IzN6w$"
     "QIK1TR87Xy+3SbsJzNUK3BwbAEgQeFmsIj3XLeWmQSw"
 )
+TEACHER_CODE_PATTERN = re.compile(r"t_[A-Z0-9]{6}")
 
 
 async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User | None:
@@ -214,7 +218,12 @@ async def create_teacher_profile(
 
 
 def generate_teacher_code() -> str:
-    return uuid.uuid4().hex
+    alphabet = string.ascii_uppercase + string.digits
+    return "t_" + "".join(secrets.choice(alphabet) for _ in range(6))
+
+
+def is_generated_teacher_code(code: str) -> bool:
+    return TEACHER_CODE_PATTERN.fullmatch(code) is not None
 
 
 async def add_teacher_profile(
