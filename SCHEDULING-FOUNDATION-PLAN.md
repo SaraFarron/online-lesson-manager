@@ -56,6 +56,7 @@ Approved by the product owner on 2026-10-15. Update downstream tasks if these de
 - `interval_end` is an **exclusive occurrence-start cutoff**. An occurrence starting before it is eligible even if its end extends beyond it. An occurrence starting exactly at the cutoff is excluded.
 - For future teacher-local generated starts, shift nonexistent local times forward by the DST gap (02:30 becomes 03:30); choose the earlier instant when a local time occurs twice. An offset-bearing input anchor identifies its instant and fold; do not re-resolve that anchor.
 - Explicitly entered offset-bearing anchor timestamps identify an instant, including a chosen fold. Future occurrences follow the approved policy.
+- If distinct local recurrence dates resolve to the same UTC start instant, collapse them to one occurrence; its stable identity and cancellation key remain the series ID plus UTC start.
 ### 3. Intervals, occurrences, and cancellations
 
 - Use half-open intervals `[start, end)` throughout: overlap means `a.start < b.end and a.end > b.start`; adjacent events do not overlap.
@@ -323,11 +324,17 @@ Task 01 time helpers, `EventType`, existing interval-in-days representation.
 
 ### Acceptance Criteria
 
-- [ ] Weekly/non-weekly intervals, later query windows, overnight/multi-day occurrences, and cutoff equality have exact expected outputs.
-- [ ] Spring/fall transitions preserve approved clock and duration semantics.
-- [ ] A series anchored years earlier does not require iterating every prior occurrence; verify bounded generation work, not only runtime timing.
-- [ ] Overlapping adjacent query windows produce identical identity/start/end for the same occurrence.
-- [ ] Budget failure is explicit and returns no falsely complete result; common checks pass.
+- [x] Weekly/non-weekly intervals, later query windows, overnight/multi-day occurrences, and cutoff equality have exact expected outputs.
+- [x] Spring/fall transitions preserve approved clock and duration semantics.
+- [x] A series anchored years earlier does not require iterating every prior occurrence; verify bounded generation work, not only runtime timing.
+- [x] Overlapping adjacent query windows produce identical identity/start/end for the same occurrence.
+- [x] Budget failure is explicit and returns no falsely complete result; common checks pass.
+
+### Verification
+
+- Added a pure recurrence expander for legacy UTC-step and teacher-local series, returning typed occurrences with stable `(source kind, source ID, UTC start)` identities.
+- Focused tests cover weekly/non-weekly schedules, naive UTC compatibility, lower-bound-crossing and multi-day events, exclusive cutoff equality, spring/fall DST rules, coincident-start collapse, adjacent query identity, bounded seeking from a 39-year-old anchor, and explicit budget/invalid-input errors.
+- `uv run pytest -q`: 72 passed. Ruff and targeted mypy pass for the new expansion module.
 
 ### Out of scope
 
