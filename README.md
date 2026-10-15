@@ -88,7 +88,9 @@ Registration returns 201 and the normal token shape only after commit. Repeat or
 concurrent registration returns 409 with `detail: telegram_already_registered`;
 recover uncertain/lost responses through `/session`, not blind registration retries.
 Read `/auth/me` with the JWT, then the owner's teacher/student profile. Teacher
-profiles expose the server-generated invitation code.
+profiles expose the server-generated invitation code, formatted as `t_` plus
+six uppercase ASCII letters or digits. Student code entry and backend code
+resolution use the complete displayed value, including `t_`.
 
 `POST /api/v1/telegram/teacher-code/resolve` accepts `{"teacher_code": "CODE"}`
 and returns only `teacher_id` / `full_name` for confirmation. Unknown, inactive
@@ -115,16 +117,25 @@ Run a single polling process per Bot API token.
 In a private chat, `/start` opens the saved role-specific home for existing
 accounts; unknown senders choose teacher or student registration. Both wizards
 require explicit timezone confirmation, show defaults, and support Back,
-Cancel, and review edits before submitting. Invalid input edits the active
-prompt and preserves the draft.
+Cancel, and review edits before submitting. Review setting choices are shown
+one per row. Invalid input edits the active prompt and preserves the draft.
 
-Teacher signup returns a server-generated code and invitation:
-`https://t.me/<bot_username>?start=teacher_<code>`. Telegram delivers this as
-`/start teacher_<code>` (not the descriptive `/start?teacher_code=...` below).
+Teacher signup returns a server-generated code matching `^t_[A-Z0-9]{6}$` and
+an invitation such as `https://t.me/<bot_username>?start=t_ABC123`. Telegram
+delivers this as `/start t_ABC123`. Returning teachers see the current profile
+code and invitation on each `/start`.
 Unknown invited students confirm the teacher; students without a link enter
 the code manually. Lesson reminders explicitly offer hours or minutes and
 store canonical minutes. Existing accounts opening an invitation retain their
 role and teacher.
+
+Existing teacher codes can be explicitly replaced after deployment with
+`uv run python -m backend.auth.teacher_code_rotation --dry-run`, then
+`uv run python -m backend.auth.teacher_code_rotation --apply`. Apply previews
+the affected count and requires typing the matching `ROTATE <count>` phrase.
+It changes only nonconforming codes in one transaction; existing shared links
+for replaced codes stop working and no aliases are retained. Do not run apply
+without owner approval and a backup.
 
 Backend outages show an unavailable/retry screen, never offline login or
 successful local signup. If a registration response is lost, the bot checks
@@ -194,7 +205,7 @@ intermediate mismatch returns authentication errors, not offline success.
 Тут описан сценарий регистрации когда пользователь впервые заходит в бота.
 
 Команда /start - бот предлагает регистрацию, 2 кнопки - как учитель, как ученик.
-Команда /start?teacher_code=abc - регистрация ученика под конкретного учителя, последний определяется по коду.
+В Telegram ссылка-приглашение открывает `/start t_ABC123` и регистрацию ученика под конкретного учителя.
 
 Регистрация учителя:
 Бот предлагает настроить:

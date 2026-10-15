@@ -112,7 +112,7 @@ Persist preferences only. Display clearly that actual scheduled notifications an
 ### Bot behavior
 
 - `/start` in a private chat first resolves the sender with the backend. Existing user: open role-specific home screen. Unknown user: show teacher/student selection, unless an invitation directly selects student onboarding.
-- README's `/start?teacher_code=abc` is descriptive, not the literal Telegram deep-link format. Generate `https://t.me/<bot_username>?start=teacher_<code>` with aiogram's helper, and parse the actual `/start teacher_<code>` argument. Respect Telegram's 64-character payload limit and allowed characters.
+- Generate `https://t.me/<bot_username>?start=t_ABC123` with aiogram's helper and parse the actual `/start t_ABC123` argument. Generated codes match `^t_[A-Z0-9]{6}$`, including the `t_` prefix in the payload.
 - An already registered account receiving an invitation must not change role or teacher. Show that it is already registered; teacher transfer/linking existing accounts is out of scope.
 - Teacher wizard: timezone → work times → working days → lesson length → break → max consecutive → max/day → digest toggle/time → review → submit → code/invitation home screen.
 - Student wizard: invitation/code → teacher confirmation → timezone → digest toggle/time → pre-lesson toggle/lead time → homework toggle/days → review → submit → home screen.
@@ -657,7 +657,7 @@ AI agent.
 
 ### What to do
 
-- Parse `/start teacher_<code>` via aiogram `CommandStart` / command arguments. Generate invitations with the matching `create_start_link` contract; do not implement literal `/start?teacher_code=...`.
+- Parse short `/start t_ABC123` payloads via aiogram `CommandStart` / command arguments. Generate invitations with the matching `create_start_link` contract; do not add a second prefix.
 - Unknown invited user goes directly to teacher confirmation/student onboarding. Plain `/start` offers role selection; student without invitation enters a code.
 - Implement timezone, digest, pre-lesson and homework preference screens, review/edit, Back/Cancel, and single submission using shared inputs from Task 10 when available. Coordinate extraction rather than duplicate parsers.
 - Unknown/malformed/inactive-teacher invitation shows a recoverable code-entry error. Final registration remains backend-validated.

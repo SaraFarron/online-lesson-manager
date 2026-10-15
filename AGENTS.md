@@ -88,7 +88,7 @@ a README-described feature.
 
 | README section | Status | Notes |
 |---|---|---|
-| Teacher/student registration (`/auth/register`, `/auth/login`) | **Done** | Password auth retained; trusted Telegram API and private-chat `/start` teacher/student wizards implemented. Invitations use `/start teacher_<code>`. No account merging/password addition for Telegram-only users. |
+| Teacher/student registration (`/auth/register`, `/auth/login`) | **Done** | Password auth retained; trusted Telegram API and private-chat `/start` teacher/student wizards implemented. Teacher invitations use short `t_[A-Z0-9]{6}` codes in `/start` payloads; existing codes can be replaced with the explicit rotation command. No account merging/password addition for Telegram-only users. |
 | Teacher settings (work hours, lesson length, break, max/day) | **Partial** | Validated work hours, JSON ISO weekdays, lesson length, break, max/day and max consecutive preferences are persisted with README defaults. Settings are not enforced by scheduling validators yet. |
 | Student settings (notifications) | **Partial** | Validated digest minutes-of-local-day, lesson reminder minutes (1–600), homework days; null disables. Safe partial updates implemented. Notification delivery is not implemented. |
 | Lessons / breaks / vacations CRUD (one-off + recurring) | **Partial** | Routers + `events` validators/service work for create/update/delete. Missing: enforcing teacher work hours/days, max-per-day, max-consecutive, and the vacation/lesson priority rules from README. See Known Issues below for a routing bug in vacations. |
