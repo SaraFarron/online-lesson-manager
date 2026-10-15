@@ -140,9 +140,11 @@ without owner approval and a backup.
 Backend outages show an unavailable/retry screen, never offline login or
 successful local signup. If a registration response is lost, the bot checks
 the backend session before resubmitting. Notification preferences and teacher
-limits are persisted only: notification delivery, scheduling enforcement,
-schedule viewing/offline cache, homework actions, account linking/transfers,
-and post-onboarding settings UI remain unimplemented.
+limits are persisted only: notification delivery, enforcement of saved work
+hours/days and lesson-count limits, schedule viewing/offline cache, homework
+actions, account linking/transfers, and post-onboarding settings UI remain
+unimplemented. Shared temporal conflict checks and vacation/break policies are
+implemented as described in the scheduling handoff below.
 
 Verification: `uv run pytest -q tests` covers simulated Telegram updates with
 recorded Bot API calls, the real ASGI backend, and an isolated SQLite database,
@@ -290,3 +292,88 @@ intermediate mismatch returns authentication errors, not offline success.
 статусе выполнения домашних работ
 истории последних 10 действий
 кнопку удаления ученика (с подтверждением)
+
+### Scheduling foundation handoff
+
+The scheduling foundation is an internal backend layer for future schedule
+views; it does not yet expose a day/week schedule endpoint or provide a
+user-facing schedule screen.
+
+#### Time and recurrence contract
+
+- Event and cancellation database timestamps are naive UTC. API timestamps with
+  an offset are normalized to UTC; an API timestamp without an offset means
+  UTC, never server-local time. Public event timestamps carry an explicit UTC
+  offset.
+- New recurring series use the teacher's IANA timezone captured when the
+  series is created. Changing the teacher's display timezone does not move
+  events or alter existing series. Legacy series retain their `UTC_STEP`
+  recurrence mode; do not reinterpret them using the current teacher timezone.
+- Recurrence preserves elapsed duration. `interval_end` is an exclusive
+  occurrence-start cutoff, while both event intervals and query ranges are
+  half-open. A query includes full occurrences crossing either boundary.
+- Teacher-local recurrence preserves wall-clock starts across DST. A
+  nonexistent local time shifts forward by the DST gap; an ambiguous local
+  time resolves to the earlier instant. User-entered local dates must use the
+  viewer's explicit IANA timezone, not the server timezone.
+- An occurrence's stable identity is
+  `(source kind, source UUID, occurrence start in UTC)`. A cancellation
+  identifies one exact generated occurrence by its UTC start and end; it is
+  not a partial blackout interval.
+
+#### Internal service handoff
+
+Use the shared `backend/events/` services rather than reimplementing
+recurrence, cancellation, or vacation rules:
+
+```python
+occurrences = await load_raw_occurrences(
+    session, teacher_id, range_start_utc, range_end_utc
+)
+visibility = filter_vacation_visibility(occurrences, teacher_id)
+```
+
+`load_raw_occurrences` is in `backend/events/range_service.py`. It returns
+active raw `Occurrence` objects for one teacher, with cancellations applied,
+without committing or applying display visibility. Each occurrence exposes
+`source.kind`, `source.id`, `source.teacher_id`, `source.user_id`,
+`source.event_type`, `start`, `end`, and the stable `identity` above.
+`filter_vacation_visibility` in `backend/events/visibility.py` returns a
+`VisibilityResult` with separate `visible` and `hidden` tuples; hidden items
+retain the occurrence and a `teacher_vacation` or `student_vacation` reason.
+Teacher vacations hide the teacher's whole schedule; student vacations hide
+only that student's events.
+
+Both helpers consume and return aware UTC timestamps. Compute day/week query
+bounds in the viewer's timezone with `local_day_bounds(day, timezone_name)` or
+`local_week_bounds(day, timezone_name)` from `backend/events/time_utils.py`;
+these helpers return aware UTC bounds and account for DST-length days. Apply
+vacation visibility and viewer authorization before shaping the response.
+Teacher-wide raw data is needed to apply policy correctly, but a student must
+not receive other students' event details. Format timestamps for the viewer
+only after overlap, cancellation, and visibility decisions.
+
+The shared temporal policy is wired through
+`validate_schedule_change(session, data, teacher_id, ...)` in
+`backend/events/conflicts.py`. It validates the complete candidate recurrence
+horizon, rejects overlapping event writes, and implements vacation admission
+and break displacement. A break overlapping lessons returns HTTP 409 with
+`detail.affected_occurrences` unless the caller explicitly confirms; a
+confirmed retry rechecks current conflicts and applies the break plus
+displacement atomically. Only lessons are displaced. One-off lessons are
+deleted, recurring lessons receive exact cancellation rows, and deleting the
+break does not restore either.
+
+The schedule-range service accepts finite half-open ranges of at most 31 days.
+Occurrence expansion is capped at 10,000 per query, and new/updated recurrences
+are limited to ten calendar years so conflict validation can be complete.
+Unsupported ranges, invalid recurrence/cancellation data, and budget exhaustion
+fail explicitly; callers must not convert these failures into an empty or
+partial schedule.
+
+This foundation does **not** yet implement teacher work-hour/weekday
+enforcement, lesson duration defaults, daily/consecutive limits, automatic
+break creation, free-slot selection, transaction-level booking locks,
+schedule endpoints/UI, caching, or notification delivery. Treat those as
+separate follow-on work; conflict validation alone is not concurrency-safe
+booking.

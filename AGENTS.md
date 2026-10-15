@@ -91,7 +91,7 @@ a README-described feature.
 | Teacher/student registration (`/auth/register`, `/auth/login`) | **Done** | Password auth retained; trusted Telegram API and private-chat `/start` teacher/student wizards implemented. Teacher invitations use short `t_[A-Z0-9]{6}` codes in `/start` payloads; existing codes can be replaced with the explicit rotation command. No account merging/password addition for Telegram-only users. |
 | Teacher settings (work hours, lesson length, break, max/day) | **Partial** | Validated work hours, JSON ISO weekdays, lesson length, break, max/day and max consecutive preferences are persisted with README defaults. Settings are not enforced by scheduling validators yet. |
 | Student settings (notifications) | **Partial** | Validated digest minutes-of-local-day, lesson reminder minutes (1–600), homework days; null disables. Safe partial updates implemented. Notification delivery is not implemented. |
-| Lessons / breaks / vacations CRUD (one-off + recurring) | **Partial** | Routers + `events` validators/service work for create/update/delete. Missing: enforcing teacher work hours/days, max-per-day, max-consecutive, and the vacation/lesson priority rules from README. See Known Issues below for a routing bug in vacations. |
+| Lessons / breaks / vacations CRUD (one-off + recurring) | **Partial** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, and confirmed break displacement are implemented. Missing: enforcing teacher work hours/days, max-per-day, max-consecutive, duration defaults, automatic breaks, and concurrency-safe booking. |
 | Schedule viewing (day/week, timeline, teacher sees student names) | **Not started** | No endpoint computes a day/week schedule; `backend/schedule/router.py` is empty. |
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
 | Homework (assign/submit/mark done) | **Not started** | `backend/homework/` is an empty package. |
@@ -99,36 +99,24 @@ a README-described feature.
 | Telegram bot | **Auth/onboarding done** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, retry/recovery and edit-in-place screens. Schedule/homework actions, notification delivery, offline schedule cache and post-onboarding settings UI are not implemented. |
 | HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |
 
-## Known Issues / Tech Debt
+## Scheduling Foundation Boundaries
 
-Found during codebase exploration — be aware of these before touching the
-affected code, and don't build new work on top of the dead code paths:
-
-- **`vacations/router.py` is missing `teacher_id`.** It calls
-  `service.create_event(session, data, validator)` /
-  `service.update_event(session, vacation, data, create_validator)`, but both
-  functions require a `teacher_id` keyword arg. This will raise `TypeError` at
-  runtime. Compare with `breaks/router.py`, which correctly passes
-  `teacher_id=user.teacher_id`. Needs a product decision (README says students
-  can create their own vacations) before fixing.
-- **Dead per-domain validator/dependency files.** `backend/lessons/validators.py`
-  + `backend/lessons/dependencies.py` and `backend/vacations/dependencies.py`
-  define `LessonValidator`/`ValidatedLesson`/`ValidatedVacation` etc., but the
-  actual routers (`lessons/router.py`, `vacations/router.py`) import
-  `ValidatedEvent`/`ValidatedEventExists` from `backend.events.dependencies`
-  directly instead. Only `backend/breaks/` correctly uses its own
-  `breaks/dependencies.py`. Don't extend the lessons/vacations-local files
-  expecting them to run — check what the router actually imports first.
-- **Duplicate `EventValidator` class in `backend/events/validators.py`.** An
-  abstract-base-class version is defined first, then a second, unrelated
-  `EventValidator` (list-of-validators composite) is defined later in the same
-  file with the same name — the second silently shadows the first. The
-  shadowing one is the one in use; the ABC one is dead.
-- **`Event.start`/`Event.end` are naive `DateTime`** (no `timezone=True`),
-  unlike `TimestampMixin`'s tz-aware columns. README requires the DB to have
-  a single consistent timezone while each user sees their own — decide and
-  document the storage convention (likely "always UTC, naive") before building
-  schedule-viewing/timezone-conversion features.
+- Event and cancellation columns remain naive database timestamps, but their
+  stored values are UTC. API input with no offset means UTC; responses use
+  offset-bearing UTC values. New recurrences snapshot the teacher's timezone;
+  legacy series retain UTC-step behavior. See the scheduling handoff in
+  [README.md](./README.md) before building schedule views.
+- The internal event range service returns teacher-scoped raw occurrences and
+  bulk-applies cancellation rows. `backend/events/visibility.py` separately
+  computes vacation-hidden occurrences; callers must apply viewer authorization
+  before returning another student's event details.
+- Day/week schedule endpoints and client screens remain unimplemented.
+  Work-hour/day, duration, daily/consecutive limits, automatic breaks, and
+  transaction-level concurrency protection are also pending; don't describe
+  current temporal conflict validation as complete booking-policy enforcement.
+- Keep break-displacement confirmation and vacation display-only semantics
+  stable. Confirmed break creation permanently deletes one-off lessons or
+  cancels exact recurring occurrences; deleting a break does not restore them.
 
 ## Compatibility Matrix
 

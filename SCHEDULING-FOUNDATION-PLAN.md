@@ -601,11 +601,20 @@ Completion means one coherent scheduling interpretation, not just helper functio
 
 ### Acceptance Criteria
 
-- [ ] Exact occurrence identities and UTC timestamps agree between range reads and temporal conflict validation.
-- [ ] End-to-end cancellations/vacations do not lose or duplicate lessons.
-- [ ] Tests prove role isolation, bounds, DST semantics, rollback behavior, and supported migration paths.
-- [ ] Documentation distinguishes implemented foundation from pending screens, booking rules, concurrency protection, caching, and notifications.
-- [ ] Relevant tests and common checks pass; completion report lists commands/results and unrelated baseline failures.
+- [x] Exact occurrence identities and UTC timestamps agree between range reads and temporal conflict validation.
+- [x] End-to-end cancellations/vacations do not lose or duplicate lessons.
+- [x] Tests prove role isolation, bounds, DST semantics, rollback behavior, and supported migration paths.
+- [x] Documentation distinguishes implemented foundation from pending screens, booking rules, concurrency protection, caching, and notifications.
+- [x] Relevant tests pass; lint passes. Formatting and repository-wide type checking retain unrelated baseline failures listed below.
+
+### Verification
+
+- Added a real-DB lifecycle test covering offset-normalized one-off/recurring writes, cancellation, later-range identity, vacation hide/unhide, break preview/confirmation and non-restoration, recurrence interval/cutoff edits, overlap rejection, and series deletion. Existing focused tests cover all event kinds, teacher/student scope, exact DST/cutoff timestamps, midnight/half-open overlap, cancellation edits, bounds, query/generation counts, budget refusal, and rollback behavior.
+- `uv run pytest -q`: 107 passed (550 existing pytest-asyncio deprecation warnings).
+- `uv run ruff check backend tests`: passed. `uv run ruff format --check tests/test_scheduling_foundation.py`: passed after formatting the new test. Whole-repository format check still identifies the pre-existing unformatted `backend/notifications/models.py`; it was left untouched.
+- `uv run mypy backend`: three pre-existing errors remain in `backend/auth/config.py` (missing `JWT_SECRET`), `backend/database.py` (unparameterized `dict`), and `backend/events/dependencies.py` (missing return annotation).
+- Full migration upgrade, downgrade-to-base, and re-upgrade passed on disposable SQLite and PostgreSQL databases. No existing development or production database was used.
+- Updated README with the time/recurrence contract, service shapes, visibility/conflict boundaries, limits, and next-module guidance. Updated AGENTS.md status and removed stale issue notes; schedule viewing remains not started.
 
 ### Out of scope
 
