@@ -2,10 +2,20 @@ import asyncio
 import time
 import uuid
 from collections.abc import Callable
-from typing import Any, Literal, TypeVar
+from datetime import date
+from typing import Any, Literal, Self, TypeVar
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 
 class BackendUnavailable(RuntimeError):
@@ -111,6 +121,92 @@ class SessionView(BaseModel):
     student: StudentProfile | None = None
 
 
+class ScheduleItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_kind: Literal["event", "recurrent_event"]
+    source_id: uuid.UUID
+    event_type: Literal["LESSON", "BREAK", "VACATION"]
+    start: AwareDatetime
+    end: AwareDatetime
+    status: Literal["past", "ongoing", "upcoming"]
+    subject_label: str | None = None
+
+    @model_validator(mode="after")
+    def validate_interval_and_label(self) -> Self:
+        if self.start >= self.end:
+            raise ValueError("Schedule item start must be before end")
+        if self.subject_label is not None and (
+            self.event_type != "LESSON" or not self.subject_label.strip()
+        ):
+            raise ValueError("Only named lessons may have a subject label")
+        return self
+
+
+class ScheduleDay(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    date: date
+    items: list[ScheduleItem]
+
+
+class ScheduleResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    period: Literal["day", "week"]
+    timezone: str
+    generated_at: AwareDatetime
+    range_start: AwareDatetime
+    range_end: AwareDatetime
+    days: list[ScheduleDay]
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError("Invalid schedule timezone") from exc
+        return value
+
+    @model_validator(mode="after")
+    def validate_period_shape(self) -> Self:
+        expected_days = 1 if self.period == "day" else 7
+        if len(self.days) != expected_days:
+            raise ValueError(
+                f"{self.period} response must contain {expected_days} day(s)"
+            )
+        if any(
+            later.date.toordinal() != earlier.date.toordinal() + 1
+            for earlier, later in zip(self.days, self.days[1:], strict=False)
+        ):
+            raise ValueError("Schedule dates must be consecutive and ascending")
+        if self.period == "week" and self.days[0].date.weekday() != 0:
+            raise ValueError("Week response must start on Monday")
+        if self.range_start >= self.range_end:
+            raise ValueError("Schedule range start must be before end")
+        return self
+
+
+ErrorContext = Literal["default", "schedule"]
+DEFAULT_ERROR_MESSAGES = {
+    400: "Account inactive or request not allowed.",
+    401: "Authentication failed. Check bot configuration or restart with /start.",
+    403: "Access denied.",
+    404: "Account or invitation not found.",
+    409: "Account already registered.",
+    422: "Invalid settings. Review the values before submitting again.",
+}
+SCHEDULE_ERROR_MESSAGES = {
+    400: "This account cannot view a schedule.",
+    401: "Schedule authentication failed. Please retry or restart with /start.",
+    403: "This account does not have schedule access.",
+    404: "The linked teacher is not available for schedule viewing.",
+    409: "The linked teacher cannot provide a schedule.",
+    422: "The schedule request or calendar data is invalid.",
+}
+
+
 Model = TypeVar("Model", bound=BaseModel)
 
 
@@ -136,6 +232,8 @@ class BackendClient:
         service: bool = False,
         token: str | None = None,
         body: dict[str, Any] | None = None,
+        params: dict[str, str] | None = None,
+        error_context: ErrorContext = "default",
     ) -> Model:
         probe = await self.breaker.enter()
         failed = False
@@ -149,7 +247,7 @@ class BackendClient:
         try:
             try:
                 response = await self.http.request(
-                    method, path, headers=headers, json=body
+                    method, path, headers=headers, params=params, json=body
                 )
             except httpx.TransportError as exc:
                 failed = True
@@ -159,14 +257,11 @@ class BackendClient:
                 raise BackendUnavailable()
             if response.is_error:
                 # Do not display arbitrary backend payloads or echo rejected input.
-                messages = {
-                    400: "Account inactive or request not allowed.",
-                    401: "Authentication failed. Check bot configuration or restart with /start.",
-                    403: "Access denied.",
-                    404: "Account or invitation not found.",
-                    409: "Account already registered.",
-                    422: "Invalid settings. Review the values before submitting again.",
-                }
+                messages = (
+                    SCHEDULE_ERROR_MESSAGES
+                    if error_context == "schedule"
+                    else DEFAULT_ERROR_MESSAGES
+                )
                 raise BackendError(
                     response.status_code,
                     messages.get(response.status_code, "Backend rejected the request."),
@@ -182,13 +277,20 @@ class BackendClient:
         finally:
             await self.breaker.finish(failed, probe)
 
-    async def session(self, sender_id: int, chat_id: int) -> Token:
+    async def session(
+        self,
+        sender_id: int,
+        chat_id: int,
+        *,
+        error_context: ErrorContext = "default",
+    ) -> Token:
         try:
             token = await self.request(
                 "POST",
                 "/api/v1/telegram/session",
                 Token,
                 service=True,
+                error_context=error_context,
                 body={
                     "telegram_user_id": sender_id,
                     "telegram_private_chat_id": chat_id,
@@ -202,17 +304,76 @@ class BackendClient:
         return token
 
     async def read(
-        self, path: str, model: type[Model], sender_id: int, chat_id: int
+        self,
+        path: str,
+        model: type[Model],
+        sender_id: int,
+        chat_id: int,
+        *,
+        params: dict[str, str] | None = None,
+        error_context: ErrorContext = "default",
     ) -> Model:
         if sender_id not in self.tokens:
-            await self.session(sender_id, chat_id)
+            await self.session(sender_id, chat_id, error_context=error_context)
         try:
-            return await self.request("GET", path, model, token=self.tokens[sender_id])
+            return await self.request(
+                "GET",
+                path,
+                model,
+                token=self.tokens[sender_id],
+                params=params,
+                error_context=error_context,
+            )
         except BackendError as exc:
             if exc.status != 401:
                 raise
-            await self.session(sender_id, chat_id)
-            return await self.request("GET", path, model, token=self.tokens[sender_id])
+            await self.session(sender_id, chat_id, error_context=error_context)
+            return await self.request(
+                "GET",
+                path,
+                model,
+                token=self.tokens[sender_id],
+                params=params,
+                error_context=error_context,
+            )
+
+    async def read_schedule_day(
+        self,
+        sender_id: int,
+        chat_id: int,
+        requested_date: date | None = None,
+    ) -> ScheduleResponse:
+        params = {"date": requested_date.isoformat()} if requested_date else None
+        result = await self.read(
+            "/api/v1/schedule/day",
+            ScheduleResponse,
+            sender_id,
+            chat_id,
+            params=params,
+            error_context="schedule",
+        )
+        if result.period != "day":
+            raise BackendUnavailable()
+        return result
+
+    async def read_schedule_week(
+        self,
+        sender_id: int,
+        chat_id: int,
+        requested_date: date | None = None,
+    ) -> ScheduleResponse:
+        params = {"date": requested_date.isoformat()} if requested_date else None
+        result = await self.read(
+            "/api/v1/schedule/week",
+            ScheduleResponse,
+            sender_id,
+            chat_id,
+            params=params,
+            error_context="schedule",
+        )
+        if result.period != "week":
+            raise BackendUnavailable()
+        return result
 
     async def view(self, sender_id: int, chat_id: int) -> SessionView:
         account = await self.read("/api/v1/auth/me", Account, sender_id, chat_id)

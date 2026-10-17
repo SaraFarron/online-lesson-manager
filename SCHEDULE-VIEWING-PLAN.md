@@ -409,10 +409,14 @@ AI agent.
 
 ### Acceptance Criteria
 
-- [ ] Day/week payloads validate, explicit query dates encode correctly, and query parameters survive JWT renewal.
-- [ ] Schedule calls use bearer auth, not `X-Bot-Service-Key`; tokens never enter callbacks or rendered text.
-- [ ] Transport/5xx/circuit failures remain availability errors; 400/403/422 use meaningful non-registration messages.
-- [ ] Existing auth/onboarding client tests still pass; common bot checks pass.
+- [x] Day/week payloads validate, explicit query dates encode correctly, and query parameters survive JWT renewal.
+- [x] Schedule calls use bearer auth, not `X-Bot-Service-Key`; tokens never enter callbacks or rendered text.
+- [x] Transport/5xx/circuit failures remain availability errors; 400/403/422 use meaningful non-registration messages.
+- [x] Existing auth/onboarding client tests still pass; common bot checks pass.
+
+Verification: `uv run pytest -q tests/test_bot_client.py tests/test_bot_flows.py`
+passed (15 tests). Ruff lint/format for `telegram` and the touched test, and
+`uv run mypy telegram`, passed.
 
 ### Out of scope
 
