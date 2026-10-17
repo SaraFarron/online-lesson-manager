@@ -14,6 +14,7 @@ from backend.lessons.router import recurrent_router as recurrent_lessons_router
 from backend.lessons.router import router as lessons_router
 from backend.pages.router import htmx_router
 from backend.pages.router import router as pages_router
+from backend.schedule.router import router as schedule_router
 from backend.telegram.router import router as telegram_router
 from backend.vacations.router import router as vacations_router
 
@@ -48,3 +49,4 @@ app.include_router(recurrent_lessons_router, prefix=settings.API_V1_STR)
 app.include_router(breaks_router, prefix=settings.API_V1_STR)
 app.include_router(recurrent_breaks_router, prefix=settings.API_V1_STR)
 app.include_router(vacations_router, prefix=settings.API_V1_STR)
+app.include_router(schedule_router, prefix=settings.API_V1_STR)

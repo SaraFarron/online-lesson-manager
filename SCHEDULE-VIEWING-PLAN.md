@@ -365,11 +365,16 @@ Task 02 service, existing auth/exception patterns, FastAPI `Annotated` dependenc
 
 ### Acceptance Criteria
 
-- [ ] Both routes work with existing user JWTs; missing/invalid JWT and inactive user requests fail before calendar disclosure.
-- [ ] Omitted date selects the correct local day/week near UTC midnight; explicit date is stable under an overridden clock.
-- [ ] Invalid dates fail validation; week anchor on Sunday still returns the preceding Monday through Sunday.
-- [ ] DST-transition day/week and engine-error paths have real-DB HTTP coverage.
-- [ ] Foundation, auth, and existing bot behavior remain intact; common checks pass.
+- [x] Both routes work with existing user JWTs; missing/invalid JWT and inactive user requests fail before calendar disclosure.
+- [x] Omitted date selects the correct local day/week near UTC midnight; explicit date is stable under an overridden clock.
+- [x] Invalid dates fail validation; week anchor on Sunday still returns the preceding Monday through Sunday.
+- [x] DST-transition day/week and engine-error paths have real-DB HTTP coverage.
+- [x] Foundation, auth, and existing bot behavior remain intact; task-scoped checks pass and full-repository baseline failures are recorded under Task 01.
+
+Verification: the schedule, foundation, auth, smoke, and bot regression
+selection passed (43 tests). Route OpenAPI, authentication, date boundaries,
+DST day/week bounds, and invalid recurrence data were exercised through the
+real ASGI app and isolated database.
 
 ### Out of scope
 
