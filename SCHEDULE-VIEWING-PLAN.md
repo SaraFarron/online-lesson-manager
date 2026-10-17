@@ -198,9 +198,9 @@ README viewing requirements, [foundation handoff](./README.md#scheduling-foundat
   the response snapshot.
 - Same-message pagination is approved for an oversized day/week. Split only
   between complete event rows, keep all dates/events, and shorten only a
-  display label longer than 80 Unicode code points. Verify a conservative
-  Telegram message-size budget; never drop a row/day or send a burst of
-  messages.
+  display label longer than 80 Unicode code points. Keep each message within a
+  conservative 3,500 UTF-16-unit budget; never drop a row/day or send a burst
+  of messages.
 
 Concrete examples (illustrative UUIDs; timestamps are offset-bearing UTC):
 
@@ -452,11 +452,11 @@ Existing escaping conventions in [dialogs](./telegram/dialogs.py), Python `zonei
 
 ### Acceptance Criteria
 
-- [ ] Ordinary day/week fits one message; week includes Monday–Sunday even when some/all days are empty.
-- [ ] Oversized day/week pages remain within Telegram limits with valid formatting and complete authorized event coverage.
-- [ ] Long names, `<>&`, emoji, repeated-hour times, start-date-only cross-midnight rendering, and zero events have exact rendering tests.
-- [ ] Divider appears only on the response's current local date; start/end equality and ongoing events render correctly.
-- [ ] Student text never includes teacher-only subject labels; common checks pass.
+- [x] Ordinary day/week fits one message; week includes Monday–Sunday even when some/all days are empty.
+- [x] Oversized day/week pages remain within Telegram limits with valid formatting and complete authorized event coverage.
+- [x] Long names, `<>&`, emoji, repeated-hour times, start-date-only cross-midnight rendering, and zero events have exact rendering tests.
+- [x] Divider appears only on the response's current local date; start/end equality and ongoing events render correctly.
+- [x] Student text never includes teacher-only subject labels; common checks pass.
 
 ### Out of scope
 
