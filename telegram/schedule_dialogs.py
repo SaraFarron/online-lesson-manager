@@ -1,0 +1,221 @@
+from html import escape
+from typing import Any, Literal
+
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery
+from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
+from aiogram_dialog.widgets.kbd import Button, Row
+from aiogram_dialog.widgets.text import Const, Format
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from telegram.api import BackendError, BackendUnavailable, SessionView
+from telegram.onboarding import backend
+from telegram.schedule_format import ViewerRole, format_schedule_pages
+
+SchedulePeriod = Literal["day", "week"]
+
+
+class ScheduleScreens(StatesGroup):
+    view = State()
+
+
+class ScheduleDialogState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    period: SchedulePeriod
+    role: ViewerRole
+    pages: list[str] = Field(default_factory=list)
+    page: int = Field(default=0, ge=0)
+    error: str = ""
+
+    @model_validator(mode="after")
+    def validate_page(self) -> ScheduleDialogState:
+        if self.pages and self.page >= len(self.pages):
+            raise ValueError("Schedule page is outside the available pages")
+        if not self.pages and not self.error:
+            raise ValueError("Schedule state must contain pages or an error")
+        return self
+
+
+async def open_today(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _open_schedule(callback, manager, "day")
+
+
+async def open_week(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _open_schedule(callback, manager, "week")
+
+
+async def _open_schedule(
+    callback: CallbackQuery, manager: DialogManager, period: SchedulePeriod
+) -> None:
+    view = SessionView.model_validate(manager.dialog_data["view"])
+    if view.account.role not in {"TEACHER", "STUDENT"}:
+        raise ValueError("This account cannot view a schedule")
+    role: ViewerRole = view.account.role
+    state = await _load_schedule(callback, manager, period, role)
+    await manager.start(
+        ScheduleScreens.view,
+        data=state.model_dump(mode="json"),
+        mode=StartMode.NORMAL,
+        show_mode=ShowMode.EDIT,
+    )
+
+
+async def schedule_started(start_data: Any, manager: DialogManager) -> None:
+    state = ScheduleDialogState.model_validate(start_data)
+    manager.dialog_data.clear()
+    manager.dialog_data.update(state.model_dump(mode="json"))
+
+
+async def switch_to_today(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _refresh(callback, manager, "day")
+
+
+async def switch_to_week(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _refresh(callback, manager, "week")
+
+
+async def refresh_schedule(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    state = _state(manager)
+    await _refresh(callback, manager, state.period)
+
+
+async def _refresh(
+    callback: CallbackQuery, manager: DialogManager, period: SchedulePeriod
+) -> None:
+    current = _state(manager)
+    state = await _load_schedule(callback, manager, period, current.role)
+    manager.dialog_data.clear()
+    manager.dialog_data.update(state.model_dump(mode="json"))
+    await manager.show(show_mode=ShowMode.EDIT)
+
+
+async def previous_page(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    state = _state(manager)
+    if state.page == 0:
+        return
+    manager.dialog_data["page"] = state.page - 1
+    await manager.show(show_mode=ShowMode.EDIT)
+
+
+async def next_page(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    state = _state(manager)
+    if state.page + 1 >= len(state.pages):
+        return
+    manager.dialog_data["page"] = state.page + 1
+    await manager.show(show_mode=ShowMode.EDIT)
+
+
+async def back_to_home(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await manager.done(show_mode=ShowMode.EDIT)
+
+
+async def schedule_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
+    state = _state(dialog_manager)
+    return {
+        "schedule_text": (
+            state.pages[state.page] if state.pages else escape(state.error)
+        ),
+        "has_previous": state.page > 0,
+        "has_next": state.page + 1 < len(state.pages),
+        "show_today": state.period != "day",
+        "show_week": state.period != "week",
+    }
+
+
+def _state(manager: DialogManager) -> ScheduleDialogState:
+    return ScheduleDialogState.model_validate(manager.dialog_data)
+
+
+async def _load_schedule(
+    callback: CallbackQuery,
+    manager: DialogManager,
+    period: SchedulePeriod,
+    role: ViewerRole,
+) -> ScheduleDialogState:
+    if callback.message is None:
+        raise ValueError("Schedule viewing requires a private chat")
+    client = backend(manager)
+    try:
+        response = (
+            await client.read_schedule_day(
+                callback.from_user.id, callback.message.chat.id
+            )
+            if period == "day"
+            else await client.read_schedule_week(
+                callback.from_user.id, callback.message.chat.id
+            )
+        )
+        pages = format_schedule_pages(response, role)
+    except BackendError as exc:
+        return ScheduleDialogState(period=period, role=role, error=str(exc))
+    except BackendUnavailable:
+        return ScheduleDialogState(
+            period=period,
+            role=role,
+            error="Schedule is unavailable right now. Please try again shortly.",
+        )
+    except ValidationError, ValueError:
+        return ScheduleDialogState(
+            period=period,
+            role=role,
+            error="The schedule response could not be displayed. Refresh or return home.",
+        )
+    return ScheduleDialogState(period=period, role=role, pages=list(pages))
+
+
+def build_schedule_dialog() -> Dialog:
+    return Dialog(
+        Window(
+            Format("{schedule_text}"),
+            Row(
+                Button(
+                    Const("◀ Previous"),
+                    id="previous",
+                    on_click=previous_page,
+                    when="has_previous",
+                ),
+                Button(
+                    Const("Next ▶"),
+                    id="next",
+                    on_click=next_page,
+                    when="has_next",
+                ),
+            ),
+            Row(
+                Button(Const("Refresh"), id="refresh", on_click=refresh_schedule),
+                Button(
+                    Const("Today"),
+                    id="today",
+                    on_click=switch_to_today,
+                    when="show_today",
+                ),
+                Button(
+                    Const("This week"),
+                    id="week",
+                    on_click=switch_to_week,
+                    when="show_week",
+                ),
+                Button(Const("Back to home"), id="home", on_click=back_to_home),
+            ),
+            state=ScheduleScreens.view,
+        ),
+        getter=schedule_data,
+        on_start=schedule_started,
+    )

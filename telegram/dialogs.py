@@ -5,12 +5,13 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, ShowMode, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Row, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import SessionView
 from telegram.inputs import digest_clock, parse_timezone
 from telegram.onboarding import begin_student, begin_teacher
+from telegram.schedule_dialogs import open_today, open_week
 
 
 class Screens(StatesGroup):
@@ -23,9 +24,9 @@ class Screens(StatesGroup):
 
 async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     raw_view = dialog_manager.dialog_data.get("view")
+    view = SessionView.model_validate(raw_view) if raw_view is not None else None
     home = ""
-    if raw_view is not None:
-        view = SessionView.model_validate(raw_view)
+    if view is not None:
         account = view.account
         home = (
             f"{account.role}: {account.full_name or 'Registered account'}\n"
@@ -55,9 +56,15 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
                 else f"{view.student.notification_homework} days"
             )
             home += f"Lesson reminder: {lesson}\nHomework reminder: {homework}\n"
-        home += (
-            "Preferences saved. Notifications and schedule rules are not active yet."
-        )
+        if account.role in {"TEACHER", "STUDENT"}:
+            home += (
+                "Preferences saved. Schedule viewing is available. "
+                "Booking rules and notifications are not active yet."
+            )
+        else:
+            home += (
+                "Preferences saved. Booking rules and notifications are not active yet."
+            )
         invitation = dialog_manager.dialog_data.get("invitation", "")
         if invitation:
             home += f"\nStudent invitation: {invitation}"
@@ -66,6 +73,8 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "error": escape(dialog_manager.dialog_data.get("error", "")),
         "home": escape(home),
         "proof": "backend_client" not in dialog_manager.middleware_data,
+        "can_view_schedule": view is not None
+        and view.account.role in {"TEACHER", "STUDENT"},
     }
 
 
@@ -133,7 +142,24 @@ def build_dialog() -> Dialog:
             SwitchTo(Const("Back"), id="back", state=Screens.details),
             state=Screens.timezone,
         ),
-        Window(Format("{home}"), state=Screens.home),
+        Window(
+            Format("{home}"),
+            Row(
+                Button(
+                    Const("Today"),
+                    id="schedule_today",
+                    on_click=open_today,
+                    when="can_view_schedule",
+                ),
+                Button(
+                    Const("This week"),
+                    id="schedule_week",
+                    on_click=open_week,
+                    when="can_view_schedule",
+                ),
+            ),
+            state=Screens.home,
+        ),
         Window(
             Format("{error}\nSend /start to retry. No offline account is created."),
             state=Screens.unavailable,

@@ -1,0 +1,376 @@
+import asyncio
+from datetime import UTC, datetime
+from urllib.parse import parse_qs, urlsplit
+
+import httpx
+from sqlalchemy import select
+
+from backend.auth.models import User
+from backend.events.constants import RecurrenceMode
+from backend.events.models import Event, RecurrentCancels, RecurrentEvent
+from backend.main import app
+from backend.schedule.router import get_schedule_clock
+from telegram.api import BackendClient
+from telegram.runtime import build_dispatcher
+from telegram.schedule_dialogs import ScheduleDialogState
+from tests.bot_support import BotDriver
+from tests.test_bot_onboarding import teacher_defaults
+
+
+async def _register_teacher(driver: BotDriver, api: BackendClient) -> None:
+    await driver.text("/start")
+    await teacher_defaults(driver)
+    await driver.click("Register")
+    assert "TEACHER:" in driver.session.last_message.text
+    assert await api.view(driver.user_id, driver.user_id)
+
+
+async def test_registered_teacher_can_navigate_and_refresh_in_place(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    api = BackendClient(client, bot_service_key)
+    driver = BotDriver(build_dispatcher(api))
+    now = [datetime(2026, 10, 19, 23, 59, tzinfo=UTC)]
+    monkeypatch.setitem(app.dependency_overrides, get_schedule_clock, lambda: now[0])
+    try:
+        await _register_teacher(driver, api)
+        view = await api.view(driver.user_id, driver.user_id)
+        message_id = driver.session.last_message.message_id
+        assert "Schedule viewing is available" in driver.session.last_message.text
+        assert "Booking rules and notifications are not active yet" in (
+            driver.session.last_message.text
+        )
+
+        await driver.click("Today")
+        assert "Monday, October 19, 2026" in driver.session.last_message.text
+        assert "No events" in driver.session.last_message.text
+        assert driver.session.last_message.message_id == message_id
+
+        await driver.click("This week")
+        assert "This week's schedule" in driver.session.last_message.text
+        assert driver.session.last_message.text.count("No events") == 7
+        assert driver.callback_data("Today")
+
+        db_session.add(
+            Event(
+                teacher_id=view.account.id,
+                user_id=view.account.id,
+                event_type="LESSON",
+                start=datetime(2026, 10, 20, 9),
+                end=datetime(2026, 10, 20, 10),
+            )
+        )
+        await db_session.commit()
+        now[0] = datetime(2026, 10, 20, 0, 1, tzinfo=UTC)
+        await driver.click("Refresh")
+        assert "Tuesday, October 20, 2026" in driver.session.last_message.text
+        assert "Updated at 2026-10-20 00:01 (UTC)" in driver.session.last_message.text
+        assert "Personal lesson" in driver.session.last_message.text
+        assert driver.session.last_message.text.count("No events") == 6
+
+        await driver.click("Today")
+        assert "Today's schedule" in driver.session.last_message.text
+        assert "Personal lesson" in driver.session.last_message.text
+        await driver.click("Back to home")
+        assert "TEACHER:" in driver.session.last_message.text
+        assert "Schedule viewing is available" in driver.session.last_message.text
+        assert driver.session.last_message.message_id == message_id
+
+        sent = [
+            call
+            for call in driver.session.calls
+            if call.__api_method__ == "sendMessage"
+        ]
+        edits = [
+            call
+            for call in driver.session.calls
+            if call.__api_method__ == "editMessageText"
+        ]
+        answers = [
+            call
+            for call in driver.session.calls
+            if call.__api_method__ == "answerCallbackQuery"
+        ]
+        assert len(sent) == 1
+        assert edits and {call.message_id for call in edits} == {message_id}
+        assert len(answers) >= 6
+    finally:
+        await driver.close()
+
+
+async def test_schedule_outage_shows_retry_and_recovers_without_stale_rows(
+    client, bot_service_key
+) -> None:
+    offline = [False]
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        if offline[0]:
+            raise httpx.ConnectError("test outage", request=request)
+        return await client.send(request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, bot_service_key)
+        driver = BotDriver(build_dispatcher(api))
+        try:
+            await _register_teacher(driver, api)
+            offline[0] = True
+            await driver.click("Today")
+            error_text = driver.session.last_message.text
+            assert "Schedule is unavailable" in error_text
+            assert "No events" not in error_text
+            assert driver.callback_data("Refresh")
+            assert driver.callback_data("Back to home")
+
+            offline[0] = False
+            await driver.click("Refresh")
+            assert "Today's schedule" in driver.session.last_message.text
+            assert "No events" in driver.session.last_message.text
+            await driver.click("Back to home")
+            assert "TEACHER:" in driver.session.last_message.text
+        finally:
+            await driver.close()
+
+
+async def test_expired_token_recovers_and_inactive_account_gets_schedule_error(
+    client, db_session, bot_service_key
+) -> None:
+    api = BackendClient(client, bot_service_key)
+    driver = BotDriver(build_dispatcher(api))
+    try:
+        await _register_teacher(driver, api)
+        await driver.click("Today")
+        api.tokens[driver.user_id] = "expired-test-token"
+        await driver.click("Refresh")
+        assert "Today's schedule" in driver.session.last_message.text
+
+        account = await db_session.scalar(
+            select(User).where(User.telegram_user_id == driver.user_id)
+        )
+        assert account is not None
+        account.is_active = False
+        await db_session.commit()
+        await driver.click("Refresh")
+
+        error_text = driver.session.last_message.text
+        assert "cannot view a schedule" in error_text
+        assert "No events" not in error_text
+        assert driver.callback_data("Refresh")
+        assert driver.callback_data("Back to home")
+    finally:
+        await driver.close()
+
+
+async def test_registered_student_can_open_week_and_return_home(
+    client, bot_service_key
+) -> None:
+    api = BackendClient(client, bot_service_key)
+    teacher = BotDriver(build_dispatcher(api))
+    student = BotDriver(build_dispatcher(api), user_id=5000000001)
+    try:
+        await _register_teacher(teacher, api)
+        invitation = teacher.session.last_message.text.split("Student invitation: ")[1]
+        payload = parse_qs(urlsplit(invitation).query)["start"][0]
+        await student.text("/start " + payload)
+        await student.click("Confirm teacher")
+        for label in [
+            "Use current/default",
+            "Use current/default",
+            "Use current minutes/off",
+            "Use current/default",
+            "Register",
+        ]:
+            await student.click(label)
+
+        message_id = student.session.last_message.message_id
+        assert "STUDENT:" in student.session.last_message.text
+        assert "Schedule viewing is available" in student.session.last_message.text
+        await student.click("This week")
+        assert "This week's schedule" in student.session.last_message.text
+        assert student.session.last_message.text.count("No events") == 7
+        await student.click("Back to home")
+        assert "STUDENT:" in student.session.last_message.text
+        assert student.session.last_message.message_id == message_id
+        assert (
+            sum(call.__api_method__ == "sendMessage" for call in student.session.calls)
+            == 1
+        )
+    finally:
+        await teacher.close()
+        await student.close()
+
+
+async def test_refresh_applies_timezone_name_cancellation_and_vacation_changes(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    api = BackendClient(client, bot_service_key)
+    teacher = BotDriver(build_dispatcher(api))
+    student = BotDriver(build_dispatcher(api), user_id=5000000001)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 19, 12, tzinfo=UTC),
+    )
+    try:
+        await _register_teacher(teacher, api)
+        invitation = teacher.session.last_message.text.split("Student invitation: ")[1]
+        payload = parse_qs(urlsplit(invitation).query)["start"][0]
+        await student.text("/start " + payload)
+        await student.click("Confirm teacher")
+        for label in [
+            "Use current/default",
+            "Use current/default",
+            "Use current minutes/off",
+            "Use current/default",
+            "Register",
+        ]:
+            await student.click(label)
+
+        teacher_view = await api.view(teacher.user_id, teacher.user_id)
+        student_view = await api.view(student.user_id, student.user_id)
+        student_user = await db_session.get(User, student_view.account.id)
+        teacher_user = await db_session.get(User, teacher_view.account.id)
+        assert student_user is not None and teacher_user is not None
+        student_user.full_name = "Original Student"
+        one_off = Event(
+            teacher_id=teacher_user.id,
+            user_id=student_user.id,
+            event_type="LESSON",
+            start=datetime(2026, 10, 19, 10),
+            end=datetime(2026, 10, 19, 11),
+        )
+        recurrent = RecurrentEvent(
+            teacher_id=teacher_user.id,
+            user_id=student_user.id,
+            event_type="LESSON",
+            start=datetime(2026, 10, 19, 11),
+            end=datetime(2026, 10, 19, 12),
+            interval=7,
+            interval_end=datetime(2026, 11, 30, 11),
+            recurrence_mode=RecurrenceMode.UTC_STEP.value,
+        )
+        db_session.add_all([one_off, recurrent])
+        await db_session.flush()
+        await db_session.commit()
+
+        await teacher.click("Today")
+        initial_text = teacher.session.last_message.text
+        assert "Original Student" in initial_text
+        assert "10:00–11:00" in initial_text
+        assert "11:00–12:00" in initial_text
+
+        student_user.full_name = "Updated Student"
+        teacher_user.timezone = "Asia/Bangkok"
+        db_session.add(
+            RecurrentCancels(
+                recurrent_event_id=recurrent.id,
+                start=datetime(2026, 10, 19, 11),
+                end=datetime(2026, 10, 19, 12),
+            )
+        )
+        await db_session.commit()
+        await teacher.click("Refresh")
+        updated_text = teacher.session.last_message.text
+        assert "Updated Student" in updated_text
+        assert "Timezone: Asia/Bangkok" in updated_text
+        assert "17:00–18:00" in updated_text
+        assert "11:00–12:00" not in updated_text
+
+        db_session.add(
+            Event(
+                teacher_id=teacher_user.id,
+                user_id=teacher_user.id,
+                event_type="VACATION",
+                start=datetime(2026, 10, 19, 10, 30),
+                end=datetime(2026, 10, 19, 10, 45),
+            )
+        )
+        await db_session.commit()
+        await teacher.click("Refresh")
+        hidden_text = teacher.session.last_message.text
+        assert "No events" in hidden_text
+        assert "Updated Student" not in hidden_text
+    finally:
+        await teacher.close()
+        await student.close()
+
+
+async def test_page_navigation_and_refresh_shrinks_page_controls(
+    client, bot_service_key, monkeypatch
+) -> None:
+    import telegram.schedule_dialogs as schedule_dialogs
+
+    api = BackendClient(client, bot_service_key)
+    driver = BotDriver(build_dispatcher(api))
+    page_count = [3]
+
+    async def fake_load(_callback, _manager, period, role):
+        return ScheduleDialogState(
+            period=period,
+            role=role,
+            pages=[
+                f"Page {index}/{page_count[0]}" for index in range(1, page_count[0] + 1)
+            ],
+        )
+
+    monkeypatch.setattr(schedule_dialogs, "_load_schedule", fake_load)
+    try:
+        await _register_teacher(driver, api)
+        message_id = driver.session.last_message.message_id
+        await driver.click("This week")
+        assert "Page 1/3" in driver.session.last_message.text
+        next_callback = driver.callback_data("Next ▶")
+        await asyncio.gather(
+            driver.click(data=next_callback), driver.click(data=next_callback)
+        )
+        assert "Page 3/3" in driver.session.last_message.text
+        await driver.click("◀ Previous")
+        assert "Page 2/3" in driver.session.last_message.text
+
+        stale_next = driver.callback_data("Next ▶")
+        page_count[0] = 1
+        await driver.click("Refresh")
+        assert "Page 1/1" in driver.session.last_message.text
+        try:
+            driver.callback_data("Next ▶")
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError("Next page must be hidden after pages shrink")
+
+        await driver.click("Back to home")
+        assert driver.session.last_message.message_id == message_id
+        await driver.click(data=stale_next)
+        assert driver.session.calls[-1].__api_method__ == "answerCallbackQuery"
+        assert (
+            sum(call.__api_method__ == "sendMessage" for call in driver.session.calls)
+            == 1
+        )
+    finally:
+        await driver.close()
+
+
+async def test_invalid_schedule_output_keeps_recovery_controls(
+    client, bot_service_key, monkeypatch
+) -> None:
+    import telegram.schedule_dialogs as schedule_dialogs
+
+    api = BackendClient(client, bot_service_key)
+    driver = BotDriver(build_dispatcher(api))
+
+    def invalid_formatter(*_args):
+        raise ValueError("malformed")
+
+    monkeypatch.setattr(schedule_dialogs, "format_schedule_pages", invalid_formatter)
+    try:
+        await _register_teacher(driver, api)
+        await driver.click("Today")
+        assert "schedule response could not be displayed" in (
+            driver.session.last_message.text
+        )
+        assert driver.callback_data("Refresh")
+        assert driver.callback_data("Back to home")
+        assert "No events" not in driver.session.last_message.text
+    finally:
+        await driver.close()

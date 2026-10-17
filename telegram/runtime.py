@@ -12,6 +12,7 @@ from telegram.api import BackendClient, BackendError, BackendUnavailable
 from telegram.dialogs import Screens, build_dialog
 from telegram.invitations import create_teacher_invitation, parse_teacher_start_payload
 from telegram.onboarding import Wizard, build_wizard
+from telegram.schedule_dialogs import build_schedule_dialog
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ def build_dispatcher(client: BackendClient | None = None) -> Dispatcher:
     commands.message.register(start, CommandStart(), F.chat.type == "private")
     dispatcher.include_router(commands)
     dispatcher.include_router(build_dialog())
+    dispatcher.include_router(build_schedule_dialog())
     dispatcher.include_router(build_wizard())
     fallback = Router(name="stale-callbacks")
     fallback.callback_query.register(orphan_callback)

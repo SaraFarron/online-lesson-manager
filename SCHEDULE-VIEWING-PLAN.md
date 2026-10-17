@@ -493,11 +493,11 @@ Task 04 reads, Task 05 formatter, `Screens.home`, existing `build_dialog`/dispat
 
 ### Acceptance Criteria
 
-- [ ] Teacher/student can open Today → This week → pages → Refresh → Back without losing the home/auth context.
-- [ ] Normal navigation edits the same message ID with zero extra sends; callbacks are acknowledged.
-- [ ] Refresh after cancellation/vacation/name/timezone changes displays new backend state; midnight rollover selects the new current period.
-- [ ] Backend outage, expired JWT, inactive account, invalid response, double-click, stale callbacks, and shrinking page counts have tested outcomes.
-- [ ] Onboarding/invitations and restart `/start` behavior remain valid; common bot checks pass.
+- [x] Teacher/student can open Today → This week → pages → Refresh → Back without losing the home/auth context.
+- [x] Normal navigation edits the same message ID with zero extra sends; callbacks are acknowledged.
+- [x] Refresh after cancellation/vacation/name/timezone changes displays new backend state; midnight rollover selects the new current period.
+- [x] Backend outage, expired JWT, inactive account, invalid response, double-click, stale callbacks, and shrinking page counts have tested outcomes.
+- [x] Onboarding/invitations and restart `/start` behavior remain valid; common bot checks pass.
 
 ### Out of scope
 
