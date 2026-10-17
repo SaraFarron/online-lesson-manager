@@ -326,12 +326,12 @@ AI agent.
 
 ### Acceptance Criteria
 
-- [ ] Teacher sees their visible lessons/breaks and lesson labels, including personal lessons; another teacher's data never appears.
-- [ ] Student sees only their own visible subjects; teacher-wide vacation still suppresses appropriately.
-- [ ] Student response contains no other subjects, hidden counts/reasons, emails, Telegram IDs, or full profiles.
-- [ ] Missing names and approved invalid-linkage states are tested.
-- [ ] Query count is bounded independently of displayed days/students/events; read does not dirty/commit rows.
-- [ ] Common checks pass.
+- [x] Teacher sees their visible lessons/breaks and lesson labels, including personal lessons; another teacher's data never appears.
+- [x] Student sees only their own visible subjects; teacher-wide vacation still suppresses appropriately.
+- [x] Student response contains no other subjects, hidden counts/reasons, emails, Telegram IDs, or full profiles.
+- [x] Missing names and approved invalid-linkage states are tested.
+- [x] Query count is bounded independently of displayed days/students/events; read does not dirty/commit rows.
+- [x] Task-scoped lint, format, and type checks pass; full-repository baseline failures are recorded under Task 01.
 
 ### Out of scope
 
