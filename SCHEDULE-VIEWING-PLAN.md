@@ -56,7 +56,7 @@ Proposed endpoints:
   - `timezone`, `generated_at`, `range_start`, `range_end`.
   - `days`: exactly one or seven ascending local dates, including empty days.
   - Each day contains ordered `items`, with stable source kind/ID/start identity, `event_type`, full UTC `start`/`end`, and status `past` / `ongoing` / `upcoming`.
-  - Teacher-facing lesson items include a minimal subject label (and subject ID if approved). Student-facing output excludes other subjects and teacher-only naming metadata.
+  - Teacher-facing lesson items include only the approved minimal subject label. Student-facing output excludes other subjects and teacher-only naming metadata.
 - Status against the single `generated_at`: `end <= now` = past; `start <= now < end` = ongoing; otherwise upcoming.
 - Never expose hidden occurrences, hidden counts/reasons, raw teacher calendars, emails, Telegram IDs, or auth/profile objects in this API.
 
@@ -68,13 +68,13 @@ Proposed endpoints:
 4. Apply existing vacation visibility to that teacher-wide input.
 5. Apply viewer authorization to visible occurrences.
 6. Bulk-load only names needed for the authorized teacher-facing output.
-7. Group by overlap with viewer-local days and serialize safe response models.
+7. Include occurrences only on their viewer-local start date and serialize safe response models.
 
 Do not filter teacher-wide policy input down to the student's rows before applying vacations. Do not perform one DB query per student, occurrence, or displayed day.
 
-Proposed cross-midnight presentation: include an occurrence in every local day it overlaps, retaining its full identity/start/end. The formatter displays the clipped per-day interval with continuation markers, not invented midnight source timestamps. Half-open boundaries prevent an event ending at midnight from appearing on the following day.
+Approved cross-midnight presentation: include an occurrence only on its viewer-local start date, retaining its full identity and UTC start/end. Do not repeat or clip it into another day. Half-open local-day boundaries include a start at midnight and exclude a start at the following midnight.
 
-Teacher names: use non-empty `User.full_name`; otherwise a neutral “Unnamed student” label, without inventing email/Telegram fallbacks. A teacher's own lesson is labeled “Personal lesson.” Confirm labels/language in Task 00.
+Teacher names: use non-empty `User.full_name`; otherwise display “Unnamed student,” without inventing email/Telegram fallbacks. A teacher's own lesson is labeled “Personal lesson.” The Telegram schedule UI is English.
 
 ### Telegram screens
 
@@ -152,7 +152,7 @@ Task 05 can run alongside backend Tasks 02–03 after the response contract is s
 ### What to do
 
 - Approve endpoint names/query date semantics, exact response fields, unsupported-role/unlinked-student handling, and inactive-linked-teacher behavior.
-- Approve overlap-based multi-day grouping, status semantics, subject-label fallback, UI language, and per-day empty states.
+- Approve start-date-only grouping, status semantics, subject-label fallback, UI language, and per-day empty states.
 - Approve the current-day divider placement and snapshot/update-time wording.
 - Approve same-message pagination when a whole week/day exceeds Telegram limits, including bounded display-label length.
 - Record concrete example responses for teacher/student views of the same date and one DST/midnight case. Mark decisions here before dependent implementation.
@@ -269,8 +269,8 @@ The foundation returns UTC occurrences; [README viewing](./README.md#просм�
 ### What to do
 
 - Add minimal response models in `backend/schedule/schemas.py` for the approved envelope/day/item/subject shapes, using concrete enums/types.
-- Add pure presentation-shaping helpers for one/seven local days, boundary overlap, status at an explicit `generated_at`, and deterministic ordering.
-- Preserve full UTC source identity/start/end even when an event appears on multiple local days.
+- Add pure presentation-shaping helpers for one/seven local days, local start-date grouping, status at an explicit `generated_at`, and deterministic ordering.
+- Preserve full UTC source identity/start/end while including each occurrence only on the viewer-local date of its start.
 - Explicitly shape teacher versus student item metadata so student responses cannot accidentally serialize teacher/raw ORM fields.
 - Do not embed escaped HTML, localized dates, or Telegram pagination state in backend models.
 
@@ -280,11 +280,18 @@ The foundation returns UTC occurrences; [README viewing](./README.md#просм�
 
 ### Acceptance Criteria
 
-- [ ] Day result has exactly one date; week has seven dates from Monday, including empty dates.
-- [ ] Midnight-ending events do not leak into the next day; crossing-midnight events keep one stable identity across day entries.
-- [ ] `end == now` is past; `start == now < end` is ongoing; all dates/statuses use the same clock instant.
-- [ ] Offset-bearing UTC serialization and role-specific output shapes are tested.
-- [ ] Common checks pass.
+- [x] Day result has exactly one date; week has seven dates from Monday, including empty dates.
+- [x] Events are included only on their local start date: a midnight-ending event is not shown on the next date, and a cross-midnight event is shown once with its full UTC start/end.
+- [x] `end == now` is past; `start == now < end` is ongoing; all dates/statuses use the same clock instant.
+- [x] Offset-bearing UTC serialization and role-specific output shapes are tested.
+- [x] Task-scoped lint, format, and type checks pass; unrelated full-repository baseline failures are recorded below.
+
+Verification: `uv run pytest -q tests/test_schedule_presentation.py tests/test_event_range_service.py tests/test_event_visibility.py` passed (18 tests); Ruff and mypy passed for `backend/schedule` and the new test.
+Repository-wide Ruff lint passed. `uv run ruff format --check backend` still
+reports pre-existing formatting in `backend/notifications/models.py`, and
+`uv run mypy backend` still reports pre-existing errors in
+`backend/auth/config.py`, `backend/database.py`, and
+`backend/events/dependencies.py`; those unrelated files were not changed.
 
 ### Out of scope
 
@@ -425,7 +432,7 @@ The README wants a weekly view in one message, but Telegram limits and long labe
 - Add a pure formatter over the agreed bot-side schedule shape, with local headings/times, event-type labels, teacher-only lesson labels, empty days, and timezone/update-time context.
 - Derive viewer-local presentation exclusively from response timezone and UTC instants; no occurrence expansion or additional vacation filtering in Telegram.
 - Place the approved now divider using `generated_at`; distinguish ongoing events and repeated-hour offsets.
-- Render cross-midnight continuation correctly using day-clipped display intervals without changing source identity.
+- Render a cross-midnight event only on its local start date, showing its full interval and indicating that its end is on the following date.
 - Implement approved same-message pagination, preserving order, complete event rows/day context, empty-day coverage, and visible page indicators.
 - Bound/escape display labels safely; handle Telegram's parsed-text/UTF-16 length semantics, including emoji and HTML entities, using a conservative verified size budget. Never cut HTML entities/tags/surrogate pairs or drop events to fit.
 - Keep callback/navigation data small and independent of full schedules.
@@ -438,7 +445,7 @@ Existing escaping conventions in [dialogs](./telegram/dialogs.py), Python `zonei
 
 - [ ] Ordinary day/week fits one message; week includes Monday–Sunday even when some/all days are empty.
 - [ ] Oversized day/week pages remain within Telegram limits with valid formatting and complete authorized event coverage.
-- [ ] Long names, `<>&`, emoji, repeated-hour times, midnight continuation, and zero events have exact rendering tests.
+- [ ] Long names, `<>&`, emoji, repeated-hour times, start-date-only cross-midnight rendering, and zero events have exact rendering tests.
 - [ ] Divider appears only on the response's current local date; start/end equality and ongoing events render correctly.
 - [ ] Student text never includes teacher-only subject labels; common checks pass.
 
