@@ -141,10 +141,12 @@ Backend outages show an unavailable/retry screen, never offline login or
 successful local signup. If a registration response is lost, the bot checks
 the backend session before resubmitting. Notification preferences and teacher
 limits are persisted only: notification delivery, enforcement of saved work
-hours/days and lesson-count limits, schedule viewing/offline cache, homework
-actions, account linking/transfers, and post-onboarding settings UI remain
-unimplemented. Shared temporal conflict checks and vacation/break policies are
-implemented as described in the scheduling handoff below.
+hours/days and lesson-count limits, offline schedule cache, homework actions,
+account linking/transfers, and post-onboarding settings UI remain
+unimplemented. Authenticated day/week schedule reads are available through the
+backend and Telegram bot as described below. Shared temporal conflict checks
+and vacation/break policies are implemented as described in the scheduling
+handoff below.
 
 Verification: `uv run pytest -q tests` covers simulated Telegram updates with
 recorded Bot API calls, the real ASGI backend, and an isolated SQLite database,
@@ -248,6 +250,50 @@ intermediate mismatch returns authentication errors, not offline success.
 Ученик:
 Логика аналогична учителю, за исключением, что отображаются только события ученика и нет подписи кому проводится урок.
 
+### Текущая реализация просмотра
+
+Backend предоставляет авторизованные read-only endpoints:
+
+- `GET /api/v1/schedule/day`
+- `GET /api/v1/schedule/week`
+
+Необязательный query-параметр `date=YYYY-MM-DD` задаёт дату в сохранённом
+часовом поясе текущего пользователя. Без `date` выбираются сегодняшний день
+или текущая неделя в этом часовом поясе. Неделя всегда содержит понедельник —
+воскресенье. Даты ответа локальные, а `generated_at`, `range_start`,
+`range_end`, `start` и `end` — UTC timestamp-ы с явным offset. В ответе есть
+`period`, `timezone` и массив `days`; каждый день содержит `date` и `items`.
+Элемент события включает тип и источник, идентификатор источника, полные
+`start`/`end` и статус (`past`, `ongoing` или `upcoming`), рассчитанный
+относительно единого `generated_at`. Учитель получает подписи учеников у
+уроков; ученик получает только собственные видимые события без этих подписей.
+Пустые дни недели тоже включены. Событие, пересекающее местную полночь,
+показывается только на дате своего местного начала, сохраняя полный интервал.
+
+Доступ определяется JWT и ролью текущего аккаунта, а не параметрами запроса:
+учитель видит свой расписанный график, ученик — только собственные события у
+связанного активного учителя. Неактивный аккаунт или отсутствие связи ученика
+возвращают `400`, отсутствующий/невалидный JWT — `401`, недопустимая роль —
+`403`, отсутствующий/неактивный связанный учитель — `409`, некорректная дата,
+часовой пояс или данные расписания — `422`.
+
+В Telegram доступны кнопки **Today** и **This week**. Страницы расписания
+переключаются в том же сообщении; кнопка обновления заново загружает актуальный
+снимок и возвращает на первую страницу, а Back возвращает к меню редактированием
+того же сообщения. Отображаются часовой пояс и время снимка; разделитель NOW
+используется для текущего локального дня. Повторяющийся час при переходе DST
+получает явное обозначение смещения UTC. Для ограничения Telegram все события
+сохраняются целыми строками и распределяются по страницам не более 3 500
+UTF-16 code units каждая; подписи длиннее 80 Unicode code points сокращаются.
+Отображаемые подписи HTML-экранируются. Это live-запросы к backend: offline
+кэширования и показа расписания без backend нет.
+
+Будущие consumers (включая уведомления и кэш) должны сначала авторизовать
+просмотр для конкретного пользователя и применять ту же ролевую фильтрацию.
+Нельзя выдавать или кэшировать сырые данные всего расписания учителя как
+результат для ученика. Правила записи/бронирования остаются отдельной задачей;
+read-only просмотр не означает, что все ограничения расписания уже применяются.
+
 ## Изменение расписания
 Еженедельные события:
 Добавление:
@@ -293,11 +339,12 @@ intermediate mismatch returns authentication errors, not offline success.
 истории последних 10 действий
 кнопку удаления ученика (с подтверждением)
 
-### Scheduling foundation handoff
+### Scheduling foundation and schedule-viewing handoff
 
-The scheduling foundation is an internal backend layer for future schedule
-views; it does not yet expose a day/week schedule endpoint or provide a
-user-facing schedule screen.
+The shared scheduling foundation and authorized backend day/week endpoints
+serve the live Telegram schedule views. The endpoint contract and current
+Telegram behavior are described in «Текущая реализация просмотра» above.
+There is no offline schedule cache.
 
 #### Time and recurrence contract
 
@@ -371,9 +418,9 @@ Unsupported ranges, invalid recurrence/cancellation data, and budget exhaustion
 fail explicitly; callers must not convert these failures into an empty or
 partial schedule.
 
-This foundation does **not** yet implement teacher work-hour/weekday
-enforcement, lesson duration defaults, daily/consecutive limits, automatic
-break creation, free-slot selection, transaction-level booking locks,
-schedule endpoints/UI, caching, or notification delivery. Treat those as
-separate follow-on work; conflict validation alone is not concurrency-safe
-booking.
+The implementation does **not** yet enforce teacher work-hour/weekday
+preferences, lesson duration defaults, daily/consecutive limits, automatic
+break creation, free-slot selection, or transaction-level booking locks.
+Arbitrary-date schedule navigation, an HTMX schedule UI, offline schedule
+caching, and notification delivery are also pending. Treat these as separate
+follow-on work; conflict validation alone is not concurrency-safe booking.

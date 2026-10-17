@@ -534,11 +534,21 @@ Completion requires the real authorized backend result to reach the edit-in-plac
 
 ### Acceptance Criteria
 
-- [ ] Exact backend results and rendered teacher/student schedules match approved examples and foundation visibility.
-- [ ] No cross-student/teacher data leaks through API, pages, errors, or callbacks.
-- [ ] DST/day/week bounds, one clock snapshot, refresh recovery, and complete length-safe pagination are verified.
-- [ ] Auth/onboarding and relevant foundation regressions pass; completion report lists commands/results and unrelated baseline failures.
-- [ ] Documentation distinguishes completed live reads from unimplemented offline caching and booking.
+- [x] Exact backend results and rendered teacher/student schedules match approved examples and foundation visibility.
+- [x] No cross-student/teacher data leaks through API, pages, errors, or callbacks.
+- [x] DST/day/week bounds, one clock snapshot, refresh recovery, and complete length-safe pagination are verified.
+- [x] Auth/onboarding and relevant foundation regressions pass; completion report lists commands/results and unrelated baseline failures.
+- [x] Documentation distinguishes completed live reads from unimplemented offline caching and booking.
+
+Verification: `uv run pytest -q tests` passed (149 tests; pytest-asyncio
+emitted existing event-loop-policy deprecation warnings). `uv run ruff check
+tests/test_bot_schedule_integration.py`, `uv run ruff format --check
+tests/test_bot_schedule_integration.py`, and `uv run mypy telegram` passed.
+The full-repository baseline remains as recorded under Task 01:
+`uv run ruff format --check backend` reports pre-existing formatting in
+`backend/notifications/models.py`, and `uv run mypy backend` reports
+pre-existing errors in `backend/auth/config.py`, `backend/database.py`, and
+`backend/events/dependencies.py`; those unrelated files were not changed.
 
 ### Out of scope
 
