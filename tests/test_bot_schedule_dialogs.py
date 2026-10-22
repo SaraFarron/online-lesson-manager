@@ -1,5 +1,5 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -127,6 +127,20 @@ async def test_schedule_outage_shows_retry_and_recovers_without_stale_rows(
             await driver.click("Refresh")
             assert "Today's schedule" in driver.session.last_message.text
             assert "No events" in driver.session.last_message.text
+
+            await driver.click("This week")
+            offline[0] = True
+            await driver.click("◀ Previous week")
+            error_text = driver.session.last_message.text
+            assert "Schedule is unavailable" in error_text
+            assert "No events" not in error_text
+            assert driver.callback_data("Refresh")
+            assert driver.callback_data("Back to home")
+
+            offline[0] = False
+            await driver.click("Refresh")
+            assert "This week's schedule" in driver.session.last_message.text
+            assert driver.session.last_message.text.count("No events") == 7
             await driver.click("Back to home")
             assert "TEACHER:" in driver.session.last_message.text
         finally:
@@ -199,6 +213,95 @@ async def test_registered_student_can_open_week_and_return_home(
     finally:
         await teacher.close()
         await student.close()
+
+
+async def test_teacher_and_student_can_navigate_and_refresh_selected_week(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    requests: list[str | None] = []
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/schedule/week":
+            requests.append(request.url.params.get("date"))
+        return await client.send(request)
+
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 12, tzinfo=UTC),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, bot_service_key)
+        teacher = BotDriver(build_dispatcher(api))
+        student = BotDriver(build_dispatcher(api), user_id=5000000001)
+        try:
+            await _register_teacher(teacher, api)
+            invitation = teacher.session.last_message.text.split(
+                "Student invitation: "
+            )[1]
+            payload = parse_qs(urlsplit(invitation).query)["start"][0]
+            await student.text("/start " + payload)
+            await student.click("Confirm teacher")
+            for label in [
+                "Use current/default",
+                "Use current/default",
+                "Use current minutes/off",
+                "Use current/default",
+                "Register",
+            ]:
+                await student.click(label)
+
+            teacher_view = await api.view(teacher.user_id, teacher.user_id)
+            student_view = await api.view(student.user_id, student.user_id)
+
+            for index, driver in enumerate((teacher, student)):
+                message_id = driver.session.last_message.message_id
+                await driver.click("This week")
+                assert "Monday, October 19, 2026" in (driver.session.last_message.text)
+                assert driver.callback_data("◀ Previous week")
+                assert driver.callback_data("Next week ▶")
+
+                await driver.click("◀ Previous week")
+                assert "Monday, October 12, 2026" in driver.session.last_message.text
+                if index == 0:
+                    assert "No events" in driver.session.last_message.text
+                await driver.click("Next week ▶")
+                assert "Monday, October 19, 2026" in driver.session.last_message.text
+                await driver.click("◀ Previous week")
+                assert "Monday, October 12, 2026" in driver.session.last_message.text
+                if index == 0:
+                    db_session.add(
+                        Event(
+                            teacher_id=teacher_view.account.id,
+                            user_id=student_view.account.id,
+                            event_type="LESSON",
+                            start=datetime(2026, 10, 12, 9),
+                            end=datetime(2026, 10, 12, 10),
+                        )
+                    )
+                    await db_session.commit()
+                await driver.click("Refresh")
+                assert "Monday, October 12, 2026" in driver.session.last_message.text
+                assert "09:00–10:00" in driver.session.last_message.text
+                assert driver.session.last_message.message_id == message_id
+
+            assert requests == [
+                None,
+                "2026-10-12",
+                "2026-10-19",
+                "2026-10-12",
+                "2026-10-12",
+                None,
+                "2026-10-12",
+                "2026-10-19",
+                "2026-10-12",
+                "2026-10-12",
+            ]
+        finally:
+            await teacher.close()
+            await student.close()
 
 
 async def test_refresh_applies_timezone_name_cancellation_and_vacation_changes(
@@ -305,10 +408,13 @@ async def test_page_navigation_and_refresh_shrinks_page_controls(
     driver = BotDriver(build_dispatcher(api))
     page_count = [3]
 
-    async def fake_load(_callback, _manager, period, role):
+    async def fake_load(_callback, _manager, period, role, requested_date=None):
         return ScheduleDialogState(
             period=period,
             role=role,
+            requested_date=(
+                requested_date or (date(2026, 10, 19) if period == "week" else None)
+            ),
             pages=[
                 f"Page {index}/{page_count[0]}" for index in range(1, page_count[0] + 1)
             ],

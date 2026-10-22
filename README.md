@@ -295,16 +295,18 @@ Backend предоставляет авторизованные read-only endpoi
 `403`, отсутствующий/неактивный связанный учитель — `409`, некорректная дата,
 часовой пояс или данные расписания — `422`.
 
-В Telegram доступны кнопки **Today** и **This week**. Страницы расписания
-переключаются в том же сообщении; кнопка обновления заново загружает актуальный
-снимок и возвращает на первую страницу, а Back возвращает к меню редактированием
-того же сообщения. Отображаются часовой пояс и время снимка; разделитель NOW
-используется для текущего локального дня. Повторяющийся час при переходе DST
-получает явное обозначение смещения UTC. Для ограничения Telegram все события
-сохраняются целыми строками и распределяются по страницам не более 3 500
-UTF-16 code units каждая; подписи длиннее 80 Unicode code points сокращаются.
-Отображаемые подписи HTML-экранируются. Это live-запросы к backend: offline
-кэширования и показа расписания без backend нет.
+В Telegram доступны кнопки **Today** и **This week**. В недельном расписании
+учитель и ученик могут переходить на предыдущую или следующую неделю целиком;
+недели остаются выровнены по понедельникам в часовом поясе пользователя.
+Страницы и недели переключаются в том же сообщении. Кнопка обновления заново
+загружает выбранную неделю или текущий день и возвращает на первую страницу, а
+Back возвращает к меню редактированием того же сообщения. Отображаются часовой
+пояс и время снимка; разделитель NOW используется для текущего локального дня.
+Повторяющийся час при переходе DST получает явное обозначение смещения UTC. Для
+ограничения Telegram все события сохраняются целыми строками и распределяются
+по страницам не более 3 500 UTF-16 code units каждая; подписи длиннее 80 Unicode
+code points сокращаются. Отображаемые подписи HTML-экранируются. Это live-запросы
+к backend: offline кэширования и показа расписания без backend нет.
 
 Будущие consumers (включая уведомления и кэш) должны сначала авторизовать
 просмотр для конкретного пользователя и применять ту же ролевую фильтрацию.
@@ -439,6 +441,7 @@ partial schedule.
 The implementation does **not** yet enforce teacher work-hour/weekday
 preferences, lesson duration defaults, daily/consecutive limits, automatic
 break creation, free-slot selection, or transaction-level booking locks.
-Arbitrary-date schedule navigation, an HTMX schedule UI, offline schedule
-caching, and notification delivery are also pending. Treat these as separate
+An arbitrary-date picker, an HTMX schedule UI, offline schedule caching, and
+notification delivery are also pending. Telegram week navigation is available
+for earlier and later Monday–Sunday weeks. Treat the remaining work as separate
 follow-on work; conflict validation alone is not concurrency-safe booking.

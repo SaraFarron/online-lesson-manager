@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from html import escape
 from typing import Any, Literal
 
@@ -24,12 +25,15 @@ class ScheduleDialogState(BaseModel):
 
     period: SchedulePeriod
     role: ViewerRole
+    requested_date: date | None = None
     pages: list[str] = Field(default_factory=list)
     page: int = Field(default=0, ge=0)
     error: str = ""
 
     @model_validator(mode="after")
-    def validate_page(self) -> ScheduleDialogState:
+    def validate_state(self) -> ScheduleDialogState:
+        if self.period == "day" and self.requested_date is not None:
+            raise ValueError("Day schedule state cannot contain a requested date")
         if self.pages and self.page >= len(self.pages):
             raise ValueError("Schedule page is outside the available pages")
         if not self.pages and not self.error:
@@ -87,14 +91,45 @@ async def refresh_schedule(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
     state = _state(manager)
-    await _refresh(callback, manager, state.period)
+    await _refresh(callback, manager, state.period, state.requested_date)
+
+
+async def previous_week(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _navigate_week(callback, manager, -7)
+
+
+async def next_week(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _navigate_week(callback, manager, 7)
+
+
+async def _navigate_week(
+    callback: CallbackQuery, manager: DialogManager, days: int
+) -> None:
+    state = _state(manager)
+    if state.requested_date is None:
+        return
+    await _refresh(
+        callback,
+        manager,
+        "week",
+        state.requested_date + timedelta(days=days),
+    )
 
 
 async def _refresh(
-    callback: CallbackQuery, manager: DialogManager, period: SchedulePeriod
+    callback: CallbackQuery,
+    manager: DialogManager,
+    period: SchedulePeriod,
+    requested_date: date | None = None,
 ) -> None:
     current = _state(manager)
-    state = await _load_schedule(callback, manager, period, current.role)
+    state = await _load_schedule(
+        callback, manager, period, current.role, requested_date
+    )
     manager.dialog_data.clear()
     manager.dialog_data.update(state.model_dump(mode="json"))
     await manager.show(show_mode=ShowMode.EDIT)
@@ -136,6 +171,10 @@ async def schedule_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
         "has_next": state.page + 1 < len(state.pages),
         "show_today": state.period != "day",
         "show_week": state.period != "week",
+        "show_previous_week": (
+            state.period == "week" and state.requested_date is not None
+        ),
+        "show_next_week": state.period == "week" and state.requested_date is not None,
     }
 
 
@@ -148,6 +187,7 @@ async def _load_schedule(
     manager: DialogManager,
     period: SchedulePeriod,
     role: ViewerRole,
+    requested_date: date | None = None,
 ) -> ScheduleDialogState:
     if callback.message is None:
         raise ValueError("Schedule viewing requires a private chat")
@@ -159,25 +199,39 @@ async def _load_schedule(
             )
             if period == "day"
             else await client.read_schedule_week(
-                callback.from_user.id, callback.message.chat.id
+                callback.from_user.id,
+                callback.message.chat.id,
+                requested_date=requested_date,
             )
         )
         pages = format_schedule_pages(response, role)
     except BackendError as exc:
-        return ScheduleDialogState(period=period, role=role, error=str(exc))
+        return ScheduleDialogState(
+            period=period,
+            role=role,
+            requested_date=requested_date if period == "week" else None,
+            error=str(exc),
+        )
     except BackendUnavailable:
         return ScheduleDialogState(
             period=period,
             role=role,
+            requested_date=requested_date if period == "week" else None,
             error="Schedule is unavailable right now. Please try again shortly.",
         )
     except ValidationError, ValueError:
         return ScheduleDialogState(
             period=period,
             role=role,
+            requested_date=requested_date if period == "week" else None,
             error="The schedule response could not be displayed. Refresh or return home.",
         )
-    return ScheduleDialogState(period=period, role=role, pages=list(pages))
+    return ScheduleDialogState(
+        period=period,
+        role=role,
+        requested_date=response.days[0].date if period == "week" else None,
+        pages=list(pages),
+    )
 
 
 def build_schedule_dialog() -> Dialog:
@@ -196,6 +250,20 @@ def build_schedule_dialog() -> Dialog:
                     id="next",
                     on_click=next_page,
                     when="has_next",
+                ),
+            ),
+            Row(
+                Button(
+                    Const("◀ Previous week"),
+                    id="previous_week",
+                    on_click=previous_week,
+                    when="show_previous_week",
+                ),
+                Button(
+                    Const("Next week ▶"),
+                    id="next_week",
+                    on_click=next_week,
+                    when="show_next_week",
                 ),
             ),
             Row(

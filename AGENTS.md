@@ -92,11 +92,11 @@ a README-described feature.
 | Teacher settings (work hours, lesson length, break, max/day) | **Partial** | Validated work hours, JSON ISO weekdays, lesson length, break, max/day and max consecutive preferences are persisted with README defaults. Settings are not enforced by scheduling validators yet. |
 | Student settings (notifications) | **Partial** | Validated digest minutes-of-local-day, lesson reminder minutes (1–600), homework days; null disables. Safe partial updates implemented. Notification delivery is not implemented. |
 | Lessons / breaks / vacations CRUD (one-off + recurring) | **Partial** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, and confirmed break displacement are implemented. Missing: enforcing teacher work hours/days, max-per-day, max-consecutive, duration defaults, automatic breaks, and concurrency-safe booking. |
-| Schedule viewing (day/week, timeline, teacher sees student names) | **Partial** | Authenticated viewer-local day/week endpoints and live Telegram Today/This week screens are implemented, including role-scoped results, refresh, DST-aware rendering, and safe pagination. HTMX/arbitrary-date UI and offline cache are not implemented. |
+| Schedule viewing (day/week, timeline, teacher sees student names) | **Partial** | Authenticated viewer-local day/week endpoints and live Telegram Today/This week screens are implemented, including role-scoped results, previous/next-week navigation, refresh, DST-aware rendering, and safe pagination. HTMX/arbitrary-date UI and offline cache are not implemented. |
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
 | Homework (assign/submit/mark done) | **Not started** | `backend/homework/` is an empty package. |
 | Student profile view for teacher (history, delete w/ confirm) | **Not started** | No action-log table or endpoint. |
-| Telegram bot | **Partial** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, retry/recovery and edit-in-place screens. Live schedule viewing is implemented; homework actions, notification delivery, offline schedule cache and post-onboarding settings UI are not implemented. |
+| Telegram bot | **Partial** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, retry/recovery and edit-in-place screens. Live schedule viewing includes previous/next-week navigation; homework actions, notification delivery, offline schedule cache and post-onboarding settings UI are not implemented. |
 | HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |
 
 ## Scheduling Foundation Boundaries
@@ -111,10 +111,11 @@ a README-described feature.
   computes vacation-hidden occurrences; callers must apply viewer authorization
   before returning another student's event details.
 - Authenticated `/api/v1/schedule/day` and `/api/v1/schedule/week` endpoints
-  and live Telegram Today/This week screens are implemented. The bot reads
-  current data from the backend; offline caching and an HTMX/arbitrary-date
-  schedule UI remain unimplemented. Apply viewer authorization before shaping
-  or caching results; never return teacher-wide raw event details to a student.
+  and live Telegram Today/This week screens are implemented, including
+  previous/next-week navigation. The bot reads current data from the backend;
+  offline caching and an HTMX/arbitrary-date schedule UI remain unimplemented.
+  Apply viewer authorization before shaping or caching results; never return
+  teacher-wide raw event details to a student.
 - Work-hour/day, duration, daily/consecutive limits, automatic breaks, and
   transaction-level concurrency protection are still pending; don't describe
   current temporal conflict validation as complete booking-policy enforcement.
