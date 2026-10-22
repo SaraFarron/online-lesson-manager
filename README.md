@@ -171,6 +171,24 @@ uv run uvicorn backend.main:app --host 127.0.0.1 --port 8093
 uv run python -m telegram
 ```
 
+For end-to-end debugging in VS Code, install the Python and Python Debugger
+extensions, select the workspace `.venv` interpreter (created by `uv sync`),
+and complete the `.env` setup and migration step above. In **Run and Debug**,
+select **Backend + Telegram bot** and press **F5**. This launches two debug
+sessions with breakpoints supported in both backend and bot code. The backend
+runs with reload on port **8000**; the bot debug configuration overrides
+`BOT_BACKEND_URL` with `http://127.0.0.1:8000`, regardless of its `.env` value.
+Both sessions load credentials from `.env`.
+
+Wait for backend startup and bot polling before sending `/start` in Telegram.
+The compound starts the processes concurrently, not in readiness order; if
+the bot reports the backend unavailable during startup, retry `/start` after
+the backend is ready (the circuit breaker may need its recovery interval).
+Use the debug toolbar's **Stop** button (**Shift+F5**) to stop both sessions.
+You can also launch **Dev server (reload)** and **Telegram bot (local backend)**
+individually; VS Code supports simultaneous debug sessions. Stop any existing
+bot poller before starting a debug session with the same token.
+
 Local Compose (PostgreSQL + backend + opt-in bot):
 ```shell
 docker compose --profile bot up --build

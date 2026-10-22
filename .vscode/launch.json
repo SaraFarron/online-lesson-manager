@@ -20,6 +20,20 @@
             "envFile": "${workspaceFolder}/.env"
         },
         {
+            "name": "Telegram bot (local backend)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "telegram",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "BOT_BACKEND_URL": "http://127.0.0.1:8000"
+            },
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
             "name": "Production (no reload)",
             "type": "debugpy",
             "request": "launch",
@@ -52,6 +66,16 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "envFile": "${workspaceFolder}/.env"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Backend + Telegram bot",
+            "configurations": [
+                "Dev server (reload)",
+                "Telegram bot (local backend)"
+            ],
+            "stopAll": true
         }
     ]
 }
