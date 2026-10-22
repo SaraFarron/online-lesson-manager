@@ -1,6 +1,6 @@
 ---
 name: implement-plan
-description: "Use when asked to execute or implement tasks from an attached implementation plan or backlog, including TELEGRAM-AUTH-PLAN.md and SCHEDULING-FOUNDATION-PLAN.md. Analyse, implement, and verify each task sequentially; stop for decisions or plan changes; optionally commit verified changes."
+description: "Use when asked to execute or implement tasks from an attached implementation plan or backlog, including docs/plans/TELEGRAM-AUTH-PLAN.md and docs/plans/SCHEDULING-FOUNDATION-PLAN.md. Analyse, implement, and verify each task sequentially; stop for decisions or plan changes; optionally commit verified changes."
 argument-hint: "Attach or name a plan, specify task IDs or a defined batch, and optionally request commits."
 ---
 
@@ -14,6 +14,9 @@ execution workflow, not a workflow for writing or decomposing a new plan.
 1. Read the attached or named plan and applicable repository instructions.
    If the plan cannot be accessed, ask the user for it; do not substitute a
    guessed backlog.
+   New project plans are stored in `docs/plans/`. Older plans may still be in
+   the repository root; use the actual tracked or attached path rather than
+   assuming every historical plan has already been moved.
 2. Identify the exact requested tasks, their prerequisites, approval gates,
    acceptance criteria, and recorded execution status. Inspect the actual
    code before treating plan descriptions as current repository facts.

@@ -28,6 +28,14 @@ description: 'Use when asked to write release/milestone plans, decompose a READM
 
 ## Output Format
 
+Save each new release/milestone plan or standalone task description as a
+Markdown file under the repository's `docs/plans/` directory. Use a concise
+kebab-case filename. Do not create plan files in the repository root. Keep
+templates and this workflow guidance in `.github/skills/plan-feature/`;
+`docs/plans/` is for project-specific plans, not skill assets. Existing
+root-level plans are historical: do not move them as an incidental part of
+writing a new plan.
+
 ### Release / milestone plan
 Use [plan-template.md](./assets/plan-template.md). One task per `##` section,
 ordered by dependency (migration/schema tasks before service/router tasks

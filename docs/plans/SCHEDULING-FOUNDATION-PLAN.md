@@ -8,10 +8,10 @@ This is an implementation backlog, not shipped behavior. Give an agent one numbe
 
 ## Scope (README sections covered)
 
-- [Start/settings](./README.md#старт): consistent storage timezone and individual display timezone. Working-hour/day/limit enforcement is a follow-on milestone.
-- [Schedule viewing](./README.md#просмотр-расписания): the underlying occurrence calculation and vacation visibility, **not** day/week HTTP endpoints or Telegram screens.
-- [Schedule changes](./README.md#изменение-расписания): shared time/recurrence semantics, cancellation integrity, ownership, and correct temporal conflict checks for existing CRUD.
-- [Architecture](./README.md#архитектура): backend remains the only scheduling source of truth; bot and later clients do not implement a second recurrence engine.
+- [Start/settings](../../README.md#старт): consistent storage timezone and individual display timezone. Working-hour/day/limit enforcement is a follow-on milestone.
+- [Schedule viewing](../../README.md#просмотр-расписания): the underlying occurrence calculation and vacation visibility, **not** day/week HTTP endpoints or Telegram screens.
+- [Schedule changes](../../README.md#изменение-расписания): shared time/recurrence semantics, cancellation integrity, ownership, and correct temporal conflict checks for existing CRUD.
+- [Architecture](../../README.md#архитектура): backend remains the only scheduling source of truth; bot and later clients do not implement a second recurrence engine.
 
 Deliverable: a tested internal range-query/occurrence service, wired into temporal validation on existing event routes. No new public schedule-viewing API is required here.
 
@@ -19,17 +19,17 @@ Deliverable: a tested internal range-query/occurrence service, wired into tempor
 
 Read against the repository on 2026-10-15:
 
-- [Event models](./backend/events/models.py) contain `Event`, `RecurrentEvent`, and `RecurrentCancels`. All scheduling timestamps are naive `DateTime`. Recurrence stores a first start/end, integer interval in days, and `interval_end`; it stores no recurrence timezone.
-- [Shared schemas](./backend/events/schemas.py) accept arbitrary `datetime` values without a stated naive/aware contract. `interval` has no positive bound. Cancellation input is a start/end pair.
-- [Shared service](./backend/events/service.py) already owns CRUD and commits. Reuse it. `update_recurrent_event` updates start/end and cancellation rows, but does **not** persist `interval` or `interval_end`; both one-off and recurring updates accept a `user_id` but do not assign it.
-- [Conflict validators](./backend/events/validators.py) compare recurring **anchor** timestamps and retrieve a single candidate, rather than correctly expanding all potentially overlapping occurrences. Cancellation rows are not considered. Recurring validation does not fully check one-off events. These are foundation blockers, not features to preserve.
-- [Lesson routes](./backend/lessons/router.py), [break routes](./backend/breaks/router.py), and [vacation routes](./backend/vacations/router.py) now use domain dependencies. Vacation calls now pass `teacher_id`. Do not re-plan the obsolete missing-argument/dead-import fixes described in [AGENTS.md](./AGENTS.md).
-- [Current validator definitions](./backend/events/validators.py) have `EventSubValidator` plus the composite `EventValidator`, not two shadowing `EventValidator` definitions. That known-issue note is also stale.
+- [Event models](../../backend/events/models.py) contain `Event`, `RecurrentEvent`, and `RecurrentCancels`. All scheduling timestamps are naive `DateTime`. Recurrence stores a first start/end, integer interval in days, and `interval_end`; it stores no recurrence timezone.
+- [Shared schemas](../../backend/events/schemas.py) accept arbitrary `datetime` values without a stated naive/aware contract. `interval` has no positive bound. Cancellation input is a start/end pair.
+- [Shared service](../../backend/events/service.py) already owns CRUD and commits. Reuse it. `update_recurrent_event` updates start/end and cancellation rows, but does **not** persist `interval` or `interval_end`; both one-off and recurring updates accept a `user_id` but do not assign it.
+- [Conflict validators](../../backend/events/validators.py) compare recurring **anchor** timestamps and retrieve a single candidate, rather than correctly expanding all potentially overlapping occurrences. Cancellation rows are not considered. Recurring validation does not fully check one-off events. These are foundation blockers, not features to preserve.
+- [Lesson routes](../../backend/lessons/router.py), [break routes](../../backend/breaks/router.py), and [vacation routes](../../backend/vacations/router.py) now use domain dependencies. Vacation calls now pass `teacher_id`. Do not re-plan the obsolete missing-argument/dead-import fixes described in [AGENTS.md](../../AGENTS.md).
+- [Current validator definitions](../../backend/events/validators.py) have `EventSubValidator` plus the composite `EventValidator`, not two shadowing `EventValidator` definitions. That known-issue note is also stale.
 - Domain validators presently compose the same shared `EventValidator`; event-type display names do not enforce that a loaded row is actually a lesson/break/vacation.
-- [Ownership helpers](./backend/events/utils.py) resolve teacher scope and assignment access. `assert_owns_event` only checks teacher scope; by itself it lets a linked student access another student's event under the same teacher. The README requires students to manage only their own events.
+- [Ownership helpers](../../backend/events/utils.py) resolve teacher scope and assignment access. `assert_owns_event` only checks teacher scope; by itself it lets a linked student access another student's event under the same teacher. The README requires students to manage only their own events.
 - `teacher_id` identifies schedule ownership; `user_id` identifies the event subject. Neither records who created an event. Approved conflict behavior is event-type-based and does not infer priority from creator role.
-- [Schedule package](./backend/schedule/) exists but its router is empty. There is no reusable occurrence-expansion service today.
-- [Existing integration fixtures](./tests/conftest.py) use real isolated SQLite, `AsyncClient`, `ASGITransport`, and dependency overrides. [Smoke tests](./tests/test_smoke.py) use naive UTC-like timestamps and cover the lesson lifecycle; preserve their intended behavior under an explicit compatibility contract.
+- [Schedule package](../../backend/schedule/) exists but its router is empty. There is no reusable occurrence-expansion service today.
+- [Existing integration fixtures](../../tests/conftest.py) use real isolated SQLite, `AsyncClient`, `ASGITransport`, and dependency overrides. [Smoke tests](../../tests/test_smoke.py) use naive UTC-like timestamps and cover the lesson lifecycle; preserve their intended behavior under an explicit compatibility contract.
 - Auth/onboarding is implemented. User IANA timezones and teacher preferences already exist; do not recreate settings fields, Telegram identity, login, deployment, or circuit breakers.
 - The approved read-only local `dev.db` inventory found 14 one-off events, 3 recurring series with a longest horizon of 91 days, no cancellations, no invalid interval ordering, no duplicate cancellation identities, and no overlapping expanded occurrences. Production data was not inspected.
 
@@ -128,7 +128,7 @@ After Task 00, Task 08 can run independently of the temporal chain. Tasks 03 and
 
 - Use existing domain composition and explicit module imports; do not build a parallel scheduler in the bot.
 - Test the actual touched behavior in each task; Task 10 adds cross-module checks rather than postponing all testing until the end.
-- Reuse [integration fixtures](./tests/conftest.py) with real isolated DBs; pure temporal helpers can have direct unit tests. No database mocks in backend integration tests.
+- Reuse [integration fixtures](../../tests/conftest.py) with real isolated DBs; pure temporal helpers can have direct unit tests. No database mocks in backend integration tests.
 - Run targeted tests and the existing lesson/auth smoke flows whenever shared schemas/routes/services change. Keep all existing auth/onboarding behavior intact.
 - Run `uv run ruff check --fix backend`, `uv run ruff format backend`, and `uv run mypy backend`; include touched tests in Ruff checks. Record unrelated baseline failures honestly rather than repairing unrelated modules.
 - Schema changes need static, reviewed, reversible migrations named `YYYY-MM-DD_slug.py`. Exercise upgrade/downgrade on disposable SQLite and PostgreSQL DBs; never use `dev.db` for test migration experiments.
@@ -144,7 +144,7 @@ After Task 00, Task 08 can run independently of the temporal chain. Tasks 03 and
 
 ### Context
 
-[README scheduling rules](./README.md#изменение-расписания) do not fully specify DST, recurrence cutoffs, cancellation matching, or overlap priority. [Current models](./backend/events/models.py) cannot establish legacy timezone or creator provenance.
+[README scheduling rules](../../README.md#изменение-расписания) do not fully specify DST, recurrence cutoffs, cancellation matching, or overlap priority. [Current models](../../backend/events/models.py) cannot establish legacy timezone or creator provenance.
 
 ### What to do
 
@@ -180,7 +180,7 @@ Complete. All dependent implementation tasks use the approved contract above; ch
 
 ### Context
 
-The README requires user-local display with a consistent DB timezone. [Shared event schemas](./backend/events/schemas.py) have no such contract today.
+The README requires user-local display with a consistent DB timezone. [Shared event schemas](../../backend/events/schemas.py) have no such contract today.
 
 ### What to do
 
@@ -218,7 +218,7 @@ AI agent after Task 00.
 
 ### Context
 
-[RecurrentEvent](./backend/events/models.py) lacks the metadata needed for approved local-clock recurrence. [RecurrentCancels](./backend/events/models.py) lacks explicit occurrence uniqueness/deletion policy.
+[RecurrentEvent](../../backend/events/models.py) lacks the metadata needed for approved local-clock recurrence. [RecurrentCancels](../../backend/events/models.py) lacks explicit occurrence uniqueness/deletion policy.
 
 ### What to do
 
@@ -263,7 +263,7 @@ AI agent.
 
 ### Context
 
-All event-like domains inherit [shared schemas](./backend/events/schemas.py) and call [shared CRUD](./backend/events/service.py). One shared fix must cover them consistently.
+All event-like domains inherit [shared schemas](../../backend/events/schemas.py) and call [shared CRUD](../../backend/events/service.py). One shared fix must cover them consistently.
 
 ### What to do
 
@@ -308,7 +308,7 @@ AI agent.
 
 ### Context
 
-Current [conflict checks](./backend/events/validators.py) use series anchors, which cannot represent later instances reliably.
+Current [conflict checks](../../backend/events/validators.py) use series anchors, which cannot represent later instances reliably.
 
 ### What to do
 
@@ -397,7 +397,7 @@ AI agent.
 
 ### Context
 
-[Recurring update service](./backend/events/service.py) currently ignores interval/cutoff changes and accepts cancellation lists without checking generated occurrence membership.
+[Recurring update service](../../backend/events/service.py) currently ignores interval/cutoff changes and accepts cancellation lists without checking generated occurrence membership.
 
 ### What to do
 
@@ -442,7 +442,7 @@ AI agent.
 
 ### Context
 
-[README schedule viewing](./README.md#просмотр-расписания) hides events during applicable vacations. Vacations affect display and notifications only; all underlying events remain candidates for temporal conflicts.
+[README schedule viewing](../../README.md#просмотр-расписания) hides events during applicable vacations. Vacations affect display and notifications only; all underlying events remain candidates for temporal conflicts.
 
 ### What to do
 
@@ -486,7 +486,7 @@ AI agent after the approved semantics in Task 00.
 
 ### Context
 
-[Ownership helper](./backend/events/utils.py) checks teacher scope only, while [README](./README.md#изменение-расписания) restricts students to their own events. Domain default event types are not immutable constraints.
+[Ownership helper](../../backend/events/utils.py) checks teacher scope only, while [README](../../README.md#изменение-расписания) restricts students to their own events. Domain default event types are not immutable constraints.
 
 ### What to do
 
@@ -591,13 +591,13 @@ Completion means one coherent scheduling interpretation, not just helper functio
 - Add a table-driven edge suite with exact UTC outputs for DST, cutoff equality, midnight overlap, cancellation changes, and budget refusal.
 - Verify candidate/expansion bounds with query/generation counts. Test invalid legacy fixtures and explicit errors, not silent omission.
 - Exercise static migrations on disposable SQLite/PostgreSQL and run relevant existing tests.
-- Update [README](./README.md) with approved storage/API/recurrence/cancellation semantics, preserving the Russian product spec.
-- Update [AGENTS.md](./AGENTS.md) Feature Status and stale known-issue notes based on actual completed code. Schedule viewing stays “not started” until endpoints/UI ship.
+- Update [README](../../README.md) with approved storage/API/recurrence/cancellation semantics, preserving the Russian product spec.
+- Update [AGENTS.md](../../AGENTS.md) Feature Status and stale known-issue notes based on actual completed code. Schedule viewing stays “not started” until endpoints/UI ship.
 - Document callable range-service shapes, policy inputs, viewer timezone boundaries, stable occurrence identity, and error cases for the next schedule-viewing agent.
 
 ### Reuse
 
-[Existing fixtures](./tests/conftest.py), existing auth/lesson smoke tests, helpers/services delivered by Tasks 01–09.
+[Existing fixtures](../../tests/conftest.py), existing auth/lesson smoke tests, helpers/services delivered by Tasks 01–09.
 
 ### Acceptance Criteria
 

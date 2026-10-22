@@ -36,6 +36,12 @@ features.
 For writing release plans, decomposing a README.md feature into small tasks,
 or drafting a task description for an AI agent or human, use the
 [plan-feature skill](.github/skills/plan-feature/SKILL.md).
+Store new plan and task Markdown files in [docs/plans/](docs/plans/), not in
+the repository root. Existing plans have been reconciled and moved there;
+update relative links and repository references whenever moving plans. Keep
+planning templates and planning workflow instructions in
+[.github/skills/plan-feature/](.github/skills/plan-feature/); completed plans
+remain in `docs/plans/` as project documentation.
 
 ## Architecture
 

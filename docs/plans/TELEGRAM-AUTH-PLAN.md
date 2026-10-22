@@ -8,9 +8,9 @@ This is a task backlog with approved decisions and execution status. Give an imp
 
 ## Scope (README sections covered)
 
-- [Bot interface](./README.md#интерфейс-бота): aiogram, edit-in-place screens, flexible time input.
-- [Architecture](./README.md#архитектура): separate bot/backend processes; backend owns accounts and settings; HTTP boundary.
-- [Start](./README.md#старт): teacher/student onboarding, teacher-code invitations, timezone, working preferences, notification preferences.
+- [Bot interface](../../README.md#интерфейс-бота): aiogram, edit-in-place screens, flexible time input.
+- [Architecture](../../README.md#архитектура): separate bot/backend processes; backend owns accounts and settings; HTTP boundary.
+- [Start](../../README.md#старт): teacher/student onboarding, teacher-code invitations, timezone, working preferences, notification preferences.
 - Login means identifying a returning Telegram user and issuing the existing backend JWT. This flow is not explicitly specified in the README; the owner selected passwordless Telegram registration/login for this milestone.
 
 ## Confirmed authentication decision
@@ -50,19 +50,19 @@ Sources:
 
 ## Baseline repository evidence and reusable pieces (before implementation)
 
-- [Auth router](./backend/auth/router.py) already provides `/api/v1/auth/register`, `/login`, `/me`, `/me/teacher`, and teacher/student profile endpoints. Do not reimplement password auth.
-- [Auth models](./backend/auth/models.py): `User.email` and `hashed_password` are non-nullable; Telegram identity is absent. `User.timezone` and `notification_lessons_today` exist. `TeacherProfile` already stores work times, duration, between-lesson break, max/day, and invitation code. `StudentProfile` stores lesson/homework notification values.
+- [Auth router](../../backend/auth/router.py) already provides `/api/v1/auth/register`, `/login`, `/me`, `/me/teacher`, and teacher/student profile endpoints. Do not reimplement password auth.
+- [Auth models](../../backend/auth/models.py): `User.email` and `hashed_password` are non-nullable; Telegram identity is absent. `User.timezone` and `notification_lessons_today` exist. `TeacherProfile` already stores work times, duration, between-lesson break, max/day, and invitation code. `StudentProfile` stores lesson/homework notification values.
 - Missing onboarding fields: working weekdays and max consecutive lessons. Current break default is **0**, whereas the README says **5 minutes**. Current work-time defaults are null, whereas the README says **09:00–18:00**.
-- [Auth schemas](./backend/auth/schemas.py): public user output assumes email exists and omits role/teacher linkage; self-update cannot change timezone or daily-digest preference. Teacher patch-like updates currently carry defaults that can overwrite unrelated values; student updates do not distinguish omission from explicit disabling.
-- [Auth service](./backend/auth/service.py): `create_user`, profile creation, and `link_student_to_teacher` each commit separately. Do not call these unchanged inside a supposedly atomic registration transaction. Teacher updates regenerate a code when omitted; codes have no uniqueness constraint.
-- [Profile routes](./backend/auth/router.py) authenticate a caller but do not currently authorize access to the requested profile owner. This blocks safe reuse for onboarding; fix these routes, not unrelated scheduling code.
-- [JWT helpers](./backend/auth/utils.py) and [current-user dependencies](./backend/auth/dependencies.py) should remain the user-authentication mechanism. Passwordless users require a deliberate password-login failure path.
-- [Backend Telegram package](./backend/telegram/) and [bot package](./telegram/) are empty. Put the backend adapter in the former and the separate executable bot client in the latter.
-- [Dependency manifest](./pyproject.toml) packages only `backend`; aiogram/aiogram-dialog are absent, and httpx is currently dev-only. The bot requires httpx at runtime.
-- [Existing test fixtures](./tests/conftest.py) already use `httpx.AsyncClient`, `ASGITransport`, a real isolated SQLite database, and dependency overrides. Reuse these. [Smoke tests](./tests/test_smoke.py) already cover a lesson lifecycle, so the “no tests yet” statement in [AGENTS.md](./AGENTS.md) is stale.
-- [Dockerfile](./Dockerfile) currently copies only backend/migrations and starts FastAPI. [Local Compose](./docker-compose.yml) and [production Compose](./docker-compose.prod.yml) have no bot service.
+- [Auth schemas](../../backend/auth/schemas.py): public user output assumes email exists and omits role/teacher linkage; self-update cannot change timezone or daily-digest preference. Teacher patch-like updates currently carry defaults that can overwrite unrelated values; student updates do not distinguish omission from explicit disabling.
+- [Auth service](../../backend/auth/service.py): `create_user`, profile creation, and `link_student_to_teacher` each commit separately. Do not call these unchanged inside a supposedly atomic registration transaction. Teacher updates regenerate a code when omitted; codes have no uniqueness constraint.
+- [Profile routes](../../backend/auth/router.py) authenticate a caller but do not currently authorize access to the requested profile owner. This blocks safe reuse for onboarding; fix these routes, not unrelated scheduling code.
+- [JWT helpers](../../backend/auth/utils.py) and [current-user dependencies](../../backend/auth/dependencies.py) should remain the user-authentication mechanism. Passwordless users require a deliberate password-login failure path.
+- [Backend Telegram package](../../backend/telegram/) and [bot package](../../telegram/) are empty. Put the backend adapter in the former and the separate executable bot client in the latter.
+- [Dependency manifest](../../pyproject.toml) packages only `backend`; aiogram/aiogram-dialog are absent, and httpx is currently dev-only. The bot requires httpx at runtime.
+- [Existing test fixtures](../../tests/conftest.py) already use `httpx.AsyncClient`, `ASGITransport`, a real isolated SQLite database, and dependency overrides. Reuse these. [Smoke tests](../../tests/test_smoke.py) already cover a lesson lifecycle, so the “no tests yet” statement in [AGENTS.md](../../AGENTS.md) is stale.
+- [Dockerfile](../../Dockerfile) currently copies only backend/migrations and starts FastAPI. [Local Compose](../../docker-compose.yml) and [production Compose](../../docker-compose.prod.yml) have no bot service.
 
-Known scheduling/vacation issues in [AGENTS.md](./AGENTS.md) are **not blockers for account onboarding**. Do not repair scheduling validators, event timezones, vacations, or dead event dependency paths in this milestone.
+Known scheduling/vacation issues in [AGENTS.md](../../AGENTS.md) are **not blockers for account onboarding**. Do not repair scheduling validators, event timezones, vacations, or dead event dependency paths in this milestone.
 
 ## Proposed implementation contract
 
@@ -194,7 +194,7 @@ After approval, Task 08 can run alongside the backend chain. Tasks 10 and 11 can
 Apply these to every implementation task (01–13), in addition to its local criteria:
 
 - Use existing domain patterns, explicit cross-domain imports, Pydantic v2, async SQLAlchemy/HTTP, and `Annotated` dependencies.
-- Reuse [test fixtures](./tests/conftest.py); use a real database for backend integration tests. Mock Telegram API transport only at the external boundary. Do not call the real Telegram API in automated tests.
+- Reuse [test fixtures](../../tests/conftest.py); use a real database for backend integration tests. Mock Telegram API transport only at the external boundary. Do not call the real Telegram API in automated tests.
 - Run targeted tests for touched behavior plus the existing auth/scheduling smoke test when auth compatibility changes. Do not use the developer's `dev.db` as a test database.
 - Run `uv run ruff check --fix backend`, `uv run ruff format backend`, and `uv run mypy backend`. For bot changes, also run Ruff and strict mypy on `telegram`; include touched tests in Ruff checks.
 - Record unrelated baseline failures rather than silently “fixing” unrelated modules or claiming all checks passed.
@@ -224,7 +224,7 @@ Apply these to every implementation task (01–13), in addition to its local cri
 
 ### Context
 
-[Start](./README.md#старт) supplies defaults but not all storage/validation semantics. [Auth models](./backend/auth/models.py) currently say weekends are stored as weekly events, and notification integers have no explicit units.
+[Start](../../README.md#старт) supplies defaults but not all storage/validation semantics. [Auth models](../../backend/auth/models.py) currently say weekends are stored as weekly events, and notification integers have no explicit units.
 
 ### What to do
 
@@ -261,7 +261,7 @@ Human owner with AI assistance; requires product approval. Dependent implementat
 
 ### Context
 
-[Auth models](./backend/auth/models.py) require email/password. [Start](./README.md#старт) does not request either.
+[Auth models](../../backend/auth/models.py) require email/password. [Start](../../README.md#старт) does not request either.
 
 ### What to do
 
@@ -278,11 +278,11 @@ Human owner with AI assistance; requires product approval. Dependent implementat
 
 ### Acceptance Criteria
 
-- [ ] Telegram IDs above signed 32-bit range round-trip; duplicate sender/user bindings are rejected by the DB.
-- [ ] Credentialless user serialization succeeds; password login for it and unknown emails returns the intended 401.
-- [ ] Existing email/password registration/login still works.
-- [ ] Upgrade preserves existing rows; downgrade succeeds on compatible data and fails safely on credentialless rows.
-- [ ] Common implementation checks pass.
+- [x] Telegram IDs above signed 32-bit range round-trip; duplicate sender/user bindings are rejected by the DB.
+- [x] Credentialless user serialization succeeds; password login for it and unknown emails returns the intended 401.
+- [x] Existing email/password registration/login still works.
+- [x] Upgrade preserves existing rows; downgrade succeeds on compatible data and fails safely on credentialless rows.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -300,7 +300,7 @@ AI agent after Task 00.
 
 ### Context
 
-[Start](./README.md#старт) requires working days and maximum consecutive lessons, which [TeacherProfile](./backend/auth/models.py) lacks. Teacher codes are not unique today.
+[Start](../../README.md#старт) requires working days and maximum consecutive lessons, which [TeacherProfile](../../backend/auth/models.py) lacks. Teacher codes are not unique today.
 
 ### What to do
 
@@ -316,11 +316,11 @@ Existing `TeacherProfile` fields and Alembic batch-alter patterns.
 
 ### Acceptance Criteria
 
-- [ ] Fresh profiles have the specified defaults; existing explicit values survive upgrade.
-- [ ] Working days and consecutive limits persist correctly in both supported databases.
-- [ ] Duplicate codes fail deterministically, including existing-data preflight.
-- [ ] Migration is reversible without rewriting existing settings.
-- [ ] Common implementation checks pass.
+- [x] Fresh profiles have the specified defaults; existing explicit values survive upgrade.
+- [x] Working days and consecutive limits persist correctly in both supported databases.
+- [x] Duplicate codes fail deterministically, including existing-data preflight.
+- [x] Migration is reversible without rewriting existing settings.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -338,7 +338,7 @@ AI agent after approved data-migration decisions.
 
 ### Context
 
-[Auth schemas](./backend/auth/schemas.py) and [profile services](./backend/auth/service.py) do not cover all onboarding settings and can reset omitted values.
+[Auth schemas](../../backend/auth/schemas.py) and [profile services](../../backend/auth/service.py) do not cover all onboarding settings and can reset omitted values.
 
 ### What to do
 
@@ -355,11 +355,11 @@ AI agent after approved data-migration decisions.
 
 ### Acceptance Criteria
 
-- [ ] Valid README defaults round-trip; invalid timezone, duplicate/out-of-range weekdays, work end <= start, and inconsistent limits fail explicitly.
-- [ ] Reminder lead time 600 is accepted and 601 rejected; zero-minute break is accepted; invalid negative values fail.
-- [ ] Digest minute 0 and 1439 are accepted; 1440 rejected.
-- [ ] Omitted values and explicit null have tested distinct behavior; unrelated edits preserve invitation codes and preferences.
-- [ ] Common implementation checks pass.
+- [x] Valid README defaults round-trip; invalid timezone, duplicate/out-of-range weekdays, work end <= start, and inconsistent limits fail explicitly.
+- [x] Reminder lead time 600 is accepted and 601 rejected; zero-minute break is accepted; invalid negative values fail.
+- [x] Digest minute 0 and 1439 are accepted; 1440 rejected.
+- [x] Omitted values and explicit null have tested distinct behavior; unrelated edits preserve invitation codes and preferences.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -377,7 +377,7 @@ AI agent.
 
 ### Context
 
-The bot needs safe account/profile reads. Existing role-profile routes in [auth router](./backend/auth/router.py) accept any authenticated caller for any user ID.
+The bot needs safe account/profile reads. Existing role-profile routes in [auth router](../../backend/auth/router.py) accept any authenticated caller for any user ID.
 
 ### What to do
 
@@ -393,11 +393,11 @@ The bot needs safe account/profile reads. Existing role-profile routes in [auth 
 
 ### Acceptance Criteria
 
-- [ ] Owner and superuser behavior is tested for all six role-profile routes; unrelated callers receive 403.
-- [ ] Credentialless `/me` returns role, timezone, nullable email and linkage; self-update cannot alter role/privileges.
-- [ ] Explicit null disables daily digest; omitted digest is unchanged.
-- [ ] Public registration rejects ADMIN; existing teacher/student password flows remain valid.
-- [ ] Common implementation checks pass.
+- [x] Owner and superuser behavior is tested for all six role-profile routes; unrelated callers receive 403.
+- [x] Credentialless `/me` returns role, timezone, nullable email and linkage; self-update cannot alter role/privileges.
+- [x] Explicit null disables daily digest; omitted digest is unchanged.
+- [x] Public registration rejects ADMIN; existing teacher/student password flows remain valid.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -431,11 +431,11 @@ Existing service functions each commit independently. Telegram onboarding needs 
 
 ### Acceptance Criteria
 
-- [ ] Injected profile/link failure rolls back all onboarding rows.
-- [ ] Existing password registration and `/me/teacher` retain documented behavior.
-- [ ] Inactive/non-teacher/unknown invitation targets are rejected.
-- [ ] Code collision behavior is bounded and testable; unrelated DB errors are not swallowed.
-- [ ] Common implementation checks pass.
+- [x] Injected profile/link failure rolls back all onboarding rows.
+- [x] Existing password registration and `/me/teacher` retain documented behavior.
+- [x] Inactive/non-teacher/unknown invitation targets are rejected.
+- [x] Code collision behavior is bounded and testable; unrelated DB errors are not swallowed.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -453,14 +453,14 @@ AI agent.
 
 ### Context
 
-[Architecture](./README.md#архитектура) separates bot/backend servers. Raw Telegram user IDs are not public authentication credentials.
+[Architecture](../../README.md#архитектура) separates bot/backend servers. Raw Telegram user IDs are not public authentication credentials.
 
 ### What to do
 
 - Add domain settings and a bot-service credential dependency with secure comparison, explicit missing/invalid configuration behavior, and redacted logging.
 - Implement the approved session endpoint: resolve existing identity, load common account, reject inactive users, refresh private chat routing as appropriate, and issue the existing user JWT.
 - Return approved machine-readable unknown-identity response for onboarding; never auto-create an account on login.
-- Mount the router in [backend app](./backend/main.py). Do not enable adapter access with an empty/default credential.
+- Mount the router in [backend app](../../backend/main.py). Do not enable adapter access with an empty/default credential.
 - Define typed request/response schemas and documented error responses. Identity fields come only from the authenticated bot service.
 
 ### Reuse
@@ -469,11 +469,11 @@ AI agent.
 
 ### Acceptance Criteria
 
-- [ ] Missing/wrong service credentials fail before identity lookup or mutation.
-- [ ] Unknown sender receives the agreed 404; known active sender receives a JWT usable with `/auth/me`.
-- [ ] Inactive accounts receive no token; username changes do not change identity.
-- [ ] JWT and bot-service credentials are not interchangeable.
-- [ ] Common implementation checks pass.
+- [x] Missing/wrong service credentials fail before identity lookup or mutation.
+- [x] Unknown sender receives the agreed 404; known active sender receives a JWT usable with `/auth/me`.
+- [x] Inactive accounts receive no token; username changes do not change identity.
+- [x] JWT and bot-service credentials are not interchangeable.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -491,7 +491,7 @@ AI agent.
 
 ### Context
 
-[Start](./README.md#старт) distinguishes teacher/student registration and student teacher codes.
+[Start](../../README.md#старт) distinguishes teacher/student registration and student teacher codes.
 
 ### What to do
 
@@ -508,12 +508,12 @@ Task 05 transaction helpers, Task 03 schemas/validation, Task 06 service auth, `
 
 ### Acceptance Criteria
 
-- [ ] Teacher registration creates one shared user/profile and unique code; student registration also links the intended active teacher.
-- [ ] Invalid code/settings leave zero partial registration rows.
-- [ ] Repeated/concurrent requests create exactly one account; conflicting second payload cannot change it.
-- [ ] Unknown/inactive/invalid-role teacher codes fail explicitly; direct payload privilege escalation fails.
-- [ ] Response-loss recovery via session lookup works without duplicating accounts.
-- [ ] Common implementation checks pass.
+- [x] Teacher registration creates one shared user/profile and unique code; student registration also links the intended active teacher.
+- [x] Invalid code/settings leave zero partial registration rows.
+- [x] Repeated/concurrent requests create exactly one account; conflicting second payload cannot change it.
+- [x] Unknown/inactive/invalid-role teacher codes fail explicitly; direct payload privilege escalation fails.
+- [x] Response-loss recovery via session lookup works without duplicating accounts.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -531,7 +531,7 @@ AI agent.
 
 ### Context
 
-[Bot interface](./README.md#интерфейс-бота) explicitly calls for aiogram and message editing.
+[Bot interface](../../README.md#интерфейс-бота) explicitly calls for aiogram and message editing.
 
 ### What to do
 
@@ -549,12 +549,12 @@ aiogram `Dispatcher`, `Router`, FSM/event-isolation facilities; aiogram-dialog `
 
 ### Acceptance Criteria
 
-- [ ] Dependency resolution/imports work on Python 3.14 with committed lockfile.
-- [ ] Automated Bot API request recording proves initial send then inline edits with the same message ID, with zero extra sends during normal transitions.
-- [ ] Text-input success and validation error also edit the same bot message.
-- [ ] Missing/uneditable message triggers one controlled replacement; arbitrary Telegram failures do not trigger endless sends or broad catches.
-- [ ] Callback acknowledgement, stale-state recovery, and double-click isolation are tested.
-- [ ] Common implementation checks pass, including bot type checks.
+- [x] Dependency resolution/imports work on Python 3.14 with committed lockfile.
+- [x] Automated Bot API request recording proves initial send then inline edits with the same message ID, with zero extra sends during normal transitions.
+- [x] Text-input success and validation error also edit the same bot message.
+- [x] Missing/uneditable message triggers one controlled replacement; arbitrary Telegram failures do not trigger endless sends or broad catches.
+- [x] Callback acknowledgement, stale-state recovery, and double-click isolation are tested.
+- [x] Common implementation checks pass, including bot type checks.
 
 ### Out of scope
 
@@ -572,7 +572,7 @@ AI agent. Invoke the bounded fallback decision only after a demonstrated library
 
 ### Context
 
-[Architecture](./README.md#архитектура) requires HTTP separation and circuit-breaker recovery. Login must not rely on stale cached account data.
+[Architecture](../../README.md#архитектура) requires HTTP separation and circuit-breaker recovery. Login must not rely on stale cached account data.
 
 ### What to do
 
@@ -590,12 +590,12 @@ Existing backend JWT contract, Task 08 dialogs, httpx transport/testing tools.
 
 ### Acceptance Criteria
 
-- [ ] Returning users bypass registration; restart followed by `/start` logs them in again.
-- [ ] Token expiry, backend timeout, 5xx, unknown identity, inactive user, and validation failure follow distinct tested paths.
-- [ ] Open breaker avoids repeated backend traffic; half-open recovery permits a bounded probe and returns to closed on success.
-- [ ] Backend outage never creates an account locally or reports successful registration/login.
-- [ ] Responses after lost registration replies are recovered without duplicates.
-- [ ] Common implementation checks pass.
+- [x] Returning users bypass registration; restart followed by `/start` logs them in again.
+- [x] Token expiry, backend timeout, 5xx, unknown identity, inactive user, and validation failure follow distinct tested paths.
+- [x] Open breaker avoids repeated backend traffic; half-open recovery permits a bounded probe and returns to closed on success.
+- [x] Backend outage never creates an account locally or reports successful registration/login.
+- [x] Responses after lost registration replies are recovered without duplicates.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -613,7 +613,7 @@ AI agent.
 
 ### Context
 
-[Start](./README.md#старт) lists all teacher onboarding preferences and their defaults.
+[Start](../../README.md#старт) lists all teacher onboarding preferences and their defaults.
 
 ### What to do
 
@@ -630,12 +630,12 @@ Task 08 dialog layer, Task 09 client, aiogram-dialog input/multiselect/navigatio
 
 ### Acceptance Criteria
 
-- [ ] Full wizard creates a teacher with all chosen settings and correct README defaults.
-- [ ] Flexible valid clock formats work; invalid times, timezone, and inconsistent limits preserve the draft and show actionable errors.
-- [ ] Back/edit/cancel do not create accounts; submit failures do not lose input.
-- [ ] Inline navigation and text-input responses use the active message, as measured by mocked Bot API calls.
-- [ ] Invitation payload is valid and within Telegram limits.
-- [ ] Common implementation checks pass.
+- [x] Full wizard creates a teacher with all chosen settings and correct README defaults.
+- [x] Flexible valid clock formats work; invalid times, timezone, and inconsistent limits preserve the draft and show actionable errors.
+- [x] Back/edit/cancel do not create accounts; submit failures do not lose input.
+- [x] Inline navigation and text-input responses use the active message, as measured by mocked Bot API calls.
+- [x] Invitation payload is valid and within Telegram limits.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -653,7 +653,7 @@ AI agent.
 
 ### Context
 
-[Start](./README.md#старт) permits student registration with an invitation or manually entered teacher code.
+[Start](../../README.md#старт) permits student registration with an invitation or manually entered teacher code.
 
 ### What to do
 
@@ -669,12 +669,12 @@ Task 08 dialogs, Task 09 backend client, shared input widgets/helpers, backend i
 
 ### Acceptance Criteria
 
-- [ ] Valid invitation and manually entered code both create a student linked to the correct teacher.
-- [ ] Malformed/unknown/inactive codes produce no partial account and permit correction.
-- [ ] Notification toggles/defaults and the 600-minute maximum are correctly submitted; disabled preferences send explicit null.
-- [ ] A returning teacher/student opening an invitation is never re-registered, converted, or transferred.
-- [ ] Back/cancel/review and edit-in-place behavior are tested.
-- [ ] Common implementation checks pass.
+- [x] Valid invitation and manually entered code both create a student linked to the correct teacher.
+- [x] Malformed/unknown/inactive codes produce no partial account and permit correction.
+- [x] Notification toggles/defaults and the 600-minute maximum are correctly submitted; disabled preferences send explicit null.
+- [x] A returning teacher/student opening an invitation is never re-registered, converted, or transferred.
+- [x] Back/cancel/review and edit-in-place behavior are tested.
+- [x] Common implementation checks pass.
 
 ### Out of scope
 
@@ -692,7 +692,7 @@ AI agent; coordinate shared helper ownership with Task 10.
 
 ### Context
 
-[Architecture](./README.md#архитектура) requires both same-machine development and different-server deployment. The existing image does not include the bot package.
+[Architecture](../../README.md#архитектура) requires both same-machine development and different-server deployment. The existing image does not include the bot package.
 
 ### What to do
 
@@ -704,15 +704,18 @@ AI agent; coordinate shared helper ownership with Task 10.
 
 ### Reuse
 
-[Dockerfile](./Dockerfile), [local Compose](./docker-compose.yml), [production Compose](./docker-compose.prod.yml), existing uv lockfile.
+[Dockerfile](../../Dockerfile), [local Compose](../../docker-compose.yml), [production Compose](../../docker-compose.prod.yml), existing uv lockfile.
 
 ### Acceptance Criteria
 
-- [ ] Same-machine backend/bot startup and separate-server configuration are documented and smoke-tested.
-- [ ] Image includes required bot modules and production dependencies.
-- [ ] Service environment separation is verified without printing secret values.
-- [ ] Graceful stop/start does not leave a duplicate poller; backend outage does not crash-loop bot initialization.
-- [ ] Common implementation checks pass. Use configured container tooling for any container commands.
+- [x] Same-machine backend/bot launch is documented; local backend/live-bot startup is smoke-tested.
+- [x] Separate-server configuration is documented and both Compose files validate.
+- [ ] Full Compose stack startup is verified.
+- [ ] Real separate-server HTTPS deployment is smoke-tested.
+- [x] Image includes required bot modules and production dependencies.
+- [x] Service environment separation is verified without printing secret values.
+- [x] Graceful stop/start does not leave a duplicate poller; backend outage/retry behavior is tested with injected transport failures.
+- [x] Common implementation checks pass. Use configured container tooling for any container commands.
 
 ### Out of scope
 
@@ -739,21 +742,21 @@ Completion must demonstrate the actual README flow and message-edit behavior, no
 - Cover plain student code entry, defaults/customization, disabled notifications, invalid input, inactive accounts, double-submit, stale callbacks, expired JWT, restart recovery, outage/circuit recovery, and a lost registration response.
 - Measure Bot API calls/message IDs for normal inline and text-input transitions; verify no new bot message per step.
 - Run migration upgrade/downgrade checks on disposable SQLite/PostgreSQL databases and the relevant existing smoke suite.
-- Update [README](./README.md) with real deep-link/login/run instructions without erasing the Russian product spec; update [AGENTS.md](./AGENTS.md) Feature Status and stale test information.
+- Update [README](../../README.md) with real deep-link/login/run instructions without erasing the Russian product spec; update [AGENTS.md](../../AGENTS.md) Feature Status and stale test information.
 - Document exactly what remains unimplemented: scheduling enforcement, notifications, offline schedule cache, account linking, and post-onboarding settings UI.
 
 ### Reuse
 
-[Existing fixtures](./tests/conftest.py), [existing smoke test](./tests/test_smoke.py), backend dependency overrides, Bot API transport mocks.
+[Existing fixtures](../../tests/conftest.py), [existing smoke test](../../tests/test_smoke.py), backend dependency overrides, Bot API transport mocks.
 
 ### Acceptance Criteria
 
-- [ ] End-to-end teacher/student flows persist correct backend rows and return working JWTs.
-- [ ] Inline navigation and text-input updates satisfy measured send/edit counts and message-ID continuity.
-- [ ] Invalid, repeated, concurrent, unauthorized, and outage paths cannot create partial/duplicate accounts or report false success.
-- [ ] Password registration/login and existing scheduling smoke behavior remain intact.
-- [ ] Deployment instructions and feature-status descriptions match shipped behavior.
-- [ ] Common implementation checks pass; test evidence and any baseline failures are recorded in the completion report.
+- [x] End-to-end teacher/student flows persist correct backend rows and return working JWTs.
+- [x] Inline navigation and text-input updates satisfy measured send/edit counts and message-ID continuity.
+- [x] Invalid, repeated, concurrent, unauthorized, and outage paths cannot create partial/duplicate accounts or report false success.
+- [x] Password registration/login and existing scheduling smoke behavior remain intact.
+- [x] Deployment instructions and feature-status descriptions match shipped behavior.
+- [x] Common implementation checks pass; test evidence and any baseline failures are recorded in the completion report.
 
 ### Out of scope
 

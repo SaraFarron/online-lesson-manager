@@ -8,10 +8,10 @@ This is an agent-ready backlog, not an implementation. Assign one numbered task 
 
 ## Scope (README sections covered)
 
-- [Schedule viewing](./README.md#просмотр-расписания): today/week, chronological events, teacher-visible student names, student-only events, and the timeline divider.
-- [Bot interface](./README.md#интерфейс-бота): aiogram-dialog edit-in-place navigation.
-- [Scheduling foundation handoff](./README.md#scheduling-foundation-handoff): reuse established recurrence, cancellation, timezone, and vacation rules.
-- [Architecture](./README.md#архитектура): backend computes the schedule; Telegram formats it. This milestone does **not** complete the separate offline-cache requirement.
+- [Schedule viewing](../../README.md#просмотр-расписания): today/week, chronological events, teacher-visible student names, student-only events, and the timeline divider.
+- [Bot interface](../../README.md#интерфейс-бота): aiogram-dialog edit-in-place navigation.
+- [Scheduling foundation handoff](../../README.md#scheduling-foundation-handoff): reuse established recurrence, cancellation, timezone, and vacation rules.
+- [Architecture](../../README.md#архитектура): backend computes the schedule; Telegram formats it. This milestone does **not** complete the separate offline-cache requirement.
 
 No booking, schedule mutation, settings UI, notifications, or new infrastructure is included.
 
@@ -19,18 +19,18 @@ No booking, schedule mutation, settings UI, notifications, or new infrastructure
 
 Verified against the repository on 2026-10-17:
 
-- [Schedule router](./backend/schedule/router.py) is empty; [backend app](./backend/main.py) does not mount a schedule router.
-- [Range service](./backend/events/range_service.py) already provides `load_raw_occurrences(session, teacher_id, range_start, range_end)`. It returns teacher-scoped `Occurrence` objects with cancellation rows applied, uses bulk DB loading, and does not commit.
-- [Time helpers](./backend/events/time_utils.py) already provide `local_day_bounds`, `local_week_bounds`, `get_timezone`, and UTC normalization. Day/week boundaries must use the **viewer's saved timezone**, not the teacher's recurrence timezone.
-- [Occurrence types](./backend/events/occurrences.py) expose source kind/ID, teacher ID, subject ID, event type, UTC start/end, and stable `(source kind, source ID, UTC start)` identity.
-- [Vacation visibility](./backend/events/visibility.py) already provides `filter_vacation_visibility`. Teacher vacations hide all overlapping occurrences, including breaks and vacation rows themselves; student vacations hide only that subject's occurrences. Whole occurrences are hidden on any overlap. Do not replace this with older proposed rules.
+- [Schedule router](../../backend/schedule/router.py) is empty; [backend app](../../backend/main.py) does not mount a schedule router.
+- [Range service](../../backend/events/range_service.py) already provides `load_raw_occurrences(session, teacher_id, range_start, range_end)`. It returns teacher-scoped `Occurrence` objects with cancellation rows applied, uses bulk DB loading, and does not commit.
+- [Time helpers](../../backend/events/time_utils.py) already provide `local_day_bounds`, `local_week_bounds`, `get_timezone`, and UTC normalization. Day/week boundaries must use the **viewer's saved timezone**, not the teacher's recurrence timezone.
+- [Occurrence types](../../backend/events/occurrences.py) expose source kind/ID, teacher ID, subject ID, event type, UTC start/end, and stable `(source kind, source ID, UTC start)` identity.
+- [Vacation visibility](../../backend/events/visibility.py) already provides `filter_vacation_visibility`. Teacher vacations hide all overlapping occurrences, including breaks and vacation rows themselves; student vacations hide only that subject's occurrences. Whole occurrences are hidden on any overlap. Do not replace this with older proposed rules.
 - Read ranges are limited to 31 elapsed days and expansion to 10,000 occurrences. Day/week requests fit the range limit; budget/data failures must remain explicit, not become an empty schedule.
 - [Approved foundation plan](./SCHEDULING-FOUNDATION-PLAN.md) and the README record completed decisions: naive DB timestamps mean UTC, new recurrence uses the teacher's timezone snapshot, legacy UTC-step series remain unchanged, and cancellation identity is exact. Do not reopen these decisions.
-- [Auth dependencies](./backend/auth/dependencies.py) provide `CurrentUser` and `SessionDep`; current-user authentication checks active status. Schedule reads must use **user JWTs**, not the bot service credential.
-- [Bot client](./telegram/api.py) already manages a shared httpx client, typed Pydantic models, JWT renewal through `read`, and a circuit breaker. Its `request`/`read` helpers currently have no query-parameter argument, and error wording is registration-oriented.
-- [Home dialog](./telegram/dialogs.py) has no schedule buttons. [Runtime](./telegram/runtime.py) registers home/onboarding dialogs, private-chat filters, per-user isolation, stale callback recovery, and edit-input middleware. Reuse them.
-- [Bot test support](./tests/bot_support.py) records Bot API methods/message IDs and drives real dispatcher updates. [Combined bot tests](./tests/test_bot_flows.py) already connect that driver to the actual ASGI backend.
-- [Visibility tests](./tests/test_event_visibility.py) and [range-service tests](./tests/test_event_range_service.py) are existing regression coverage. Extend/compose them rather than implementing a second engine.
+- [Auth dependencies](../../backend/auth/dependencies.py) provide `CurrentUser` and `SessionDep`; current-user authentication checks active status. Schedule reads must use **user JWTs**, not the bot service credential.
+- [Bot client](../../telegram/api.py) already manages a shared httpx client, typed Pydantic models, JWT renewal through `read`, and a circuit breaker. Its `request`/`read` helpers currently have no query-parameter argument, and error wording is registration-oriented.
+- [Home dialog](../../telegram/dialogs.py) has no schedule buttons. [Runtime](../../telegram/runtime.py) registers home/onboarding dialogs, private-chat filters, per-user isolation, stale callback recovery, and edit-input middleware. Reuse them.
+- [Bot test support](../../tests/bot_support.py) records Bot API methods/message IDs and drives real dispatcher updates. [Combined bot tests](../../tests/test_bot_flows.py) already connect that driver to the actual ASGI backend.
+- [Visibility tests](../../tests/test_event_visibility.py) and [range-service tests](../../tests/test_event_range_service.py) are existing regression coverage. Extend/compose them rather than implementing a second engine.
 
 ## Proposed viewing contract — Task 00 approval required
 
@@ -130,8 +130,8 @@ Task 05 can run alongside backend Tasks 02–03 after the response contract is s
 
 - Reuse foundation helpers and domain composition; no new recurrence, vacation, or cancellation implementation.
 - Add focused tests in each task. Final integration tests supplement rather than defer local validation.
-- Backend integration tests use real isolated DBs and [existing fixtures](./tests/conftest.py), not mocked scheduling services/databases.
-- Bot integration tests reuse [BotDriver/RecordingSession](./tests/bot_support.py); mock only external Telegram transport. Do not call the live Bot API in automated tests.
+- Backend integration tests use real isolated DBs and [existing fixtures](../../tests/conftest.py), not mocked scheduling services/databases.
+- Bot integration tests reuse [BotDriver/RecordingSession](../../tests/bot_support.py); mock only external Telegram transport. Do not call the live Bot API in automated tests.
 - Run relevant existing foundation and bot/auth regression tests when shared code changes.
 - Run `uv run ruff check --fix backend`, `uv run ruff format backend`, and `uv run mypy backend`. For bot changes, also lint/format/type-check `telegram`; include touched tests in Ruff checks.
 - Report unrelated baseline failures honestly; do not repair unrelated booking/infrastructure code.
@@ -147,7 +147,7 @@ Task 05 can run alongside backend Tasks 02–03 after the response contract is s
 
 ### Context
 
-[README viewing](./README.md#просмотр-расписания) specifies the primary flows but not response shape, multi-day grouping, overflow, or unsupported account states.
+[README viewing](../../README.md#просмотр-расписания) specifies the primary flows but not response shape, multi-day grouping, overflow, or unsupported account states.
 
 ### What to do
 
@@ -160,7 +160,7 @@ Task 05 can run alongside backend Tasks 02–03 after the response contract is s
 
 ### Reuse
 
-README viewing requirements, [foundation handoff](./README.md#scheduling-foundation-handoff), existing bot navigation conventions.
+README viewing requirements, [foundation handoff](../../README.md#scheduling-foundation-handoff), existing bot navigation conventions.
 
 ### Acceptance Criteria
 
@@ -264,7 +264,7 @@ Human owner with AI assistance. Stop dependent work if a required decision remai
 
 ### Context
 
-The foundation returns UTC occurrences; [README viewing](./README.md#просмотр-расписания) needs ordered local days, event status, and a stable client contract.
+The foundation returns UTC occurrences; [README viewing](../../README.md#просмотр-расписания) needs ordered local days, event status, and a stable client contract.
 
 ### What to do
 
@@ -349,13 +349,13 @@ AI agent.
 
 ### Context
 
-[Schedule router](./backend/schedule/router.py) is empty and unmounted.
+[Schedule router](../../backend/schedule/router.py) is empty and unmounted.
 
 ### What to do
 
 - Add the approved `/schedule/day` and `/schedule/week` GET routes using `CurrentUser`, `SessionDep`, response models, and validated optional local `date`.
 - Obtain one clock instant per request through a small overridable dependency; pass it to the service.
-- Mount the router under the existing API prefix in [backend app](./backend/main.py).
+- Mount the router under the existing API prefix in [backend app](../../backend/main.py).
 - Fully document query semantics, timezone, role scope, snapshot fields, and validation/auth errors in OpenAPI.
 - Return existing validation errors for range/data/budget issues, never a partial or empty schedule fallback.
 
@@ -392,7 +392,7 @@ AI agent.
 
 ### Context
 
-[BackendClient](./telegram/api.py) already supports safe read/token renewal but lacks schedule types and structured query parameters.
+[BackendClient](../../telegram/api.py) already supports safe read/token renewal but lacks schedule types and structured query parameters.
 
 ### What to do
 
@@ -448,7 +448,7 @@ The README wants a weekly view in one message, but Telegram limits and long labe
 
 ### Reuse
 
-Existing escaping conventions in [dialogs](./telegram/dialogs.py), Python `zoneinfo`, aiogram/Telegram formatting helpers where appropriate.
+Existing escaping conventions in [dialogs](../../telegram/dialogs.py), Python `zoneinfo`, aiogram/Telegram formatting helpers where appropriate.
 
 ### Acceptance Criteria
 
@@ -474,12 +474,12 @@ AI agent after Task 00 approval.
 
 ### Context
 
-[Registered home screen](./telegram/dialogs.py) has no schedule actions. Existing runtime already supplies private-chat and stale-state handling.
+[Registered home screen](../../telegram/dialogs.py) has no schedule actions. Existing runtime already supplies private-chat and stale-state handling.
 
 ### What to do
 
 - Add Today and This week entry buttons for registered TEACHER/STUDENT accounts without exposing unsupported admin actions.
-- Add a focused schedule dialog/module using aiogram-dialog; register it through [runtime](./telegram/runtime.py), preserving home/onboarding stack behavior.
+- Add a focused schedule dialog/module using aiogram-dialog; register it through [runtime](../../telegram/runtime.py), preserving home/onboarding stack behavior.
 - Fetch on open, period switch, and Refresh; page navigation may use the currently fetched snapshot but must retain its update-time label.
 - Store only necessary period/page/snapshot UI state. Do not store JWTs in dialog data or trust callback-supplied account IDs.
 - Retry/back controls survive schedule-specific failures. On failed fresh read, replace calendar content with an unavailable/error screen, not silently stale rows.
@@ -524,13 +524,13 @@ Completion requires the real authorized backend result to reach the edit-in-plac
 - Test viewer zones on opposite sides of UTC midnight, DST weeks, cross-midnight events, empty days, now divider, long-name overflow, and current-period refresh.
 - Exercise API authorization and inspect both serialized responses and bot text for leakage, not only visible button labels.
 - Measure request/query counts and actual Bot API send/edit/message-ID behavior. Assert all authorized event rows survive pagination.
-- Update [README](./README.md) with endpoint schemas/query semantics, bot navigation, snapshot/refresh behavior, and approved overflow policy without deleting the Russian spec.
-- Update [AGENTS.md](./AGENTS.md) feature status to match shipped views, preserving pending booking limits, automatic breaks, concurrency protection, cache, notifications, and HTMX status.
+- Update [README](../../README.md) with endpoint schemas/query semantics, bot navigation, snapshot/refresh behavior, and approved overflow policy without deleting the Russian spec.
+- Update [AGENTS.md](../../AGENTS.md) feature status to match shipped views, preserving pending booking limits, automatic breaks, concurrency protection, cache, notifications, and HTMX status.
 - Provide a concise handoff for future notification/cache consumers: authorization remains required; do not cache teacher-wide raw data as a student's result.
 
 ### Reuse
 
-[Existing DB fixtures](./tests/conftest.py), [BotDriver](./tests/bot_support.py), [combined-flow patterns](./tests/test_bot_flows.py), foundation range/visibility tests.
+[Existing DB fixtures](../../tests/conftest.py), [BotDriver](../../tests/bot_support.py), [combined-flow patterns](../../tests/test_bot_flows.py), foundation range/visibility tests.
 
 ### Acceptance Criteria
 
