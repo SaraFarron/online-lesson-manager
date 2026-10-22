@@ -49,6 +49,70 @@ Record the precise admission semantics before implementation, reusing the approv
 
 Record approved choices in this plan before implementing dependent tasks. No new teacher settings are in scope: their fields/defaults already exist.
 
+#### Owner-approved booking and concurrency contract (2026-10-23)
+
+The product owner approved the following semantics for Tasks 3–6. Preserve the
+existing authorization rules; this contract does not grant new roles access to
+schedule mutations.
+
+**Lesson admission and duration**
+
+- Work-day, work-hour, duration, daily-count, and consecutive-count rules apply
+  to every lesson on the teacher's calendar: teacher personal lessons and
+  lessons for all assigned students, regardless of whether the authorized
+  writer is the teacher or a student. Breaks and vacations are not subject to
+  these lesson booking rules; their existing validation remains authoritative.
+- Evaluate a lesson against its teacher-local occurrence start date and require
+  its entire interval to fit within that local work day. The start must be at
+  or after `work_start`; an end exactly equal to `work_end` is valid. Reject
+  any lesson that crosses local midnight.
+- At the API boundary, retain explicit `end` values for compatibility. A
+  lesson create may omit `end`, in which case derive it by adding the
+  configured `lesson_length` as elapsed minutes to `start`. A student-created
+  lesson must use that configured duration. A non-default duration is allowed
+  only when the existing route authorization identifies a teacher-authorized
+  write; do not broaden ownership or authorization. No migration or new setting
+  is approved.
+
+**Daily/consecutive counts and recurrence**
+
+- Count every active, non-canceled teacher lesson, including personal lessons
+  and lessons for all assigned students. Group lessons by their evaluated
+  teacher-local occurrence start date. When updating a one-off event or series,
+  exclude that event or series from the existing count before adding its
+  candidate occurrence(s).
+- A consecutive chain comprises chronologically adjacent lessons on the same
+  evaluated local date when the elapsed gap from the previous lesson's end to
+  the next lesson's start is less than or equal to
+  `between_lessons_break`. Thus zero joins exact adjacency only. Enforce both
+  `max_lessons_per_day` and `max_consecutive_lessons` against existing and
+  candidate occurrences.
+- Apply these checks to every candidate occurrence over the complete accepted
+  recurrence horizon, up to the scheduling foundation's ten-calendar-year
+  maximum. A canceled occurrence does not count. Use the immutable timezone
+  snapshot for a new teacher-local series; evaluate its work hours, working
+  day, and local-date counts in that snapshot. Evaluate one-off events and
+  legacy `UTC_STEP` series in the teacher's current profile timezone, converting
+  each generated UTC occurrence before checking local policy. Order elapsed
+  gaps by UTC instants. Preserve the foundation's explicit horizon, expansion
+  budget, and invalid-data failures; never silently truncate.
+
+**Database-backed serialization**
+
+- Use a dedicated persistent guard row keyed by teacher. Acquire it with an
+  atomic insert-or-update before loading schedule conflict or booking-limit
+  inputs, and hold its transaction lock through validation, confirmed break
+  displacement/cancellation, event writes, and transaction completion.
+- PostgreSQL serializes mutations for the same teacher on that teacher's guard
+  row. SQLite's database write-lock semantics may serialize different
+  teachers more coarsely, but must prevent two concurrent schedule mutations
+  from both validating against stale inputs and committing conflicting results.
+  The guard row is the database-backed correctness boundary, not an
+  in-process mutex. Add a static reversible migration for the guard table if
+  required by the implementation.
+- Apply this mechanism to all lesson, break, and vacation mutations, both
+  one-off and recurring, including writes that can displace or cancel lessons.
+
 ### 3. Serialize schedule validation and writes per teacher
 
 **Domain:** `backend/events/` and event-domain write routes  
@@ -101,6 +165,5 @@ Update [AGENTS.md](../../AGENTS.md) and the scheduling handoff in [README.md](..
 
 ## Open questions
 
-- Task 2 lists the product decisions required before implementation. The recommendation for omitted `end` preserves existing callers, but the request shape and role-specific duration behavior need explicit approval.
-- The supported concurrency mechanism must provide the same correctness guarantee on SQLite and PostgreSQL and must be acquired before validation reads. If that cannot be guaranteed with the current session/transaction setup, stop and propose the smallest infrastructure/API adjustment rather than claiming race safety.
+- Task 2's product decisions and database-backed guard-row strategy are approved above. Tasks 3–6 must implement that contract; if the current session/transaction setup cannot provide the approved SQLite and PostgreSQL guarantees, stop and obtain approval for the smallest required adjustment rather than claiming race safety.
 - Verify the current occurrence/range service can validate per-day and consecutive limits for all accepted recurrence horizons within its explicit query/expansion budgets. If it cannot, identify the precise bounded extension needed; never silently sample or truncate the schedule.
