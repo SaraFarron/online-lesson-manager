@@ -8,6 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.service import get_user_by_id
 from backend.constants import EventType
+from backend.events.booking_policy import (
+    TeacherBookingPreferences,
+    get_teacher_preferences,
+    lesson_policy_range,
+    validate_lesson_limits,
+    validate_lesson_work_window,
+)
 from backend.events.constants import RecurrenceMode
 from backend.events.models import Event, RecurrentEvent
 from backend.events.occurrences import (
@@ -48,8 +55,16 @@ async def validate_schedule_change(
     recurrence_mode: RecurrenceMode | str | None = None,
     canceled_starts: Sequence[datetime] = (),
     confirm_displacement: bool = False,
+    lesson_preferences: TeacherBookingPreferences | None = None,
+    teacher_timezone: str | None = None,
 ) -> list[Occurrence]:
     event_type = await _event_type(session, data, expected_event_type, exclude_event_id)
+    if event_type == EventType.LESSON and (
+        lesson_preferences is None or teacher_timezone is None
+    ):
+        lesson_preferences, teacher_timezone = await get_teacher_preferences(
+            session, teacher_id
+        )
     candidate_occurrences, range_end, candidate_count = await _candidate_occurrences(
         session,
         data,
@@ -63,11 +78,33 @@ async def validate_schedule_change(
     if isinstance(data, RecurrentEventWrite):
         _reject_self_overlap(candidate_occurrences)
 
+    policy_timezone = teacher_timezone
+    if (
+        event_type == EventType.LESSON
+        and isinstance(data, RecurrentEventWrite)
+        and (recurrence_mode or RecurrenceMode.TEACHER_LOCAL)
+        == RecurrenceMode.TEACHER_LOCAL
+        and recurrence_timezone is not None
+    ):
+        policy_timezone = recurrence_timezone
+    policy_range = (
+        lesson_policy_range(candidate_occurrences, policy_timezone)
+        if event_type == EventType.LESSON
+        and lesson_preferences is not None
+        and policy_timezone is not None
+        else None
+    )
+    query_start = normalize_utc(data.start)
+    query_end = range_end
+    if policy_range is not None:
+        query_start = min(query_start, policy_range[0])
+        query_end = max(query_end, policy_range[1])
+
     existing = await load_raw_occurrences_for_validation(
         session,
         teacher_id,
-        data.start,
-        range_end,
+        query_start,
+        query_end,
         max_occurrences=MAX_OCCURRENCES_PER_QUERY - candidate_count,
     )
     if exclude_event_id is not None:
@@ -84,6 +121,19 @@ async def validate_schedule_change(
                 and occurrence.source.id == exclude_event_id
             )
         ]
+
+    if (
+        event_type == EventType.LESSON
+        and candidate_occurrences
+        and lesson_preferences is not None
+        and policy_timezone is not None
+    ):
+        validate_lesson_work_window(
+            candidate_occurrences, lesson_preferences, policy_timezone
+        )
+        validate_lesson_limits(
+            candidate_occurrences, existing, lesson_preferences, policy_timezone
+        )
 
     overlaps = _find_overlaps(candidate_occurrences, existing)
     if isinstance(data, EventWrite):

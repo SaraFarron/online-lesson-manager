@@ -7,11 +7,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.constants import Roles
 from backend.auth.models import TeacherProfile, User
-from backend.events.models import Event
-from backend.events.service import create_event, create_recurrent_event
-from backend.events.validators import default_event_validator
+from backend.constants import EventType
+from backend.events.models import Event, RecurrentCancels
+from backend.events.schemas import RecurrentCancel
+from backend.events.service import (
+    create_event,
+    create_recurrent_event,
+    update_recurrent_event,
+)
+from backend.events.validators import EventValidator, default_event_validator
 from backend.exceptions import ValidationError
-from backend.lessons.schemas import LessonCreate, RecurrentLessonCreate
+from backend.lessons.schemas import (
+    LessonCreate,
+    RecurrentLessonCreate,
+    RecurrentLessonUpdate,
+)
 
 
 async def _teacher_with_student(
@@ -22,6 +32,9 @@ async def _teacher_with_student(
     work_end: time = time(18),
     working_days: list[int] | None = None,
     lesson_length: int = 60,
+    between_lessons_break: int = 5,
+    max_consecutive_lessons: int = 4,
+    max_lessons_per_day: int = 6,
 ) -> tuple[User, User]:
     teacher = User(role=Roles.TEACHER, timezone=timezone)
     session.add(teacher)
@@ -36,6 +49,9 @@ async def _teacher_with_student(
             work_end=work_end,
             working_days=working_days or [1, 2, 3, 4, 5],
             lesson_length=lesson_length,
+            between_lessons_break=between_lessons_break,
+            max_consecutive_lessons=max_consecutive_lessons,
+            max_lessons_per_day=max_lessons_per_day,
         )
     )
     await session.commit()
@@ -170,6 +186,178 @@ async def test_lesson_ending_exactly_at_work_end_is_allowed(
     )
 
     assert event.end == datetime(2026, 10, 26, 18)
+
+
+async def _create_lesson(
+    session: AsyncSession, teacher: User, user: User, start: datetime
+) -> Event:
+    return await create_event(
+        session,
+        LessonCreate(
+            start=start,
+            end=start + timedelta(minutes=60),
+            user_id=user.id,
+        ),
+        default_event_validator,
+        teacher_id=teacher.id,
+        actor_is_teacher=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_counts_teacher_personal_and_student_lessons(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _teacher_with_student(
+        db_session, timezone="UTC", max_lessons_per_day=2
+    )
+    await _create_lesson(
+        db_session, teacher, teacher, datetime(2026, 10, 26, 9, tzinfo=UTC)
+    )
+    await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 10, 5, tzinfo=UTC)
+    )
+
+    with pytest.raises(ValidationError, match="daily lesson limit of 2"):
+        await _create_lesson(
+            db_session, teacher, student, datetime(2026, 10, 26, 12, tzinfo=UTC)
+        )
+
+
+@pytest.mark.asyncio
+async def test_consecutive_limit_includes_exact_configured_gap(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _teacher_with_student(
+        db_session,
+        timezone="UTC",
+        max_consecutive_lessons=2,
+        between_lessons_break=5,
+    )
+    await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 9, tzinfo=UTC)
+    )
+    await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 10, 5, tzinfo=UTC)
+    )
+
+    with pytest.raises(ValidationError, match="consecutive lesson limit of 2"):
+        await _create_lesson(
+            db_session, teacher, student, datetime(2026, 10, 26, 11, 10, tzinfo=UTC)
+        )
+
+    allowed = await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 11, 11, tzinfo=UTC)
+    )
+    assert allowed.start == datetime(2026, 10, 26, 11, 11)
+
+
+@pytest.mark.asyncio
+async def test_zero_break_joins_only_exactly_adjacent_lessons(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _teacher_with_student(
+        db_session,
+        timezone="UTC",
+        between_lessons_break=0,
+        max_consecutive_lessons=1,
+    )
+    await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 9, tzinfo=UTC)
+    )
+
+    with pytest.raises(ValidationError, match="consecutive lesson limit of 1"):
+        await _create_lesson(
+            db_session, teacher, student, datetime(2026, 10, 26, 10, tzinfo=UTC)
+        )
+
+    allowed = await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 10, 1, tzinfo=UTC)
+    )
+    assert allowed.start == datetime(2026, 10, 26, 10, 1)
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_groups_by_teacher_local_date_near_utc_midnight(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _teacher_with_student(
+        db_session,
+        timezone="Asia/Bangkok",
+        work_start=time(6),
+        working_days=[2],
+        max_lessons_per_day=1,
+    )
+    await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 23, 30, tzinfo=UTC)
+    )
+
+    with pytest.raises(ValidationError, match="daily lesson limit of 1"):
+        await _create_lesson(
+            db_session, teacher, student, datetime(2026, 10, 27, 0, 30, tzinfo=UTC)
+        )
+
+
+@pytest.mark.asyncio
+async def test_recurrence_update_excludes_its_series_and_ignores_canceled_days(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _teacher_with_student(
+        db_session, timezone="UTC", max_lessons_per_day=1
+    )
+    series_start = datetime(2026, 10, 26, 9, tzinfo=UTC)
+    series_end = datetime(2026, 10, 26, 10, tzinfo=UTC)
+    series = await create_recurrent_event(
+        db_session,
+        RecurrentLessonCreate(
+            start=series_start,
+            end=series_end,
+            interval=7,
+            interval_end=datetime(2026, 11, 9, 9, tzinfo=UTC),
+            user_id=student.id,
+        ),
+        default_event_validator,
+        teacher_id=teacher.id,
+    )
+    db_session.add(
+        Event(
+            teacher_id=teacher.id,
+            user_id=student.id,
+            event_type=EventType.LESSON.value,
+            start=datetime(2026, 11, 2, 11),
+            end=datetime(2026, 11, 2, 12),
+        )
+    )
+    await db_session.commit()
+
+    updated = await update_recurrent_event(
+        db_session,
+        series,
+        RecurrentLessonUpdate(
+            start=series_start,
+            end=series_end,
+            interval=7,
+            interval_end=datetime(2026, 11, 9, 9, tzinfo=UTC),
+            user_id=student.id,
+            cancels=[
+                RecurrentCancel(
+                    start=datetime(2026, 11, 2, 9, tzinfo=UTC),
+                    end=datetime(2026, 11, 2, 10, tzinfo=UTC),
+                )
+            ],
+        ),
+        EventValidator(expected_event_type=EventType.LESSON),
+        teacher_id=teacher.id,
+        actor_is_teacher=True,
+    )
+
+    cancellation = await db_session.scalar(
+        select(RecurrentCancels).where(
+            RecurrentCancels.recurrent_event_id == updated.id
+        )
+    )
+    assert cancellation is not None
+    assert cancellation.start == datetime(2026, 11, 2, 9)
 
 
 @pytest.mark.asyncio

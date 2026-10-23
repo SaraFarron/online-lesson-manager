@@ -1,33 +1,23 @@
 import uuid
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.models import TeacherProfile, User
 from backend.constants import EventType
-from backend.events.constants import RecurrenceMode
-from backend.events.occurrences import (
-    Occurrence,
-    OccurrenceSource,
-    OccurrenceSourceKind,
-    RecurrenceSeries,
-    expand_recurrence,
-)
+from backend.events.occurrences import Occurrence
 from backend.events.schemas import (
     EventCreate,
     EventUpdate,
-    EventWrite,
     RecurrentEventCreate,
     RecurrentEventUpdate,
-    RecurrentEventWrite,
 )
-from backend.events.time_utils import get_timezone, normalize_utc
+from backend.events.time_utils import get_timezone, local_day_bounds, normalize_utc
 from backend.exceptions import ValidationError
-
-MAX_RECURRENT_HORIZON_YEARS = 10
 
 
 @dataclass(frozen=True)
@@ -102,37 +92,29 @@ async def prepare_lesson_write[
     return data, profile, teacher_timezone
 
 
+def lesson_policy_range(
+    candidates: Sequence[Occurrence], timezone_name: str
+) -> tuple[datetime, datetime] | None:
+    if not candidates:
+        return None
+    zone = get_timezone(timezone_name)
+    local_dates = [
+        normalize_utc(item.start).astimezone(zone).date() for item in candidates
+    ]
+    range_start, _ = local_day_bounds(min(local_dates), timezone_name)
+    _, range_end = local_day_bounds(max(local_dates), timezone_name)
+    return range_start, range_end
+
+
 def validate_lesson_work_window(
-    data: EventWrite | RecurrentEventWrite,
-    teacher_id: uuid.UUID,
+    occurrences: Sequence[Occurrence],
     profile: TeacherBookingPreferences,
-    teacher_timezone: str,
-    *,
-    recurrence_timezone: str | None = None,
-    recurrence_mode: str | None = None,
-    canceled_starts: Sequence[datetime] = (),
+    timezone_name: str,
 ) -> None:
-    if data.end is None:
-        raise ValidationError("Lesson end time is required")
     if profile.work_start is None or profile.work_end is None:
         raise ValidationError("Teacher work hours are not configured")
 
-    mode = recurrence_mode or RecurrenceMode.TEACHER_LOCAL.value
-    timezone_name = (
-        recurrence_timezone
-        if isinstance(data, RecurrentEventWrite)
-        and mode == RecurrenceMode.TEACHER_LOCAL
-        and recurrence_timezone is not None
-        else teacher_timezone
-    )
     zone = get_timezone(timezone_name)
-    occurrences = _candidate_occurrences(
-        data,
-        teacher_id,
-        recurrence_timezone=recurrence_timezone or teacher_timezone,
-        recurrence_mode=mode,
-        canceled_starts=canceled_starts,
-    )
     working_days = profile.working_days
     if (
         not isinstance(working_days, Sequence)
@@ -154,70 +136,55 @@ def validate_lesson_work_window(
             raise ValidationError("Lesson ends after the teacher's work hours")
 
 
-def _candidate_occurrences(
-    data: EventWrite | RecurrentEventWrite,
-    teacher_id: uuid.UUID,
-    *,
-    recurrence_timezone: str,
-    recurrence_mode: str,
-    canceled_starts: Sequence[datetime],
-) -> list[Occurrence]:
-    if data.end is None:
-        raise ValidationError("Lesson end time is required")
+def validate_lesson_limits(
+    candidates: Sequence[Occurrence],
+    existing: Sequence[Occurrence],
+    profile: TeacherBookingPreferences,
+    timezone_name: str,
+) -> None:
+    if not candidates:
+        return
+    zone = get_timezone(timezone_name)
+    lessons_by_day: dict[date, list[Occurrence]] = defaultdict(list)
+    candidate_days: set[date] = set()
+    for occurrence in (*existing, *candidates):
+        if occurrence.source.event_type != EventType.LESSON:
+            continue
+        day = normalize_utc(occurrence.start).astimezone(zone).date()
+        lessons_by_day[day].append(occurrence)
+    for candidate in candidates:
+        candidate_days.add(normalize_utc(candidate.start).astimezone(zone).date())
 
-    source = OccurrenceSource(
-        kind=(
-            OccurrenceSourceKind.RECURRENT_EVENT
-            if isinstance(data, RecurrentEventWrite)
-            else OccurrenceSourceKind.EVENT
-        ),
-        id=uuid.UUID(int=0),
-        teacher_id=teacher_id,
-        user_id=data.user_id,
-        event_type=EventType.LESSON,
-    )
-    start = normalize_utc(data.start)
-    end = normalize_utc(data.end)
-    if not isinstance(data, RecurrentEventWrite):
-        return [Occurrence(source=source, start=start, end=end)]
-
-    cutoff = normalize_utc(data.interval_end)
-    target_year = start.year + MAX_RECURRENT_HORIZON_YEARS
-    if target_year > 9999:
-        raise ValidationError("Recurrence start is outside the supported range")
-    try:
-        max_cutoff = start.replace(year=target_year)
-    except ValueError as exc:
-        if start.month != 2 or start.day != 29:
+    break_duration = timedelta(minutes=profile.between_lessons_break)
+    for day in candidate_days:
+        lessons = sorted(
+            lessons_by_day[day],
+            key=lambda occurrence: (
+                normalize_utc(occurrence.start),
+                normalize_utc(occurrence.end),
+            ),
+        )
+        if len(lessons) > profile.max_lessons_per_day:
             raise ValidationError(
-                "Recurrence start is outside the supported range"
-            ) from exc
-        max_cutoff = start.replace(year=target_year, day=28)
-    if cutoff > max_cutoff:
-        raise ValidationError("Recurrence duration cannot exceed 10 years")
-    try:
-        range_end = cutoff + (end - start)
-    except OverflowError as exc:
-        raise ValidationError(
-            "Recurrence policy horizon is outside the supported range"
-        ) from exc
+                f"Teacher's daily lesson limit of {profile.max_lessons_per_day} "
+                "would be exceeded"
+            )
 
-    series = RecurrenceSeries(
-        source=source,
-        start=start,
-        end=end,
-        interval=data.interval,
-        interval_end=cutoff,
-        recurrence_mode=recurrence_mode,
-        recurrence_timezone=(
-            recurrence_timezone
-            if recurrence_mode == RecurrenceMode.TEACHER_LOCAL
-            else None
-        ),
-    )
-    canceled = {normalize_utc(value) for value in canceled_starts}
-    return [
-        occurrence
-        for occurrence in expand_recurrence(series, start, range_end)
-        if occurrence.start not in canceled
-    ]
+        longest_chain = chain_length = 0
+        previous: Occurrence | None = None
+        for lesson in lessons:
+            if (
+                previous is None
+                or normalize_utc(lesson.start) - normalize_utc(previous.end)
+                > break_duration
+            ):
+                chain_length = 1
+            else:
+                chain_length += 1
+            longest_chain = max(longest_chain, chain_length)
+            previous = lesson
+        if longest_chain > profile.max_consecutive_lessons:
+            raise ValidationError(
+                "Teacher's consecutive lesson limit of "
+                f"{profile.max_consecutive_lessons} would be exceeded"
+            )

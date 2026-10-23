@@ -7,18 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.service import get_user_by_id
 from backend.constants import EventType
-from backend.events.booking_policy import (
-    TeacherBookingPreferences,
-    get_teacher_preferences,
-    validate_lesson_work_window,
-)
+from backend.events.booking_policy import TeacherBookingPreferences
 from backend.events.conflicts import validate_schedule_change
 from backend.events.models import Event, RecurrentEvent
 from backend.events.occurrences import Occurrence
 from backend.events.schemas import (
-    EventCreate,
     EventWrite,
-    RecurrentEventCreate,
     RecurrentEventWrite,
 )
 from backend.exceptions import ValidationError
@@ -92,6 +86,8 @@ class NoConflictValidation:
         recurrence_mode: str | None = None,
         canceled_starts: Sequence[datetime] = (),
         confirm_displacement: bool = False,
+        lesson_preferences: TeacherBookingPreferences | None = None,
+        teacher_timezone: str | None = None,
     ) -> list[Occurrence]:
         return await validate_schedule_change(
             session,
@@ -103,6 +99,8 @@ class NoConflictValidation:
             recurrence_mode=recurrence_mode,
             canceled_starts=canceled_starts,
             confirm_displacement=confirm_displacement,
+            lesson_preferences=lesson_preferences,
+            teacher_timezone=teacher_timezone,
         )
 
 
@@ -148,26 +146,9 @@ class EventValidator:
             recurrence_mode=recurrence_mode,
             canceled_starts=canceled_starts,
             confirm_displacement=confirm_displacement,
+            lesson_preferences=teacher_profile,
+            teacher_timezone=teacher_timezone,
         )
-        event_type = (
-            data.event_type
-            if isinstance(data, (EventCreate, RecurrentEventCreate))
-            else self.expected_event_type
-        )
-        if event_type == EventType.LESSON:
-            if teacher_profile is None or teacher_timezone is None:
-                teacher_profile, teacher_timezone = await get_teacher_preferences(
-                    session, teacher_id
-                )
-            validate_lesson_work_window(
-                data,
-                teacher_id,
-                teacher_profile,
-                teacher_timezone,
-                recurrence_timezone=recurrence_timezone,
-                recurrence_mode=recurrence_mode,
-                canceled_starts=canceled_starts,
-            )
         return displaced
 
 

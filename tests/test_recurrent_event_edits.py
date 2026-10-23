@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import User
+from backend.auth.models import TeacherProfile, User
 from backend.constants import EventType
 from backend.events.constants import RecurrenceMode
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
@@ -48,6 +48,13 @@ async def _users(
         teacher_id=teacher.id,
     )
     session.add_all([teacher, first_student, second_student])
+    session.add(
+        TeacherProfile(
+            teacher_id=teacher.id,
+            code="t_EDIT001",
+            working_days=[1, 2, 3, 4, 5, 6, 7],
+        )
+    )
     await session.flush()
     return teacher, first_student, second_student
 
