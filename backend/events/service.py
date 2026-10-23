@@ -1,14 +1,24 @@
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
+from sqlite3 import SQLITE_BUSY, SQLITE_LOCKED
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.service import get_user_by_id
 from backend.breaks.schemas import RecurrentBreakCreate
 from backend.constants import EventType
 from backend.events.constants import RecurrenceMode
-from backend.events.models import Event, RecurrentCancels, RecurrentEvent
+from backend.events.models import (
+    Event,
+    RecurrentCancels,
+    RecurrentEvent,
+    TeacherScheduleGuard,
+)
 from backend.events.occurrences import (
     Occurrence,
     OccurrenceSource,
@@ -24,10 +34,99 @@ from backend.events.schemas import (
 )
 from backend.events.time_utils import from_storage_utc, to_storage_utc
 from backend.events.validators import EventValidator
-from backend.exceptions import ValidationError
+from backend.exceptions import Conflict, ValidationError
+
+
+async def _run_serialized_schedule_mutation[ResultT](
+    session: AsyncSession,
+    teacher_id: uuid.UUID,
+    operation: Callable[[], Awaitable[ResultT]],
+) -> ResultT:
+    dialect_name = session.get_bind().dialect.name
+    try:
+        await _acquire_teacher_schedule_guard(session, teacher_id, dialect_name)
+    except OperationalError as exc:
+        await session.rollback()
+        if _is_sqlite_contention(exc, dialect_name):
+            raise Conflict("Schedule is being changed; retry this request.") from exc
+        raise
+    except BaseException:
+        await session.rollback()
+        raise
+
+    try:
+        return await operation()
+    except Conflict, ValidationError:
+        # These domain rejections occur before displacement or event writes.
+        await session.commit()
+        raise
+    except BaseException:
+        await session.rollback()
+        raise
+
+
+async def _acquire_teacher_schedule_guard(
+    session: AsyncSession, teacher_id: uuid.UUID, dialect_name: str
+) -> None:
+    values = {"teacher_id": teacher_id}
+    if dialect_name == "sqlite":
+        await session.execute(
+            sqlite_insert(TeacherScheduleGuard)
+            .values(**values)
+            .on_conflict_do_update(
+                index_elements=[TeacherScheduleGuard.teacher_id],
+                set_={"teacher_id": teacher_id},
+            )
+        )
+    elif dialect_name == "postgresql":
+        await session.execute(
+            postgresql_insert(TeacherScheduleGuard)
+            .values(**values)
+            .on_conflict_do_update(
+                index_elements=[TeacherScheduleGuard.teacher_id],
+                set_={"teacher_id": teacher_id},
+            )
+        )
+    else:
+        raise RuntimeError(
+            f"Schedule serialization is unsupported for database dialect {dialect_name}"
+        )
+
+
+def _is_sqlite_contention(exc: OperationalError, dialect_name: str) -> bool:
+    if dialect_name != "sqlite":
+        return False
+
+    error_code = getattr(exc.orig, "sqlite_errorcode", None)
+    if error_code is not None and error_code & 0xFF in (SQLITE_BUSY, SQLITE_LOCKED):
+        return True
+
+    message = str(exc.orig).lower()
+    return "database is locked" in message or "database table is locked" in message
 
 
 async def create_event(
+    session: AsyncSession,
+    event_data: EventCreate,
+    validator: EventValidator,
+    teacher_id: uuid.UUID,
+    *,
+    confirm_displacement: bool = False,
+) -> Event:
+    return await _run_serialized_schedule_mutation(
+        session,
+        teacher_id,
+        lambda: _create_event(
+            session,
+            event_data,
+            validator,
+            teacher_id,
+            confirm_displacement=confirm_displacement,
+        ),
+    )
+
+
+async def _create_event(
     session: AsyncSession,
     event_data: EventCreate,
     validator: EventValidator,
@@ -66,6 +165,29 @@ async def update_event(
     *,
     confirm_displacement: bool = False,
 ) -> Event:
+    return await _run_serialized_schedule_mutation(
+        session,
+        teacher_id,
+        lambda: _update_event(
+            session,
+            event,
+            event_data,
+            validator,
+            teacher_id,
+            confirm_displacement=confirm_displacement,
+        ),
+    )
+
+
+async def _update_event(
+    session: AsyncSession,
+    event: Event,
+    event_data: EventUpdate,
+    validator: EventValidator,
+    teacher_id: uuid.UUID,
+    *,
+    confirm_displacement: bool = False,
+) -> Event:
     displaced = await validator.validate_all(
         session,
         event_data,
@@ -87,6 +209,12 @@ async def update_event(
 
 
 async def delete_event(session: AsyncSession, event: Event | RecurrentEvent) -> None:
+    await _run_serialized_schedule_mutation(
+        session, event.teacher_id, lambda: _delete_event(session, event)
+    )
+
+
+async def _delete_event(session: AsyncSession, event: Event | RecurrentEvent) -> None:
     if isinstance(event, RecurrentEvent):
         await session.execute(
             delete(RecurrentCancels).where(
@@ -105,6 +233,31 @@ async def create_recurrent_event(
     *,
     confirm_displacement: bool = False,
 ) -> RecurrentEvent:
+    return await _run_serialized_schedule_mutation(
+        session,
+        teacher_id,
+        lambda: _create_recurrent_event(
+            session,
+            event_data,
+            validator,
+            teacher_id,
+            confirm_displacement=confirm_displacement,
+        ),
+    )
+
+
+async def _create_recurrent_event(
+    session: AsyncSession,
+    event_data: RecurrentEventCreate | RecurrentBreakCreate,
+    validator: EventValidator,
+    teacher_id: uuid.UUID,
+    *,
+    confirm_displacement: bool = False,
+) -> RecurrentEvent:
+    teacher = await get_user_by_id(session, teacher_id)
+    if teacher is None:
+        raise ValidationError(f"Teacher with ID {teacher_id} does not exist")
+
     displaced = await validator.validate_all(
         session,
         event_data,
@@ -113,10 +266,6 @@ async def create_recurrent_event(
         confirm_displacement=confirm_displacement,
     )
     await _apply_displacements(session, displaced, teacher_id)
-
-    teacher = await get_user_by_id(session, teacher_id)
-    if teacher is None:
-        raise ValidationError(f"Teacher with ID {teacher_id} does not exist")
 
     recurrent_event = RecurrentEvent(
         start=to_storage_utc(event_data.start),
@@ -136,6 +285,29 @@ async def create_recurrent_event(
 
 
 async def update_recurrent_event(
+    session: AsyncSession,
+    recurrent_event: RecurrentEvent,
+    event_data: RecurrentEventUpdate,
+    validator: EventValidator,
+    teacher_id: uuid.UUID,
+    *,
+    confirm_displacement: bool = False,
+) -> RecurrentEvent:
+    return await _run_serialized_schedule_mutation(
+        session,
+        teacher_id,
+        lambda: _update_recurrent_event(
+            session,
+            recurrent_event,
+            event_data,
+            validator,
+            teacher_id,
+            confirm_displacement=confirm_displacement,
+        ),
+    )
+
+
+async def _update_recurrent_event(
     session: AsyncSession,
     recurrent_event: RecurrentEvent,
     event_data: RecurrentEventUpdate,

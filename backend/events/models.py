@@ -110,3 +110,13 @@ class RecurrentCancels(Base, TimestampMixin):
     )
     start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TeacherScheduleGuard(Base):
+    __tablename__ = "teacher_schedule_guard"
+
+    teacher_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
