@@ -95,9 +95,9 @@ a README-described feature.
 | README section | Status | Notes |
 |---|---|---|
 | Teacher/student registration (`/auth/register`, `/auth/login`) | **Done** | Password auth retained; trusted Telegram API and private-chat `/start` teacher/student wizards implemented. Teacher invitations use short `t_[A-Z0-9]{6}` codes in `/start` payloads; existing codes can be replaced with the explicit rotation command. No account merging/password addition for Telegram-only users. |
-| Teacher settings (work hours, lesson length, break, max/day) | **Partial** | Validated work hours, JSON ISO weekdays, lesson length, break, max/day and max consecutive preferences are persisted with README defaults. Workdays/hours and lesson duration are enforced; daily/consecutive limits and automatic breaks remain pending. |
+| Teacher settings (work hours, lesson length, break, max/day) | **Partial** | Validated work hours, JSON ISO weekdays, lesson length, break, max/day and max consecutive preferences are persisted with README defaults. Workdays/hours, lesson duration, daily/consecutive limits are enforced; automatic breaks remain pending. |
 | Student settings (notifications) | **Partial** | Validated digest minutes-of-local-day, lesson reminder minutes (1–600), homework days; null disables. Safe partial updates implemented. Notification delivery is not implemented. |
-| Lessons / breaks / vacations CRUD (one-off + recurring) | **Partial** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, confirmed break displacement, teacher-local workday/hour checks, lesson duration defaults/authorization, and database-backed per-teacher mutation serialization are implemented. Missing: max-per-day, max-consecutive, and automatic breaks. |
+| Lessons / breaks / vacations CRUD (one-off + recurring) | **Partial** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, confirmed break displacement, teacher-local workday/hour checks, lesson duration defaults/authorization, daily/consecutive limits, and database-backed per-teacher mutation serialization are implemented. Automatic break creation is not implemented. |
 | Schedule viewing (day/week, timeline, teacher sees student names) | **Partial** | Authenticated viewer-local day/week endpoints and live Telegram Today/This week screens are implemented, including role-scoped results, previous/next-week navigation, refresh, DST-aware rendering, and safe pagination. HTMX/arbitrary-date UI and offline cache are not implemented. |
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
 | Homework (assign/submit/mark done) | **Not started** | `backend/homework/` is an empty package. |
@@ -122,10 +122,9 @@ a README-described feature.
   offline caching and an HTMX/arbitrary-date schedule UI remain unimplemented.
   Apply viewer authorization before shaping or caching results; never return
   teacher-wide raw event details to a student.
-- Workday/hour and duration enforcement plus database-backed mutation
-  serialization are implemented. Daily/consecutive limits and automatic
-  breaks remain pending; do not describe booking-policy enforcement as
-  complete until those limits are implemented and verified.
+- Workday/hour and duration enforcement, daily/consecutive limits, and
+  database-backed mutation serialization are implemented. Automatic breaks
+  remain pending; do not imply that lessons automatically create breaks.
 - Keep break-displacement confirmation and vacation display-only semantics
   stable. Confirmed break creation permanently deletes one-off lessons or
   cancels exact recurring occurrences; deleting a break does not restore them.

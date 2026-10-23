@@ -139,10 +139,10 @@ without owner approval and a backup.
 
 Backend outages show an unavailable/retry screen, never offline login or
 successful local signup. If a registration response is lost, the bot checks
-the backend session before resubmitting. Teacher workdays/hours and lesson
-duration defaults are enforced by the backend; daily/consecutive lesson limits
-are still pending. Notification delivery, automatic break creation, offline
-schedule cache, homework actions, account linking/transfers, and
+the backend session before resubmitting. Teacher workdays/hours, lesson
+duration defaults, and daily/consecutive lesson limits are enforced by the
+backend. Notification delivery, automatic break creation, offline schedule
+cache, homework actions, account linking/transfers, and
 post-onboarding settings UI remain unimplemented. Authenticated day/week
 schedule reads are available through the backend and Telegram bot as described
 below. Shared temporal conflict checks and vacation/break policies are
@@ -152,9 +152,12 @@ Verification: `uv run pytest -q tests` covers simulated Telegram updates with
 recorded Bot API calls, the real ASGI backend, and an isolated SQLite database,
 including password/scheduling smoke behavior. Real teacher signup, invitation
 student signup (including an hours-based reminder), and returning `/start`
-were also manually confirmed. Disposable SQLite/PostgreSQL migration checks
-and image/Compose configuration checks passed; a full Compose stack startup
-and separate-server HTTPS deployment have not been exercised.
+were also manually confirmed. PostgreSQL schedule-mutation tests run when
+`SCHEDULE_TEST_DATABASE_URL` points to a disposable PostgreSQL database; each
+test creates and removes its own temporary schema. Disposable
+SQLite/PostgreSQL migration checks and image/Compose configuration checks
+passed; a full Compose stack startup and separate-server HTTPS deployment have
+not been exercised.
 
 ### Running backend and bot
 
@@ -451,16 +454,17 @@ Lesson admission checks every occurrence against the teacher's configured
 local working days and hours, rejecting local-midnight crossings. Lesson
 creates may omit `end` to derive it from the configured duration; student
 bookings must use that duration, while teacher-authorized writes may choose
-another explicit duration. The checks use the recurrence timezone snapshot for
-new teacher-local series and the current teacher timezone for one-off and
-legacy UTC-step events. Schedule mutations acquire a persistent per-teacher
-database guard before validation and hold it through writes/displacement.
-Daily/consecutive lesson limits and automatic break creation remain pending.
+another explicit duration. Daily and consecutive limits count teacher-personal
+lessons and all assigned students, excluding canceled occurrences and the
+series being updated. The checks use the recurrence timezone snapshot for new
+teacher-local series and the current teacher timezone for one-off and legacy
+UTC-step events. Schedule mutations acquire a persistent per-teacher database
+guard before validation and hold it through writes/displacement; SQLite and
+PostgreSQL transaction behavior is covered by concurrent mutation tests.
 
-The implementation does **not** yet enforce daily/consecutive limits,
-automatic break creation, or free-slot selection.
+Automatic break creation and free-slot selection are not implemented.
 An arbitrary-date picker, an HTMX schedule UI, offline schedule caching, and
 notification delivery are also pending. Telegram week navigation is available
 for earlier and later Monday–Sunday weeks. Treat the remaining work as separate
-follow-on work; the booking contract is not complete until daily/consecutive
-limits are enforced.
+follow-on work; booking-policy enforcement does not automatically create
+between-lesson breaks.

@@ -9,10 +9,11 @@ from backend.auth.constants import Roles
 from backend.auth.models import TeacherProfile, User
 from backend.constants import EventType
 from backend.events.models import Event, RecurrentCancels
-from backend.events.schemas import RecurrentCancel
+from backend.events.schemas import EventUpdate, RecurrentCancel
 from backend.events.service import (
     create_event,
     create_recurrent_event,
+    update_event,
     update_recurrent_event,
 )
 from backend.events.validators import EventValidator, default_event_validator
@@ -225,6 +226,69 @@ async def test_daily_limit_counts_teacher_personal_and_student_lessons(
 
 
 @pytest.mark.asyncio
+async def test_daily_limit_excludes_breaks_and_vacations(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _teacher_with_student(
+        db_session, timezone="UTC", max_lessons_per_day=2
+    )
+    await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 9, tzinfo=UTC)
+    )
+    db_session.add_all(
+        [
+            Event(
+                teacher_id=teacher.id,
+                user_id=teacher.id,
+                event_type=EventType.BREAK.value,
+                start=datetime(2026, 10, 26, 10),
+                end=datetime(2026, 10, 26, 10, 30),
+            ),
+            Event(
+                teacher_id=teacher.id,
+                user_id=teacher.id,
+                event_type=EventType.VACATION.value,
+                start=datetime(2026, 10, 26, 11),
+                end=datetime(2026, 10, 26, 11, 30),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    candidate = await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 12, tzinfo=UTC)
+    )
+    assert candidate.start == datetime(2026, 10, 26, 12)
+
+
+@pytest.mark.asyncio
+async def test_one_off_update_excludes_the_event_being_replaced(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _teacher_with_student(
+        db_session, timezone="UTC", max_lessons_per_day=1
+    )
+    event = await _create_lesson(
+        db_session, teacher, student, datetime(2026, 10, 26, 9, tzinfo=UTC)
+    )
+
+    updated = await update_event(
+        db_session,
+        event,
+        EventUpdate(
+            start=datetime(2026, 10, 26, 10, tzinfo=UTC),
+            end=datetime(2026, 10, 26, 11, tzinfo=UTC),
+            user_id=student.id,
+        ),
+        EventValidator(expected_event_type=EventType.LESSON),
+        teacher_id=teacher.id,
+        actor_is_teacher=True,
+    )
+
+    assert updated.start == datetime(2026, 10, 26, 10)
+
+
+@pytest.mark.asyncio
 async def test_consecutive_limit_includes_exact_configured_gap(
     db_session: AsyncSession,
 ) -> None:
@@ -295,6 +359,28 @@ async def test_daily_limit_groups_by_teacher_local_date_near_utc_midnight(
     with pytest.raises(ValidationError, match="daily lesson limit of 1"):
         await _create_lesson(
             db_session, teacher, student, datetime(2026, 10, 27, 0, 30, tzinfo=UTC)
+        )
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_groups_by_teacher_local_date_across_dst_transition(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _teacher_with_student(
+        db_session,
+        timezone="America/New_York",
+        work_start=time(1),
+        work_end=time(5),
+        working_days=[7],
+        max_lessons_per_day=1,
+    )
+    await _create_lesson(
+        db_session, teacher, student, datetime(2026, 3, 8, 6, 30, tzinfo=UTC)
+    )
+
+    with pytest.raises(ValidationError, match="daily lesson limit of 1"):
+        await _create_lesson(
+            db_session, teacher, student, datetime(2026, 3, 8, 7, 30, tzinfo=UTC)
         )
 
 

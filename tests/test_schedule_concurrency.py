@@ -1,5 +1,7 @@
 import asyncio
+import os
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import datetime
 
 import pytest
@@ -31,7 +33,7 @@ from backend.events.service import (
     update_recurrent_event,
 )
 from backend.events.validators import EventValidator
-from backend.exceptions import Conflict
+from backend.exceptions import Conflict, ValidationError
 from backend.models import Base
 
 
@@ -46,6 +48,44 @@ async def _create_shared_memory_database() -> tuple[
     keeper = await engine.connect()
     await keeper.run_sync(Base.metadata.create_all)
     return engine, keeper, async_sessionmaker(engine, expire_on_commit=False)
+
+
+@pytest.fixture(params=("sqlite", "postgresql"))
+async def mutation_session_factory(
+    request: pytest.FixtureRequest,
+) -> AsyncGenerator[async_sessionmaker[AsyncSession]]:
+    if request.param == "sqlite":
+        engine, keeper, session_factory = await _create_shared_memory_database()
+        try:
+            yield session_factory
+        finally:
+            await keeper.close()
+            await engine.dispose()
+        return
+
+    database_url = os.environ.get("SCHEDULE_TEST_DATABASE_URL")
+    if database_url is None:
+        pytest.skip("SCHEDULE_TEST_DATABASE_URL is not configured")
+    if not database_url.startswith("postgresql+psycopg://"):
+        pytest.fail("SCHEDULE_TEST_DATABASE_URL must use postgresql+psycopg")
+
+    schema = f"schedule_test_{uuid.uuid4().hex}"
+    engine = create_async_engine(
+        database_url,
+        connect_args={"options": f"-csearch_path={schema}"},
+        poolclass=NullPool,
+    )
+    try:
+        async with engine.begin() as connection:
+            await connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+            await connection.run_sync(Base.metadata.create_all)
+        yield async_sessionmaker(engine, expire_on_commit=False)
+    finally:
+        async with engine.begin() as connection:
+            await connection.exec_driver_sql(
+                f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'
+            )
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -243,3 +283,64 @@ async def test_all_event_mutation_entrypoints_acquire_the_guard(
     await assert_guard_was_acquired_and_clear_it()
     await delete_event(db_session, recurrent_event)
     await assert_guard_was_acquired_and_clear_it()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "event_type", [EventType.LESSON, EventType.BREAK, EventType.VACATION]
+)
+async def test_concurrent_conflicting_event_mutations_are_serialized(
+    mutation_session_factory: async_sessionmaker[AsyncSession],
+    event_type: EventType,
+) -> None:
+    async with mutation_session_factory() as seed_session:
+        teacher = User(role="TEACHER", timezone="UTC")
+        seed_session.add(teacher)
+        await seed_session.flush()
+        student = User(role="STUDENT", timezone="UTC", teacher_id=teacher.id)
+        seed_session.add(student)
+        await seed_session.commit()
+
+    event_data = EventCreate(
+        start=datetime(2026, 10, 26, 9),
+        end=datetime(2026, 10, 26, 10),
+        user_id=student.id if event_type == EventType.LESSON else teacher.id,
+        event_type=event_type,
+    )
+    validator = EventValidator(expected_event_type=event_type)
+    start_together = asyncio.Barrier(2)
+
+    async def attempt_mutation() -> Event | Conflict | ValidationError:
+        await start_together.wait()
+        async with mutation_session_factory() as session:
+            try:
+                return await create_event(
+                    session,
+                    event_data.model_copy(),
+                    validator,
+                    teacher_id=teacher.id,
+                    actor_is_teacher=True,
+                )
+            except (Conflict, ValidationError) as exc:
+                return exc
+
+    outcomes = await asyncio.gather(attempt_mutation(), attempt_mutation())
+    created = [outcome for outcome in outcomes if isinstance(outcome, Event)]
+    rejected = [
+        outcome
+        for outcome in outcomes
+        if isinstance(outcome, (Conflict, ValidationError))
+    ]
+    assert len(created) == 1
+    assert len(rejected) == 1
+
+    async with mutation_session_factory() as verification_session:
+        events = (
+            await verification_session.scalars(
+                select(Event).where(Event.teacher_id == teacher.id)
+            )
+        ).all()
+        guard = await verification_session.get(TeacherScheduleGuard, teacher.id)
+    assert len(events) == 1
+    assert events[0].event_type == event_type.value
+    assert guard is not None
