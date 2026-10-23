@@ -158,6 +158,8 @@ async def _candidate_occurrences(
         event_type=event_type,
     )
     start = normalize_utc(data.start)
+    if data.end is None:
+        raise ValidationError("Event end time is required")
     end = normalize_utc(data.end)
     duration = end - start
     if duration <= timedelta(0):

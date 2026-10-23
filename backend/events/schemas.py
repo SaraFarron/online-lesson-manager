@@ -47,13 +47,14 @@ class EventCreate(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
     start: UtcTimestamp
-    end: UtcTimestamp
+    end: UtcTimestamp | None = None
     user_id: uuid.UUID
     event_type: EventType
 
     @model_validator(mode="after")
     def validate_time_range(self) -> Self:
-        _validate_time_range(self.start, self.end)
+        if self.end is not None:
+            _validate_time_range(self.start, self.end)
         return self
 
 
@@ -91,7 +92,7 @@ class RecurrentEventCreate(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
     start: UtcTimestamp
-    end: UtcTimestamp
+    end: UtcTimestamp | None = None
     user_id: uuid.UUID
     event_type: EventType
     interval: PositiveInterval
@@ -99,7 +100,12 @@ class RecurrentEventCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_time_range(self) -> Self:
-        _validate_time_range(self.start, self.end, self.interval_end)
+        if self.end is not None:
+            _validate_time_range(self.start, self.end, self.interval_end)
+        elif self.interval_end <= self.start:
+            raise ValueError(
+                "Recurrence cutoff must be after the first occurrence start"
+            )
         return self
 
 

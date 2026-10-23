@@ -3,6 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, status
 
+from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.events import service
 from backend.events.utils import (
@@ -37,7 +38,13 @@ async def create_lesson(
 ) -> Any:
     teacher_id = resolve_teacher_id(user)
     await assert_can_assign_user(session, user, data.user_id)
-    lesson = await service.create_event(session, data, validator, teacher_id=teacher_id)
+    lesson = await service.create_event(
+        session,
+        data,
+        validator,
+        teacher_id=teacher_id,
+        actor_is_teacher=user.role == Roles.TEACHER,
+    )
     return LessonPublic.model_validate(lesson)
 
 
@@ -60,7 +67,12 @@ async def update_lesson(
     assert_owns_event(user, lesson)
     await assert_can_assign_user(session, user, data.user_id)
     updated_lesson = await service.update_event(
-        session, lesson, data, create_validator, teacher_id=teacher_id
+        session,
+        lesson,
+        data,
+        create_validator,
+        teacher_id=teacher_id,
+        actor_is_teacher=user.role == Roles.TEACHER,
     )
     return LessonPublic.model_validate(updated_lesson)
 
@@ -99,7 +111,11 @@ async def create_recurrent_lesson(
     teacher_id = resolve_teacher_id(user)
     await assert_can_assign_user(session, user, data.user_id)
     lesson = await service.create_recurrent_event(
-        session, data, validator, teacher_id=teacher_id
+        session,
+        data,
+        validator,
+        teacher_id=teacher_id,
+        actor_is_teacher=user.role == Roles.TEACHER,
     )
     return RecurrentLessonPublic.model_validate(lesson)
 
@@ -123,7 +139,12 @@ async def update_recurrent_lesson(
     assert_owns_event(user, lesson)
     await assert_can_assign_user(session, user, data.user_id)
     updated_lesson = await service.update_recurrent_event(
-        session, lesson, data, create_validator, teacher_id=teacher_id
+        session,
+        lesson,
+        data,
+        create_validator,
+        teacher_id=teacher_id,
+        actor_is_teacher=user.role == Roles.TEACHER,
     )
     return RecurrentLessonPublic.model_validate(updated_lesson)
 

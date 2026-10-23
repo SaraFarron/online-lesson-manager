@@ -43,14 +43,21 @@ def _headers(token: str) -> dict[str, str]:
 
 
 async def _teacher_and_students(
-    client: AsyncClient, suffix: str, timezone: str = "UTC"
+    client: AsyncClient,
+    suffix: str,
+    timezone: str = "UTC",
+    work_start: str = "09:00",
 ) -> tuple[str, str, list[tuple[str, str]]]:
     teacher_id, teacher_token = await _register_and_login(
         client, f"{suffix}-teacher@test.com", "TEACHER", timezone
     )
     profile = await client.post(
         f"/api/v1/auth/users/{teacher_id}/teacher-profile",
-        json={"code": f"join-{suffix}"},
+        json={
+            "code": f"join-{suffix}",
+            "work_start": work_start,
+            "working_days": [1, 2, 3, 4, 5, 6, 7],
+        },
         headers=_headers(teacher_token),
     )
     assert profile.status_code == 201, profile.text
@@ -242,7 +249,7 @@ async def test_full_horizon_validation_fails_explicitly_over_occurrence_budget(
         )
 
 
-async def test_recurring_conflicts_handle_midnight_and_different_intervals(
+async def test_recurring_conflicts_reject_midnight_and_handle_different_intervals(
     client: AsyncClient,
     db_session: AsyncSession,  # noqa: ARG001
 ) -> None:
@@ -260,20 +267,33 @@ async def test_recurring_conflicts_handle_midnight_and_different_intervals(
             "user_id": student_id,
         },
     )
-    assert overnight.status_code == 201, overnight.text
+    assert overnight.status_code == 422, overnight.text
+
+    first_interval = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T10:00:00Z",
+            "end": "2026-12-01T10:30:00Z",
+            "interval": 2,
+            "interval_end": "2026-12-09T10:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert first_interval.status_code == 201, first_interval.text
 
     different_interval = await client.post(
         "/api/v1/recurrent-lessons/",
         headers=headers,
         json={
-            "start": "2026-12-02T00:15:00Z",
-            "end": "2026-12-02T00:45:00Z",
+            "start": "2026-12-02T10:15:00Z",
+            "end": "2026-12-02T10:45:00Z",
             "interval": 3,
-            "interval_end": "2026-12-11T00:15:00Z",
+            "interval_end": "2026-12-11T10:15:00Z",
             "user_id": student_id,
         },
     )
-    assert different_interval.status_code == 422
+    assert different_interval.status_code == 422, different_interval.text
 
 
 async def test_dst_shifted_occurrence_participates_in_conflict_check(
@@ -281,7 +301,7 @@ async def test_dst_shifted_occurrence_participates_in_conflict_check(
     db_session: AsyncSession,  # noqa: ARG001
 ) -> None:
     _, teacher_token, students = await _teacher_and_students(
-        client, "dst-conflict", "Europe/Berlin"
+        client, "dst-conflict", "Europe/Berlin", "02:00"
     )
     student_id = students[0][0]
     headers = _headers(teacher_token)

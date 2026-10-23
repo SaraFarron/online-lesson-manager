@@ -7,10 +7,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.service import get_user_by_id
 from backend.constants import EventType
+from backend.events.booking_policy import (
+    TeacherBookingPreferences,
+    get_teacher_preferences,
+    validate_lesson_work_window,
+)
 from backend.events.conflicts import validate_schedule_change
 from backend.events.models import Event, RecurrentEvent
 from backend.events.occurrences import Occurrence
-from backend.events.schemas import EventWrite, RecurrentEventWrite
+from backend.events.schemas import (
+    EventCreate,
+    EventWrite,
+    RecurrentEventCreate,
+    RecurrentEventWrite,
+)
 from backend.exceptions import ValidationError
 
 
@@ -37,6 +47,8 @@ class TimeValidation(EventSubValidator):
         teacher_id: UUID,
         user_id: UUID | None = None,
     ) -> None:
+        if data.end is None:
+            raise ValidationError(f"{self.EVENT_TYPE} end time is required")
         if data.start >= data.end:
             raise ValidationError(
                 f"{self.EVENT_TYPE} start time must be before end time"
@@ -119,12 +131,14 @@ class EventValidator:
         recurrence_mode: str | None = None,
         canceled_starts: Sequence[datetime] = (),
         confirm_displacement: bool = False,
+        teacher_profile: TeacherBookingPreferences | None = None,
+        teacher_timezone: str | None = None,
     ) -> list[Occurrence]:
         for validator in self.validators:
             await validator.validate(
                 session, data, teacher_id=teacher_id, user_id=user_id
             )
-        return await self.conflict_validator.validate(
+        displaced = await self.conflict_validator.validate(
             session,
             data,
             teacher_id,
@@ -135,6 +149,26 @@ class EventValidator:
             canceled_starts=canceled_starts,
             confirm_displacement=confirm_displacement,
         )
+        event_type = (
+            data.event_type
+            if isinstance(data, (EventCreate, RecurrentEventCreate))
+            else self.expected_event_type
+        )
+        if event_type == EventType.LESSON:
+            if teacher_profile is None or teacher_timezone is None:
+                teacher_profile, teacher_timezone = await get_teacher_preferences(
+                    session, teacher_id
+                )
+            validate_lesson_work_window(
+                data,
+                teacher_id,
+                teacher_profile,
+                teacher_timezone,
+                recurrence_timezone=recurrence_timezone,
+                recurrence_mode=recurrence_mode,
+                canceled_starts=canceled_starts,
+            )
+        return displaced
 
 
 class EventExistsValidator:

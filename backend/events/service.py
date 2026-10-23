@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth.service import get_user_by_id
 from backend.breaks.schemas import RecurrentBreakCreate
 from backend.constants import EventType
+from backend.events.booking_policy import prepare_lesson_write
 from backend.events.constants import RecurrenceMode
 from backend.events.models import (
     Event,
@@ -112,6 +113,7 @@ async def create_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    actor_is_teacher: bool = False,
 ) -> Event:
     return await _run_serialized_schedule_mutation(
         session,
@@ -122,6 +124,7 @@ async def create_event(
             validator,
             teacher_id,
             confirm_displacement=confirm_displacement,
+            actor_is_teacher=actor_is_teacher,
         ),
     )
 
@@ -133,13 +136,28 @@ async def _create_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    actor_is_teacher: bool = False,
 ) -> Event:
+    teacher_profile = None
+    teacher_timezone = None
+    if event_data.event_type == EventType.LESSON:
+        event_data, teacher_profile, teacher_timezone = await prepare_lesson_write(
+            session,
+            event_data,
+            teacher_id,
+            actor_is_teacher=actor_is_teacher,
+        )
+    if event_data.end is None:
+        raise ValidationError("Event end time is required")
+
     displaced = await validator.validate_all(
         session,
         event_data,
         teacher_id=teacher_id,
         user_id=event_data.user_id,
         confirm_displacement=confirm_displacement,
+        teacher_profile=teacher_profile,
+        teacher_timezone=teacher_timezone,
     )
     await _apply_displacements(session, displaced, teacher_id)
 
@@ -164,6 +182,7 @@ async def update_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    actor_is_teacher: bool = False,
 ) -> Event:
     return await _run_serialized_schedule_mutation(
         session,
@@ -175,6 +194,7 @@ async def update_event(
             validator,
             teacher_id,
             confirm_displacement=confirm_displacement,
+            actor_is_teacher=actor_is_teacher,
         ),
     )
 
@@ -187,7 +207,20 @@ async def _update_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    actor_is_teacher: bool = False,
 ) -> Event:
+    teacher_profile = None
+    teacher_timezone = None
+    if validator.expected_event_type == EventType.LESSON:
+        event_data, teacher_profile, teacher_timezone = await prepare_lesson_write(
+            session,
+            event_data,
+            teacher_id,
+            actor_is_teacher=actor_is_teacher,
+        )
+    if event_data.end is None:
+        raise ValidationError("Event end time is required")
+
     displaced = await validator.validate_all(
         session,
         event_data,
@@ -195,6 +228,8 @@ async def _update_event(
         user_id=event_data.user_id,
         exclude_event_id=event.id,
         confirm_displacement=confirm_displacement,
+        teacher_profile=teacher_profile,
+        teacher_timezone=teacher_timezone,
     )
     await _apply_displacements(session, displaced, teacher_id)
 
@@ -232,6 +267,7 @@ async def create_recurrent_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
     return await _run_serialized_schedule_mutation(
         session,
@@ -242,6 +278,7 @@ async def create_recurrent_event(
             validator,
             teacher_id,
             confirm_displacement=confirm_displacement,
+            actor_is_teacher=actor_is_teacher,
         ),
     )
 
@@ -253,10 +290,23 @@ async def _create_recurrent_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
     teacher = await get_user_by_id(session, teacher_id)
     if teacher is None:
         raise ValidationError(f"Teacher with ID {teacher_id} does not exist")
+
+    teacher_profile = None
+    teacher_timezone = None
+    if event_data.event_type == EventType.LESSON:
+        event_data, teacher_profile, teacher_timezone = await prepare_lesson_write(
+            session,
+            event_data,
+            teacher_id,
+            actor_is_teacher=actor_is_teacher,
+        )
+    if event_data.end is None:
+        raise ValidationError("Event end time is required")
 
     displaced = await validator.validate_all(
         session,
@@ -264,6 +314,8 @@ async def _create_recurrent_event(
         teacher_id=teacher_id,
         user_id=event_data.user_id,
         confirm_displacement=confirm_displacement,
+        teacher_profile=teacher_profile,
+        teacher_timezone=teacher_timezone,
     )
     await _apply_displacements(session, displaced, teacher_id)
 
@@ -292,6 +344,7 @@ async def update_recurrent_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
     return await _run_serialized_schedule_mutation(
         session,
@@ -303,6 +356,7 @@ async def update_recurrent_event(
             validator,
             teacher_id,
             confirm_displacement=confirm_displacement,
+            actor_is_teacher=actor_is_teacher,
         ),
     )
 
@@ -315,7 +369,20 @@ async def _update_recurrent_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
+    teacher_profile = None
+    teacher_timezone = None
+    if validator.expected_event_type == EventType.LESSON:
+        event_data, teacher_profile, teacher_timezone = await prepare_lesson_write(
+            session,
+            event_data,
+            teacher_id,
+            actor_is_teacher=actor_is_teacher,
+        )
+    if event_data.end is None:
+        raise ValidationError("Event end time is required")
+
     recurrence_changed = (
         recurrent_event.start != to_storage_utc(event_data.start)
         or recurrent_event.end != to_storage_utc(event_data.end)
@@ -354,6 +421,8 @@ async def _update_recurrent_event(
         recurrence_mode=recurrent_event.recurrence_mode,
         canceled_starts=candidate_cancellations,
         confirm_displacement=confirm_displacement,
+        teacher_profile=teacher_profile,
+        teacher_timezone=teacher_timezone,
     )
     await _apply_displacements(session, displaced, teacher_id)
 

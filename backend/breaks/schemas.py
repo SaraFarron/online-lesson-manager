@@ -8,10 +8,12 @@ from backend.events.schemas import (
     RecurrentEventCreate,
     RecurrentEventPublic,
     RecurrentEventUpdate,
+    UtcTimestamp,
 )
 
 
 class BreakCreate(EventCreate):
+    end: UtcTimestamp
     event_type: Literal[EventType.BREAK] = EventType.BREAK
 
 
@@ -24,6 +26,7 @@ class BreakUpdate(EventUpdate):
 
 
 class RecurrentBreakCreate(RecurrentEventCreate):
+    end: UtcTimestamp
     event_type: Literal[EventType.BREAK] = EventType.BREAK
 
 

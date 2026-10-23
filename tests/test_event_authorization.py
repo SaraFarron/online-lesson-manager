@@ -202,7 +202,7 @@ async def test_student_can_manage_own_lesson_and_vacation_but_not_breaks(
         headers=headers,
         json={
             "start": "2026-12-10T09:00:00Z",
-            "end": "2026-12-10T09:30:00Z",
+            "end": "2026-12-10T10:00:00Z",
             "user_id": student_id,
         },
     )
@@ -214,7 +214,7 @@ async def test_student_can_manage_own_lesson_and_vacation_but_not_breaks(
         headers=headers,
         json={
             "start": "2026-12-10T09:05:00Z",
-            "end": "2026-12-10T09:35:00Z",
+            "end": "2026-12-10T10:05:00Z",
             "user_id": student_id,
             "event_type": "LESSON",
         },
@@ -226,7 +226,7 @@ async def test_student_can_manage_own_lesson_and_vacation_but_not_breaks(
         headers=headers,
         json={
             "start": "2026-12-10T09:05:00Z",
-            "end": "2026-12-10T09:35:00Z",
+            "end": "2026-12-10T10:05:00Z",
             "user_id": other_student_id,
         },
     )
@@ -249,7 +249,7 @@ async def test_student_can_manage_own_lesson_and_vacation_but_not_breaks(
         headers=headers,
         json={
             "start": "2027-01-07T09:00:00Z",
-            "end": "2027-01-07T09:30:00Z",
+            "end": "2027-01-07T10:00:00Z",
             "interval": 7,
             "interval_end": "2027-01-21T09:00:00Z",
             "user_id": student_id,
@@ -262,7 +262,7 @@ async def test_student_can_manage_own_lesson_and_vacation_but_not_breaks(
         headers=headers,
         json={
             "start": "2027-01-07T09:00:00Z",
-            "end": "2027-01-07T09:30:00Z",
+            "end": "2027-01-07T10:00:00Z",
             "interval": 7,
             "interval_end": "2027-01-21T09:00:00Z",
             "user_id": student_id,

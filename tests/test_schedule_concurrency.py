@@ -215,10 +215,10 @@ async def test_all_event_mutation_entrypoints_acquire_the_guard(
     recurrent_event = await create_recurrent_event(
         db_session,
         RecurrentEventCreate(
-            start=datetime(2026, 10, 25, 9),
-            end=datetime(2026, 10, 25, 10),
+            start=datetime(2026, 10, 26, 9),
+            end=datetime(2026, 10, 26, 10),
             interval=7,
-            interval_end=datetime(2026, 10, 26, 9),
+            interval_end=datetime(2026, 10, 27, 9),
             user_id=student.id,
             event_type=EventType.LESSON,
         ),
@@ -231,10 +231,10 @@ async def test_all_event_mutation_entrypoints_acquire_the_guard(
         db_session,
         recurrent_event,
         RecurrentEventUpdate(
-            start=datetime(2026, 10, 25, 9),
-            end=datetime(2026, 10, 25, 10),
+            start=datetime(2026, 10, 26, 9),
+            end=datetime(2026, 10, 26, 10),
             interval=7,
-            interval_end=datetime(2026, 10, 26, 9),
+            interval_end=datetime(2026, 10, 27, 9),
             user_id=student.id,
         ),
         validator,
