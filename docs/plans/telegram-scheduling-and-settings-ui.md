@@ -208,7 +208,9 @@ For an omitted-year February 29 that cannot be represented in the next calendar 
 
 **Reuse:** Vacation CRUD, management reads, existing visibility contract, date input.
 
-**Acceptance:** [ ] Teacher/student vacations hide the correct scope and deleting restores display without restoring break-displaced lessons. [ ] Range boundaries, authorization and edit-in-place flow tests pass.
+**Acceptance:** [x] Teacher/student vacations hide the correct scope and deleting restores display without restoring break-displaced lessons. [x] Inclusive end-date boundaries, authorization, independent management listing, edit-in-place, and ambiguous-write recovery pass real-dispatcher/backend tests. `uv run pytest -q tests` passes (259 passed, 4 skipped); Ruff check/format and `mypy telegram` pass.
+
+**Execution:** Added teacher and student vacation management in Telegram, including role-scoped subject selection, bounded lists, local date/time entry, deletion confirmation, revision-aware updates, and no-replay recovery for ambiguous writes.
 
 **Out of scope:** A recurring-vacation API or new destructive vacation semantics. **Suitable for:** AI agent.
 
