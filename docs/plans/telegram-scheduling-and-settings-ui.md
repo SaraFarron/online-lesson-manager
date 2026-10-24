@@ -4,7 +4,7 @@
 
 Teachers and students can manage their authorized lessons and vacations, teachers can manage manual breaks, and both roles can edit saved preferences from Telegram without using Swagger.
 
-**Status:** Planned; no implementation or verification is claimed.
+**Status:** Contract approved; implementation and verification are pending.
 
 ## Scope (README.md sections covered)
 
@@ -59,13 +59,26 @@ Apply these in addition to each task's checks:
 
 **Context:** The README specifies capabilities, but not the exact bot screens, date grammar, or single-occurrence move contract.
 
-**What to do:** Obtain approval for role-home entries (Schedule, Add lesson, Manage events, Settings; teacher-only Breaks; Vacations for both). Recommend weekly recurrence (`interval=7`) with explicit end date while preserving other existing API intervals in edits. Distinguish "this occurrence" cancellation/move from whole-series edit/delete; recommend atomic cancel-original-and-create-one-off for a single move. Confirm whether one-off lesson creation should be exposed alongside existing weekly booking. Agree an explicit date grammar matching the README examples, local-year rollover warning/confirmation, inclusive user-facing recurrence/vacation end dates mapped to exclusive backend cutoffs, and DST gap/fold input UX. Recommend backend-assisted local-time resolution using existing temporal helpers, avoiding a second recurrence engine in the client.
+**What to do:** Approve and record the role-home, recurrence, occurrence-move, date/time, timezone, conflict-feedback, stale-write, and ambiguous-write contracts before implementation.
 
-Decide whether manual date/time entry plus explicit conflict feedback is sufficient initially, or whether a free-slot picker is required. If required, specify a bounded privacy-safe availability read with no other students' details; add a separate implementation task before Task 06 rather than guessing a slot grid. Approve optimistic stale-edit protection and timeout recovery: no blind replay of unknown-outcome POSTs; use an approved operation key/reconciliation contract if exact write recovery is required.
+**Approved contract:** The product owner approved these recommendations on 2026-10-24:
+
+- Role homes expose Schedule, Add lesson, Manage events, and Settings; teachers also get Breaks, and both roles get Vacations.
+- Lesson creation supports one-off and weekly events. New weekly series use `interval=7` and an explicit end date; edits preserve the existing interval.
+- Occurrence cancellation/move is distinct from whole-series edit/delete. A move atomically cancels the original occurrence and creates a one-off replacement.
+- Date and time use separate, bounded prompts: dates accept `MM DD`, `MM:DD`, or `MM/DD`, with an optional year; times accept `HH MM` or `HH:MM`. If an omitted year would make the date past, infer the next year and require confirmation. Displayed recurrence/vacation end dates are inclusive and map to exclusive backend cutoffs.
+- Resolve local times through the backend temporal helpers. A DST gap shifts forward by the gap; an ambiguous time chooses the earlier instant. Show the timezone and resolved UTC offset in the review.
+- Initial booking uses manual date/time entry and explicit conflict feedback; a free-slot picker is not required.
+- Edits use optimistic stale-write protection. Never blindly replay a write with an unknown outcome; show an unknown-outcome state with a safe reload/reconciliation path. No operation-key or idempotency schema change is required.
+- API design uses a bounded `skip`/`limit` teacher-student picker returning `{items, total}` with only ID/display label; the bot represents a personal lesson using the authenticated teacher identity.
+- Event management uses domain-scoped, JWT-authenticated list/detail reads with bounded filters and pagination. Detail results include the authoritative subject, recurrence data and cancellations, hidden/canceled status, and a revision precondition. Authorization is applied before shaping results.
+- Occurrence actions identify the source and exact UTC start/end. A move submits the replacement interval and atomically cancels the selected occurrence while creating a one-off replacement. Edits submit the revision precondition; stale writes make no changes.
+- Break displacement confirmation is bound to the submitted event request and exact affected-occurrence preview. Confirmation revalidates both; a changed affected set returns a new preview without applying the write.
+- User-entered local datetimes are resolved by the backend temporal helper using the explicit IANA timezone; the response/review includes the UTC instant and resolved offset. Exact route paths follow the existing domain routers.
 
 **Reuse:** Existing schedule/week UI, UTC/recurrence contract, current role permissions.
 
-**Acceptance:** [ ] Screen map, backend request shapes, parser examples, DST/cutoff semantics, stale-edit and ambiguous-write behavior are recorded as approved. [ ] Required availability/idempotency schema additions have explicit tasks/migration decisions before work starts.
+**Acceptance:** [x] Screen map, backend request shapes, parser examples, DST/cutoff semantics, stale-edit and ambiguous-write behavior are recorded as approved. [x] Required availability/idempotency schema additions have explicit tasks/migration decisions before work starts; none were approved.
 
 **Out of scope:** Implementing unresolved choices. **Suitable for:** Human/product owner with agent preparation.
 
