@@ -231,6 +231,12 @@ intermediate mismatch returns authentication errors, not offline success.
 актуальный статус из [AGENTS.md](./AGENTS.md) и требования этого README.
 Существующие планы сверены, перенесены в `docs/plans/`, а ссылки обновлены.
 
+Следующие этапы (планы, не реализованные возможности), в рекомендуемом порядке:
+
+1. [Telegram: управление расписанием и настройками](./docs/plans/telegram-scheduling-and-settings-ui.md).
+2. [Автоматические перерывы после уроков, включая Telegram UI](./docs/plans/automatic-between-lesson-breaks.md).
+3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md).
+
 ## Фронтенд
 В случае если до фронтенда дойдет, первые версии нужно делать без использования каких то больших фреймворков типо react. Из шаблона проектов есть начальные файлы в templates - используется htmx. Этого должно быть достаточно на первое время.
 
