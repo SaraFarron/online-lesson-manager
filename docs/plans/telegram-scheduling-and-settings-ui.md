@@ -4,7 +4,7 @@
 
 Teachers and students can manage their authorized lessons and vacations, teachers can manage manual breaks, and both roles can edit saved preferences from Telegram without using Swagger.
 
-**Status:** Tasks 00–06 approved/verified; Tasks 07–11 are pending.
+**Status:** Tasks 00–07 approved/verified; Tasks 08–11 are pending.
 
 ## Scope (README.md sections covered)
 
@@ -178,7 +178,7 @@ For an omitted-year February 29 that cannot be represented in the next calendar 
 
 **Reuse:** Management details, occurrence API, client errors, existing pagination and edit modes.
 
-**Acceptance:** [ ] Both roles manage only authorized lessons; hidden/canceled items remain discoverable. [ ] Whole-series versus one-occurrence choices produce exact persisted results. [ ] Stale callbacks, lost responses and failed moves preserve data; common checks pass.
+**Acceptance:** [x] Both roles manage only authorized lessons; hidden lessons remain manageable and cancelled occurrences are discoverable through paginated selectors. [x] Whole-series versus one-occurrence choices produce the expected persisted results. [x] Stale callbacks, lost responses and failed moves preserve data; the full suite passes (245 passed, 4 skipped), Ruff/format checks and `mypy telegram` pass. `mypy backend` retains three unrelated baseline errors in `backend/auth/config.py`, `backend/database.py`, and `backend/events/dependencies.py`.
 
 **Out of scope:** Future-only series splitting. **Suitable for:** AI agent.
 

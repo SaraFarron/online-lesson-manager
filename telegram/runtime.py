@@ -10,6 +10,7 @@ from aiogram_dialog.api.exceptions import OutdatedIntent, UnknownIntent
 
 from telegram.api import BackendClient, BackendError, BackendUnavailable
 from telegram.dialogs import Screens, build_dialog
+from telegram.event_management_dialogs import build_event_management_dialog
 from telegram.invitations import create_teacher_invitation, parse_teacher_start_payload
 from telegram.lesson_dialogs import build_lesson_dialog
 from telegram.onboarding import Wizard, build_wizard
@@ -92,6 +93,7 @@ def build_dispatcher(client: BackendClient | None = None) -> Dispatcher:
     dispatcher.include_router(build_dialog())
     dispatcher.include_router(build_schedule_dialog())
     dispatcher.include_router(build_lesson_dialog())
+    dispatcher.include_router(build_event_management_dialog())
     dispatcher.include_router(build_wizard())
     fallback = Router(name="stale-callbacks")
     fallback.callback_query.register(orphan_callback)

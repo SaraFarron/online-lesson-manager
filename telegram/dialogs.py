@@ -9,6 +9,7 @@ from aiogram_dialog.widgets.kbd import Button, Row, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import SessionView
+from telegram.event_management_dialogs import open_event_management
 from telegram.inputs import digest_clock, parse_timezone
 from telegram.lesson_dialogs import open_lesson_creation
 from telegram.onboarding import begin_student, begin_teacher
@@ -60,6 +61,7 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         if account.role in {"TEACHER", "STUDENT"}:
             home += (
                 "Preferences saved. Lesson booking and schedule viewing are available. "
+                "Existing events can be managed. "
                 "Notifications are not active yet."
             )
         else:
@@ -77,6 +79,8 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "can_view_schedule": view is not None
         and view.account.role in {"TEACHER", "STUDENT"},
         "can_book_lessons": view is not None
+        and view.account.role in {"TEACHER", "STUDENT"},
+        "can_manage_events": view is not None
         and view.account.role in {"TEACHER", "STUDENT"},
     }
 
@@ -152,6 +156,12 @@ def build_dialog() -> Dialog:
                 id="add_lesson",
                 on_click=open_lesson_creation,
                 when="can_book_lessons",
+            ),
+            Button(
+                Const("Manage events"),
+                id="manage_events",
+                on_click=open_event_management,
+                when="can_manage_events",
             ),
             Row(
                 Button(
