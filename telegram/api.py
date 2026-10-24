@@ -138,6 +138,26 @@ class StudentPickerPage(BaseModel):
     total: int = Field(ge=0)
 
 
+class TeacherBookingContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    teacher_id: uuid.UUID
+    timezone: str
+    work_start: str | None
+    work_end: str | None
+    working_days: list[int]
+    lesson_length: int = Field(gt=0)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError("Invalid teacher timezone") from exc
+        return value
+
+
 ManagementResource = Literal[
     "lessons", "recurrent-lessons", "breaks", "recurrent-breaks", "vacations"
 ]
@@ -949,6 +969,17 @@ class BackendClient:
             sender_id,
             chat_id,
             params={"skip": str(skip), "limit": str(limit)},
+            error_context="scheduling",
+        )
+
+    async def read_teacher_booking_context(
+        self, sender_id: int, chat_id: int
+    ) -> TeacherBookingContext:
+        return await self.read(
+            "/api/v1/auth/me/teacher-context",
+            TeacherBookingContext,
+            sender_id,
+            chat_id,
             error_context="scheduling",
         )
 

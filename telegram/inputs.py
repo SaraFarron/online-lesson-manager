@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from telegram.api import LocalIntervalResolution
@@ -84,9 +84,31 @@ def combine_schedule_date_time(day: date, clock: str) -> datetime:
     return datetime.combine(day, time(hour, minute))
 
 
-def format_local_interval_review(resolution: LocalIntervalResolution) -> str:
+def format_local_interval_review(
+    resolution: LocalIntervalResolution, *, duration_minutes: int | None = None
+) -> str:
     start = resolution.start
     end = resolution.end
+    if duration_minutes is not None:
+        try:
+            end_utc = start.utc + timedelta(minutes=duration_minutes)
+        except OverflowError as exc:
+            raise ValueError("Lesson duration is outside the supported range.") from exc
+        if end_utc <= start.utc:
+            raise ValueError("Lesson duration must be positive.")
+        zone = ZoneInfo(resolution.timezone)
+        start_local = start.utc.astimezone(zone)
+        end_local = end_utc.astimezone(zone)
+        start_offset = start_local.strftime("%z")
+        end_offset = end_local.strftime("%z")
+        return (
+            f"Timezone: {resolution.timezone}\n"
+            f"Start: {start_local:%Y-%m-%d %H:%M} "
+            f"(UTC{start_offset[:3]}:{start_offset[3:]})\n"
+            f"End: {end_local:%Y-%m-%d %H:%M} "
+            f"(UTC{end_offset[:3]}:{end_offset[3:]})\n"
+            f"UTC interval: {start.utc.isoformat()} - {end_utc.isoformat()}"
+        )
     return (
         f"Timezone: {resolution.timezone}\n"
         f"Start: {start.local:%Y-%m-%d %H:%M} (UTC{start.utc_offset})\n"

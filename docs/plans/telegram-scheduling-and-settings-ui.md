@@ -4,7 +4,7 @@
 
 Teachers and students can manage their authorized lessons and vacations, teachers can manage manual breaks, and both roles can edit saved preferences from Telegram without using Swagger.
 
-**Status:** Tasks 00–05 approved/verified; Tasks 06–11 are pending.
+**Status:** Tasks 00–06 approved/verified; Tasks 07–11 are pending.
 
 ## Scope (README.md sections covered)
 
@@ -164,7 +164,7 @@ For an omitted-year February 29 that cannot be represented in the next calendar 
 
 **Reuse:** Picker/client/input tasks, `ShowMode.EDIT`, existing schedule navigation and draft patterns.
 
-**Acceptance:** [ ] Teacher/student/personal creations persist and appear in live schedule. [ ] Students cannot forge duration/subject; concurrent slot loss yields a useful error, not a successful screen. [ ] Callbacks/double submits cannot create duplicate writes; common checks pass.
+**Acceptance:** [x] Teacher/student/personal creations persist and appear in the live schedule. [x] Students cannot forge duration/subject; concurrent slot loss requires a schedule reload and cannot be mistaken for success. [x] Duplicate submits and unknown write outcomes cannot replay creation. Focused tests passed in three consecutive runs (42 each); Ruff check, Telegram/test formatting, and `mypy telegram` pass.
 
 **Out of scope:** Auto breaks (next plan). **Suitable for:** AI agent.
 

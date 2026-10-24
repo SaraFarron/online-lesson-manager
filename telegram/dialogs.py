@@ -10,6 +10,7 @@ from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import SessionView
 from telegram.inputs import digest_clock, parse_timezone
+from telegram.lesson_dialogs import open_lesson_creation
 from telegram.onboarding import begin_student, begin_teacher
 from telegram.schedule_dialogs import open_today, open_week
 
@@ -58,8 +59,8 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             home += f"Lesson reminder: {lesson}\nHomework reminder: {homework}\n"
         if account.role in {"TEACHER", "STUDENT"}:
             home += (
-                "Preferences saved. Schedule viewing is available. "
-                "Booking rules and notifications are not active yet."
+                "Preferences saved. Lesson booking and schedule viewing are available. "
+                "Notifications are not active yet."
             )
         else:
             home += (
@@ -74,6 +75,8 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "home": escape(home),
         "proof": "backend_client" not in dialog_manager.middleware_data,
         "can_view_schedule": view is not None
+        and view.account.role in {"TEACHER", "STUDENT"},
+        "can_book_lessons": view is not None
         and view.account.role in {"TEACHER", "STUDENT"},
     }
 
@@ -144,6 +147,12 @@ def build_dialog() -> Dialog:
         ),
         Window(
             Format("{home}"),
+            Button(
+                Const("Add lesson"),
+                id="add_lesson",
+                on_click=open_lesson_creation,
+                when="can_book_lessons",
+            ),
             Row(
                 Button(
                     Const("Today"),

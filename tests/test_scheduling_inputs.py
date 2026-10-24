@@ -151,6 +151,11 @@ async def test_backend_local_resolution_handles_dst_and_viewer_timezone(
     assert "Start: 2024-03-10 03:30 (UTC-04:00)" in review
     assert "UTC interval:" in review
 
+    lesson_review = format_local_interval_review(fold, duration_minutes=60)
+    assert "Start: 2024-11-03 01:30 (UTC-04:00)" in lesson_review
+    assert "End: 2024-11-03 01:30 (UTC-05:00)" in lesson_review
+    assert "2024-11-03T05:30:00+00:00 - 2024-11-03T06:30:00+00:00" in lesson_review
+
 
 async def test_local_resolution_rejects_aware_or_invalid_input_without_writing(
     client, bot_service_key

@@ -36,10 +36,10 @@ async def test_registered_teacher_can_navigate_and_refresh_in_place(
         await _register_teacher(driver, api)
         view = await api.view(driver.user_id, driver.user_id)
         message_id = driver.session.last_message.message_id
-        assert "Schedule viewing is available" in driver.session.last_message.text
-        assert "Booking rules and notifications are not active yet" in (
+        assert "Lesson booking and schedule viewing are available" in (
             driver.session.last_message.text
         )
+        assert "Notifications are not active yet" in driver.session.last_message.text
 
         await driver.click("Today")
         assert "Monday, October 19, 2026" in driver.session.last_message.text
@@ -73,7 +73,9 @@ async def test_registered_teacher_can_navigate_and_refresh_in_place(
         assert "Personal lesson" in driver.session.last_message.text
         await driver.click("Back to home")
         assert "TEACHER:" in driver.session.last_message.text
-        assert "Schedule viewing is available" in driver.session.last_message.text
+        assert "Lesson booking and schedule viewing are available" in (
+            driver.session.last_message.text
+        )
         assert driver.session.last_message.message_id == message_id
 
         sent = [
@@ -199,7 +201,9 @@ async def test_registered_student_can_open_week_and_return_home(
 
         message_id = student.session.last_message.message_id
         assert "STUDENT:" in student.session.last_message.text
-        assert "Schedule viewing is available" in student.session.last_message.text
+        assert "Lesson booking and schedule viewing are available" in (
+            student.session.last_message.text
+        )
         await student.click("This week")
         assert "This week's schedule" in student.session.last_message.text
         assert student.session.last_message.text.count("No events") == 7

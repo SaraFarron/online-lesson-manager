@@ -53,14 +53,25 @@ async def open_week(
     await _open_schedule(callback, manager, "week")
 
 
+async def open_schedule_week(
+    callback: CallbackQuery, manager: DialogManager, requested_date: date
+) -> None:
+    await _open_schedule(callback, manager, "week", requested_date)
+
+
 async def _open_schedule(
-    callback: CallbackQuery, manager: DialogManager, period: SchedulePeriod
+    callback: CallbackQuery,
+    manager: DialogManager,
+    period: SchedulePeriod,
+    requested_date: date | None = None,
 ) -> None:
     view = SessionView.model_validate(manager.dialog_data["view"])
     if view.account.role not in {"TEACHER", "STUDENT"}:
         raise ValueError("This account cannot view a schedule")
     role: ViewerRole = view.account.role
-    state = await _load_schedule(callback, manager, period, role)
+    state = await _load_schedule(
+        callback, manager, period, role, requested_date=requested_date
+    )
     await manager.start(
         ScheduleScreens.view,
         data=state.model_dump(mode="json"),
