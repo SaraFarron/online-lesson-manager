@@ -4,7 +4,7 @@ import asyncio
 import time
 import uuid
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Annotated, Any, Literal, Self, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -301,6 +301,66 @@ class RecurrentOccurrenceMovePayload(RecurrentOccurrenceCancelPayload):
     def validate_replacement(self) -> Self:
         if self.replacement_start >= self.replacement_end:
             raise ValueError("Replacement start must be before end")
+        return self
+
+
+class LocalIntervalResolutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: datetime
+    end: datetime
+
+    @field_validator("start", "end")
+    @classmethod
+    def require_naive_local_time(cls, value: datetime) -> datetime:
+        if value.utcoffset() is not None:
+            raise ValueError("Local datetimes must not include a timezone offset")
+        return value
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.start >= self.end:
+            raise ValueError("Local interval start must be before end")
+        return self
+
+
+class ResolvedLocalInstant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    local: AwareDatetime
+    utc: AwareDatetime
+    utc_offset: str = Field(pattern=r"^[+-][0-9]{2}:[0-9]{2}$")
+
+    @model_validator(mode="after")
+    def validate_utc_offset(self) -> Self:
+        if self.utc.utcoffset() != timedelta(0):
+            raise ValueError("Resolved instant must be UTC")
+        local_offset = self.local.strftime("%z")
+        if self.utc_offset != f"{local_offset[:3]}:{local_offset[3:]}":
+            raise ValueError("Local instant offset does not match its timezone offset")
+        return self
+
+
+class LocalIntervalResolution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timezone: str
+    start: ResolvedLocalInstant
+    end: ResolvedLocalInstant
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError("Invalid resolution timezone") from exc
+        return value
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.start.utc >= self.end.utc:
+            raise ValueError("Resolved interval start must be before end")
         return self
 
 
@@ -760,6 +820,38 @@ class BackendClient:
                 token=self.tokens[sender_id],
                 params=params,
                 error_context=error_context,
+            )
+
+    async def resolve_local_interval(
+        self,
+        sender_id: int,
+        chat_id: int,
+        start: datetime,
+        end: datetime,
+    ) -> LocalIntervalResolution:
+        payload = LocalIntervalResolutionRequest(start=start, end=end)
+        if sender_id not in self.tokens:
+            await self.session(sender_id, chat_id, error_context="scheduling")
+        try:
+            return await self.request(
+                "POST",
+                "/api/v1/events/resolve-local-time",
+                LocalIntervalResolution,
+                token=self.tokens[sender_id],
+                body=payload.model_dump(mode="json"),
+                error_context="scheduling",
+            )
+        except BackendError as exc:
+            if exc.status != 401:
+                raise
+            await self.session(sender_id, chat_id, error_context="scheduling")
+            return await self.request(
+                "POST",
+                "/api/v1/events/resolve-local-time",
+                LocalIntervalResolution,
+                token=self.tokens[sender_id],
+                body=payload.model_dump(mode="json"),
+                error_context="scheduling",
             )
 
     async def write(

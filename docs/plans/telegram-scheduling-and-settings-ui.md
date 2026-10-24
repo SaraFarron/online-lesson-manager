@@ -4,7 +4,7 @@
 
 Teachers and students can manage their authorized lessons and vacations, teachers can manage manual breaks, and both roles can edit saved preferences from Telegram without using Swagger.
 
-**Status:** Tasks 00–03 approved/verified; Tasks 04–11 are pending.
+**Status:** Tasks 00–05 approved/verified; Tasks 06–11 are pending.
 
 ## Scope (README.md sections covered)
 
@@ -146,9 +146,11 @@ Apply these in addition to each task's checks:
 
 **What to do:** Implement the approved bounded grammar with date and time prompts separated where needed. Reuse existing clock/timezone parsing; resolve instants through the approved boundary. Display timezone, explicit year, resolved DST offset, and final interval in review. Warn/confirm any inferred next-year date; reject invalid calendar dates, overflow, and invalid ranges without discarding drafts.
 
+For an omitted-year February 29 that cannot be represented in the next calendar year, require an explicit year rather than skipping ahead multiple years.
+
 **Reuse:** `parse_clock`, `parse_timezone`, onboarding input-error/edit patterns.
 
-**Acceptance:** [ ] Exact examples cover separators, explicit years, Dec/Jan, leap dates, past dates, DST gaps/folds, and viewer/teacher timezone differences. [ ] Common checks pass.
+**Acceptance:** [x] Exact examples cover separators, explicit years, Dec/Jan, leap dates, past dates, DST gaps/folds, and viewer/teacher timezone differences. [x] Common checks pass (`225 passed, 4 skipped`; Ruff, Telegram/test formatting, and `mypy telegram` pass).
 
 **Out of scope:** Natural-language parsing or a second recurrence engine. **Suitable for:** AI agent.
 
