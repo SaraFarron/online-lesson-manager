@@ -746,6 +746,8 @@ class BackendClient:
             message = "This event changed. Reload it before editing."
         elif code == "occurrence_already_cancelled":
             message = "This lesson occurrence is already cancelled. Reload the series."
+        elif response.status_code == 422 and detail == "Break not found":
+            message = "This break is no longer available. Refresh the list."
         elif response.status_code == 422 and detail in {
             "Lesson not found",
             "Recurring event not found",

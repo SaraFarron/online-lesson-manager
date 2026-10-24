@@ -9,6 +9,7 @@ from aiogram_dialog.widgets.kbd import Button, Row, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import SessionView
+from telegram.break_dialogs import open_break_management
 from telegram.event_management_dialogs import open_event_management
 from telegram.inputs import digest_clock, parse_timezone
 from telegram.lesson_dialogs import open_lesson_creation
@@ -82,6 +83,7 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         and view.account.role in {"TEACHER", "STUDENT"},
         "can_manage_events": view is not None
         and view.account.role in {"TEACHER", "STUDENT"},
+        "can_manage_breaks": view is not None and view.account.role == "TEACHER",
     }
 
 
@@ -162,6 +164,12 @@ def build_dialog() -> Dialog:
                 id="manage_events",
                 on_click=open_event_management,
                 when="can_manage_events",
+            ),
+            Button(
+                Const("Breaks"),
+                id="manage_breaks",
+                on_click=open_break_management,
+                when="can_manage_breaks",
             ),
             Row(
                 Button(

@@ -4,7 +4,7 @@
 
 Teachers and students can manage their authorized lessons and vacations, teachers can manage manual breaks, and both roles can edit saved preferences from Telegram without using Swagger.
 
-**Status:** Tasks 00–07 approved/verified; Tasks 08–11 are pending.
+**Status:** Tasks 00–08 approved/verified; Tasks 09–11 are pending.
 
 ## Scope (README.md sections covered)
 
@@ -188,11 +188,13 @@ For an omitted-year February 29 that cannot be represented in the next calendar 
 
 **Context:** Teacher manual-break creation can permanently remove lesson occurrences.
 
+**Approved UI contract:** A break is recorded on the teacher's calendar and blocks availability for all of that teacher's students. Students do not see break events or their details. The teacher enters start and end times on the same local date.
+
 **What to do:** Wire teacher-only create/edit/delete for one-off and weekly breaks. First submit without confirmation; render authorized affected occurrences from the typed preview, with bounded pagination and a clear permanent-cancellation warning. Cancel performs no write. Explicit Confirm retries only the reviewed request; revalidation may produce a new conflict requiring fresh review. Do not convert every 409 into confirmation.
 
-**Reuse:** Existing break routes and `confirm_displacement=true` contract; typed preview, picker, date input.
+**Reuse:** Existing break routes and `confirm_displacement=true` contract; typed preview and local date/time input.
 
-**Acceptance:** [ ] Preview/Cancel do not mutate. [ ] Confirm deletes exact one-offs/cancels exact recurrences; removing break does not restore lessons. [ ] Students cannot enter/forge actions; same-message and error tests pass.
+**Acceptance:** [x] Preview/Cancel do not mutate; affected occurrences are shown in bounded pages and a changed preview requires a new confirmation. [x] Confirm deletes exact one-offs/cancels exact recurrences; confirmed one-off and recurring break edits work, and deleting a break does not restore displaced lessons. [x] Breaks are teacher-only and teacher-owned; student schedules and management reads hide them, forged student writes are forbidden, and booking conflicts disclose no break details. Full suite: 256 passed, 4 skipped; Ruff/format and `mypy telegram` pass. `mypy backend` retains three unrelated baseline errors in `backend/auth/config.py`, `backend/database.py`, and `backend/events/dependencies.py`.
 
 **Out of scope:** Automatic breaks or changed displacement priority. **Suitable for:** AI agent.
 
