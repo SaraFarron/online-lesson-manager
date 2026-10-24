@@ -1,10 +1,16 @@
 import uuid
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from backend.auth.dependencies import CurrentUser, SessionDep
+from backend.constants import EventType
+from backend.events import management as management_service
 from backend.events import service
+from backend.events.management_schemas import (
+    EventManagementDetail,
+    EventManagementPage,
+)
 from backend.events.utils import (
     assert_can_assign_user,
     assert_owns_event,
@@ -14,6 +20,36 @@ from backend.vacations.dependencies import ValidatedVacation, ValidatedVacationE
 from backend.vacations.schemas import VacationCreate, VacationPublic, VacationUpdate
 
 router = APIRouter(prefix="/vacations", tags=["vacations"])
+
+
+@router.get(
+    "/", response_model=EventManagementPage, summary="List manageable vacations"
+)
+async def list_vacations(
+    session: SessionDep,
+    user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    subject_id: uuid.UUID | None = None,
+) -> EventManagementPage:
+    return await management_service.list_managed_events(
+        session,
+        user,
+        EventType.VACATION,
+        is_recurrent=False,
+        skip=skip,
+        limit=limit,
+        subject_id=subject_id,
+    )
+
+
+@router.get("/{vacation_id}", response_model=EventManagementDetail)
+async def get_vacation(
+    session: SessionDep, user: CurrentUser, vacation_id: uuid.UUID
+) -> EventManagementDetail:
+    return await management_service.get_managed_event(
+        session, user, vacation_id, EventType.VACATION, is_recurrent=False
+    )
 
 
 @router.post(

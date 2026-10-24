@@ -1,11 +1,18 @@
 import uuid
-from typing import Any
+from datetime import datetime
+from typing import Annotated, Any
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser, SessionDep
+from backend.constants import EventType
+from backend.events import management as management_service
 from backend.events import service
+from backend.events.management_schemas import (
+    EventManagementDetail,
+    EventManagementPage,
+)
 from backend.events.utils import (
     assert_can_assign_user,
     assert_owns_event,
@@ -22,6 +29,34 @@ from backend.lessons.schemas import (
 )
 
 router = APIRouter(prefix="/lessons", tags=["lessons"])
+
+
+@router.get("/", response_model=EventManagementPage, summary="List manageable lessons")
+async def list_lessons(
+    session: SessionDep,
+    user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    subject_id: uuid.UUID | None = None,
+) -> EventManagementPage:
+    return await management_service.list_managed_events(
+        session,
+        user,
+        EventType.LESSON,
+        is_recurrent=False,
+        skip=skip,
+        limit=limit,
+        subject_id=subject_id,
+    )
+
+
+@router.get("/{lesson_id}", response_model=EventManagementDetail)
+async def get_lesson(
+    session: SessionDep, user: CurrentUser, lesson_id: uuid.UUID
+) -> EventManagementDetail:
+    return await management_service.get_managed_event(
+        session, user, lesson_id, EventType.LESSON, is_recurrent=False
+    )
 
 
 @router.post(
@@ -94,6 +129,44 @@ async def delete_lesson(
 
 
 recurrent_router = APIRouter(prefix="/recurrent-lessons", tags=["lessons"])
+
+
+@recurrent_router.get(
+    "/", response_model=EventManagementPage, summary="List manageable recurring lessons"
+)
+async def list_recurrent_lessons(
+    session: SessionDep,
+    user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    subject_id: uuid.UUID | None = None,
+) -> EventManagementPage:
+    return await management_service.list_managed_events(
+        session,
+        user,
+        EventType.LESSON,
+        is_recurrent=True,
+        skip=skip,
+        limit=limit,
+        subject_id=subject_id,
+    )
+
+
+@recurrent_router.get("/{lesson_id}", response_model=EventManagementDetail)
+async def get_recurrent_lesson(
+    session: SessionDep,
+    user: CurrentUser,
+    lesson_id: uuid.UUID,
+    occurrence_start: datetime | None = None,
+) -> EventManagementDetail:
+    return await management_service.get_managed_event(
+        session,
+        user,
+        lesson_id,
+        EventType.LESSON,
+        is_recurrent=True,
+        occurrence_start=occurrence_start,
+    )
 
 
 @recurrent_router.post(

@@ -24,6 +24,7 @@ from backend.auth.schemas import (
     StudentProfileCreate,
     StudentProfilePublic,
     StudentProfileUpdate,
+    TeacherBookingContext,
     TeacherProfileCreate,
     TeacherProfilePublic,
     TeacherProfileUpdate,
@@ -36,6 +37,8 @@ from backend.auth.schemas import (
     UserUpdateMe,
 )
 from backend.auth.utils import create_access_token
+from backend.events.booking_policy import get_teacher_preferences
+from backend.exceptions import BadRequest, Conflict
 
 router = APIRouter(
     prefix="/auth",
@@ -98,6 +101,44 @@ async def register(session: SessionDep, data: UserRegister) -> Any:
 )
 async def read_me(current_user: CurrentUser) -> Any:
     return current_user
+
+
+@router.get(
+    "/me/teacher-context",
+    response_model=TeacherBookingContext,
+    summary="Read linked teacher booking defaults as a student",
+)
+async def read_teacher_context(
+    session: SessionDep, current_user: CurrentUser
+) -> TeacherBookingContext:
+    if current_user.role != Roles.STUDENT:
+        raise InsufficientPermissions()
+    if current_user.teacher_id is None:
+        raise BadRequest("Student is not linked to a teacher")
+
+    teacher = await service.get_user_by_id(session, current_user.teacher_id)
+    if teacher is None or teacher.role != Roles.TEACHER or not teacher.is_active:
+        raise Conflict("Linked teacher cannot provide booking context")
+
+    preferences, timezone = await get_teacher_preferences(
+        session, current_user.teacher_id
+    )
+    return TeacherBookingContext(
+        teacher_id=teacher.id,
+        timezone=timezone,
+        work_start=(
+            preferences.work_start.strftime("%H:%M")
+            if preferences.work_start is not None
+            else None
+        ),
+        work_end=(
+            preferences.work_end.strftime("%H:%M")
+            if preferences.work_end is not None
+            else None
+        ),
+        working_days=list(preferences.working_days),
+        lesson_length=preferences.lesson_length,
+    )
 
 
 @router.patch(

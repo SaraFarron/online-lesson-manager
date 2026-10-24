@@ -1,5 +1,6 @@
 import uuid
-from typing import Any
+from datetime import datetime
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, status
 
@@ -13,7 +14,13 @@ from backend.breaks.schemas import (
     RecurrentBreakPublic,
     RecurrentBreakUpdate,
 )
+from backend.constants import EventType
+from backend.events import management as management_service
 from backend.events import service
+from backend.events.management_schemas import (
+    EventManagementDetail,
+    EventManagementPage,
+)
 from backend.events.utils import (
     assert_can_assign_user,
     assert_owns_event,
@@ -22,6 +29,34 @@ from backend.events.utils import (
 )
 
 router = APIRouter(prefix="/breaks", tags=["breaks"])
+
+
+@router.get("/", response_model=EventManagementPage, summary="List manageable breaks")
+async def list_breaks(
+    session: SessionDep,
+    user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    subject_id: uuid.UUID | None = None,
+) -> EventManagementPage:
+    return await management_service.list_managed_events(
+        session,
+        user,
+        EventType.BREAK,
+        is_recurrent=False,
+        skip=skip,
+        limit=limit,
+        subject_id=subject_id,
+    )
+
+
+@router.get("/{break_id}", response_model=EventManagementDetail)
+async def get_break(
+    session: SessionDep, user: CurrentUser, break_id: uuid.UUID
+) -> EventManagementDetail:
+    return await management_service.get_managed_event(
+        session, user, break_id, EventType.BREAK, is_recurrent=False
+    )
 
 
 @router.post(
@@ -121,6 +156,46 @@ async def delete_break(
 
 
 recurrent_router = APIRouter(prefix="/recurrent-breaks", tags=["breaks"])
+
+
+@recurrent_router.get(
+    "/",
+    response_model=EventManagementPage,
+    summary="List manageable recurring breaks",
+)
+async def list_recurrent_breaks(
+    session: SessionDep,
+    user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    subject_id: uuid.UUID | None = None,
+) -> EventManagementPage:
+    return await management_service.list_managed_events(
+        session,
+        user,
+        EventType.BREAK,
+        is_recurrent=True,
+        skip=skip,
+        limit=limit,
+        subject_id=subject_id,
+    )
+
+
+@recurrent_router.get("/{break_id}", response_model=EventManagementDetail)
+async def get_recurrent_break(
+    session: SessionDep,
+    user: CurrentUser,
+    break_id: uuid.UUID,
+    occurrence_start: datetime | None = None,
+) -> EventManagementDetail:
+    return await management_service.get_managed_event(
+        session,
+        user,
+        break_id,
+        EventType.BREAK,
+        is_recurrent=True,
+        occurrence_start=occurrence_start,
+    )
 
 
 @recurrent_router.post(

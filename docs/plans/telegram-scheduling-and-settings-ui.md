@@ -4,7 +4,7 @@
 
 Teachers and students can manage their authorized lessons and vacations, teachers can manage manual breaks, and both roles can edit saved preferences from Telegram without using Swagger.
 
-**Status:** Task 00 approved and Task 01 verified; Tasks 02–11 are pending.
+**Status:** Tasks 00–02 approved/verified; Tasks 03–11 are pending.
 
 ## Scope (README.md sections covered)
 
@@ -106,7 +106,7 @@ Apply these in addition to each task's checks:
 
 **Reuse:** `assert_owns_event`, domain existence validators, UTC schemas and [time helpers](../../backend/events/time_utils.py).
 
-**Acceptance:** [ ] Owners can find hidden vacations and canceled series. [ ] Type-confused IDs and cross-student/teacher IDs fail. [ ] Pagination, legacy recurrence metadata, DST resolution and stale-token contract have real-DB tests. [ ] Common checks pass.
+**Acceptance:** [x] Owners can find hidden vacations and canceled series. [x] Type-confused IDs and cross-student/teacher IDs fail. [x] Pagination, legacy recurrence metadata, DST resolution and stale-token contract have real-DB tests. [x] Ruff, formatting, changed-module mypy, and focused real-DB regression tests pass. `uv run mypy backend` still reports the existing errors in `backend/auth/config.py`, `backend/database.py`, and `backend/events/dependencies.py`.
 
 **Out of scope:** Returning teacher-wide raw schedules to students or new recurrence types. **Suitable for:** AI agent.
 

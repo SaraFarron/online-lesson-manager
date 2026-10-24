@@ -122,6 +122,17 @@ class UserList(BaseModel):
     total: int
 
 
+class TeacherBookingContext(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    teacher_id: uuid.UUID
+    timezone: str
+    work_start: str | None
+    work_end: str | None
+    working_days: list[int]
+    lesson_length: int
+
+
 class StudentPickerItem(BaseModel):
     id: uuid.UUID
     display_label: str
