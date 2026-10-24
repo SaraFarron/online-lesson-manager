@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Header, Query, status
 
 from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser, SessionDep
@@ -13,6 +13,7 @@ from backend.events.management_schemas import (
     EventManagementDetail,
     EventManagementPage,
 )
+from backend.events.schemas import RecurrentCancel
 from backend.events.utils import (
     assert_can_assign_user,
     assert_owns_event,
@@ -26,6 +27,9 @@ from backend.lessons.schemas import (
     RecurrentLessonCreate,
     RecurrentLessonPublic,
     RecurrentLessonUpdate,
+    RecurrentOccurrenceActionResult,
+    RecurrentOccurrenceCancelRequest,
+    RecurrentOccurrenceMoveRequest,
 )
 
 router = APIRouter(prefix="/lessons", tags=["lessons"])
@@ -96,6 +100,13 @@ async def update_lesson(
     data: LessonUpdate,
     create_validator: ValidatedLesson,
     exist_validator: ValidatedLessonExists,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> Any:
     lesson = await exist_validator.validate(session, lesson_id)
     teacher_id = resolve_teacher_id(user)
@@ -107,6 +118,8 @@ async def update_lesson(
         data,
         create_validator,
         teacher_id=teacher_id,
+        actor=user,
+        expected_revision=if_match,
         actor_is_teacher=user.role == Roles.TEACHER,
     )
     return LessonPublic.model_validate(updated_lesson)
@@ -122,10 +135,17 @@ async def delete_lesson(
     user: CurrentUser,
     lesson_id: uuid.UUID,
     validator: ValidatedLessonExists,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> None:
     lesson = await validator.validate(session, lesson_id)
     assert_owns_event(user, lesson)
-    await service.delete_event(session, lesson)
+    await service.delete_event(session, lesson, actor=user, expected_revision=if_match)
 
 
 recurrent_router = APIRouter(prefix="/recurrent-lessons", tags=["lessons"])
@@ -170,6 +190,59 @@ async def get_recurrent_lesson(
 
 
 @recurrent_router.post(
+    "/{lesson_id}/occurrences/cancel",
+    response_model=RecurrentOccurrenceActionResult,
+    summary="Cancel one exact occurrence of a recurring lesson",
+)
+async def cancel_recurrent_lesson_occurrence(
+    session: SessionDep,
+    user: CurrentUser,
+    lesson_id: uuid.UUID,
+    data: RecurrentOccurrenceCancelRequest,
+) -> RecurrentOccurrenceActionResult:
+    teacher_id = resolve_teacher_id(user)
+    cancellation, revision = await service.cancel_recurrent_lesson_occurrence(
+        session, lesson_id, data, user, teacher_id
+    )
+    return RecurrentOccurrenceActionResult(
+        cancelled_occurrence=RecurrentCancel(
+            start=cancellation.start, end=cancellation.end
+        ),
+        revision=revision,
+    )
+
+
+@recurrent_router.post(
+    "/{lesson_id}/occurrences/move",
+    response_model=RecurrentOccurrenceActionResult,
+    status_code=status.HTTP_201_CREATED,
+    summary="Move one exact occurrence to a one-off lesson",
+)
+async def move_recurrent_lesson_occurrence(
+    session: SessionDep,
+    user: CurrentUser,
+    lesson_id: uuid.UUID,
+    data: RecurrentOccurrenceMoveRequest,
+    validator: ValidatedLesson,
+) -> RecurrentOccurrenceActionResult:
+    teacher_id = resolve_teacher_id(user)
+    (
+        cancellation,
+        replacement,
+        revision,
+    ) = await service.move_recurrent_lesson_occurrence(
+        session, lesson_id, data, user, teacher_id, validator
+    )
+    return RecurrentOccurrenceActionResult(
+        cancelled_occurrence=RecurrentCancel(
+            start=cancellation.start, end=cancellation.end
+        ),
+        replacement=LessonPublic.model_validate(replacement),
+        revision=revision,
+    )
+
+
+@recurrent_router.post(
     "/",
     response_model=RecurrentLessonPublic,
     status_code=status.HTTP_201_CREATED,
@@ -206,6 +279,13 @@ async def update_recurrent_lesson(
     data: RecurrentLessonUpdate,
     create_validator: ValidatedLesson,
     exist_validator: ValidatedLessonExists,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> Any:
     lesson = await exist_validator.validate_recurrent(session, lesson_id)
     teacher_id = resolve_teacher_id(user)
@@ -217,6 +297,8 @@ async def update_recurrent_lesson(
         data,
         create_validator,
         teacher_id=teacher_id,
+        actor=user,
+        expected_revision=if_match,
         actor_is_teacher=user.role == Roles.TEACHER,
     )
     return RecurrentLessonPublic.model_validate(updated_lesson)
@@ -232,7 +314,14 @@ async def delete_recurrent_lesson(
     user: CurrentUser,
     lesson_id: uuid.UUID,
     validator: ValidatedLessonExists,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> None:
     lesson = await validator.validate_recurrent(session, lesson_id)
     assert_owns_event(user, lesson)
-    await service.delete_event(session, lesson)
+    await service.delete_event(session, lesson, actor=user, expected_revision=if_match)

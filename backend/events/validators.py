@@ -86,6 +86,7 @@ class NoConflictValidation:
         recurrence_mode: str | None = None,
         canceled_starts: Sequence[datetime] = (),
         confirm_displacement: bool = False,
+        displacement_token: str | None = None,
         lesson_preferences: TeacherBookingPreferences | None = None,
         teacher_timezone: str | None = None,
     ) -> list[Occurrence]:
@@ -99,6 +100,7 @@ class NoConflictValidation:
             recurrence_mode=recurrence_mode,
             canceled_starts=canceled_starts,
             confirm_displacement=confirm_displacement,
+            displacement_token=displacement_token,
             lesson_preferences=lesson_preferences,
             teacher_timezone=teacher_timezone,
         )
@@ -129,6 +131,7 @@ class EventValidator:
         recurrence_mode: str | None = None,
         canceled_starts: Sequence[datetime] = (),
         confirm_displacement: bool = False,
+        displacement_token: str | None = None,
         teacher_profile: TeacherBookingPreferences | None = None,
         teacher_timezone: str | None = None,
     ) -> list[Occurrence]:
@@ -146,6 +149,7 @@ class EventValidator:
             recurrence_mode=recurrence_mode,
             canceled_starts=canceled_starts,
             confirm_displacement=confirm_displacement,
+            displacement_token=displacement_token,
             lesson_preferences=teacher_profile,
             teacher_timezone=teacher_timezone,
         )

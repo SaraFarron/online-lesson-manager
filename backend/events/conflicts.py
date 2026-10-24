@@ -1,3 +1,5 @@
+import hashlib
+import json
 from bisect import bisect_left, bisect_right
 from collections.abc import Sequence
 from datetime import datetime, timedelta
@@ -55,6 +57,7 @@ async def validate_schedule_change(
     recurrence_mode: RecurrenceMode | str | None = None,
     canceled_starts: Sequence[datetime] = (),
     confirm_displacement: bool = False,
+    displacement_token: str | None = None,
     lesson_preferences: TeacherBookingPreferences | None = None,
     teacher_timezone: str | None = None,
 ) -> list[Occurrence]:
@@ -175,8 +178,18 @@ async def validate_schedule_change(
         ]
         if blocking_overlaps:
             raise ValidationError("Event overlaps an existing non-lesson event")
-        if lesson_overlaps and not confirm_displacement:
-            raise Conflict(_break_conflict_detail(lesson_overlaps))
+        if lesson_overlaps:
+            token = _break_confirmation_token(
+                data,
+                teacher_id,
+                event_type,
+                exclude_event_id,
+                lesson_overlaps,
+            )
+            if not confirm_displacement or (
+                displacement_token is not None and displacement_token != token
+            ):
+                raise Conflict(_break_conflict_detail(lesson_overlaps, token))
         return lesson_overlaps
 
     if overlaps:
@@ -363,10 +376,49 @@ class _OccurrenceIndex:
         ]
 
 
-def _break_conflict_detail(occurrences: Sequence[Occurrence]) -> dict[str, object]:
+def _break_confirmation_token(
+    data: EventWrite | RecurrentEventWrite,
+    teacher_id: UUID,
+    event_type: EventType,
+    exclude_event_id: UUID | None,
+    occurrences: Sequence[Occurrence],
+) -> str:
+    payload = {
+        "teacher_id": str(teacher_id),
+        "event_type": event_type.value,
+        "exclude_event_id": str(exclude_event_id) if exclude_event_id else None,
+        "request": data.model_dump(mode="json"),
+        "affected_occurrences": [
+            {
+                "source_kind": occurrence.source.kind.value,
+                "source_id": str(occurrence.source.id),
+                "user_id": str(occurrence.source.user_id),
+                "event_type": occurrence.source.event_type.value,
+                "start": normalize_utc(occurrence.start).isoformat(),
+                "end": normalize_utc(occurrence.end).isoformat(),
+            }
+            for occurrence in sorted(
+                occurrences,
+                key=lambda item: (
+                    item.start,
+                    item.end,
+                    item.source.kind.value,
+                    item.source.id,
+                ),
+            )
+        ],
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _break_conflict_detail(
+    occurrences: Sequence[Occurrence], confirmation_token: str
+) -> dict[str, object]:
     return {
         "code": "break_displacement_confirmation_required",
         "message": "Confirm cancellation of overlapping lesson occurrences",
+        "confirmation_token": confirmation_token,
         "affected_occurrences": [
             {
                 "source_kind": occurrence.source.kind.value,

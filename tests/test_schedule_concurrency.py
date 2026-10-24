@@ -17,7 +17,12 @@ from sqlalchemy.pool import NullPool
 
 from backend.auth.models import User
 from backend.constants import EventType
-from backend.events.models import Event, TeacherScheduleGuard
+from backend.events.models import (
+    Event,
+    RecurrentCancels,
+    RecurrentEvent,
+    TeacherScheduleGuard,
+)
 from backend.events.schemas import (
     EventCreate,
     EventUpdate,
@@ -26,6 +31,7 @@ from backend.events.schemas import (
 )
 from backend.events.service import (
     _run_serialized_schedule_mutation,
+    cancel_recurrent_lesson_occurrence,
     create_event,
     create_recurrent_event,
     delete_event,
@@ -34,6 +40,7 @@ from backend.events.service import (
 )
 from backend.events.validators import EventValidator
 from backend.exceptions import Conflict, ValidationError
+from backend.lessons.schemas import RecurrentOccurrenceCancelRequest
 from backend.models import Base
 
 
@@ -299,6 +306,7 @@ async def test_concurrent_conflicting_event_mutations_are_serialized(
         await seed_session.flush()
         student = User(role="STUDENT", timezone="UTC", teacher_id=teacher.id)
         seed_session.add(student)
+        await seed_session.flush()
         await seed_session.commit()
 
     event_data = EventCreate(
@@ -344,3 +352,86 @@ async def test_concurrent_conflicting_event_mutations_are_serialized(
     assert len(events) == 1
     assert events[0].event_type == event_type.value
     assert guard is not None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_occurrence_cancellations_preserve_both_identities(
+    mutation_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with mutation_session_factory() as seed_session:
+        teacher = User(role="TEACHER", timezone="UTC")
+        seed_session.add(teacher)
+        await seed_session.flush()
+        student = User(role="STUDENT", timezone="UTC", teacher_id=teacher.id)
+        seed_session.add(student)
+        await seed_session.flush()
+        series = RecurrentEvent(
+            teacher_id=teacher.id,
+            user_id=student.id,
+            event_type=EventType.LESSON.value,
+            start=datetime(2026, 12, 1, 9),
+            end=datetime(2026, 12, 1, 10),
+            interval=7,
+            interval_end=datetime(2026, 12, 22, 9),
+            recurrence_mode="UTC_STEP",
+            recurrence_timezone=None,
+        )
+        seed_session.add(series)
+        await seed_session.commit()
+        teacher_id = teacher.id
+        series_id = series.id
+        actor = User(id=teacher.id, role="TEACHER", timezone="UTC")
+
+    start_together = asyncio.Barrier(2)
+    starts = (
+        datetime(2026, 12, 8, 9),
+        datetime(2026, 12, 15, 9),
+    )
+
+    async def cancel(start: datetime) -> Conflict | None:
+        await start_together.wait()
+        async with mutation_session_factory() as session:
+            try:
+                await cancel_recurrent_lesson_occurrence(
+                    session,
+                    series_id,
+                    RecurrentOccurrenceCancelRequest(
+                        occurrence_start=start,
+                        occurrence_end=start.replace(hour=10),
+                    ),
+                    actor,
+                    teacher_id,
+                )
+            except Conflict as exc:
+                return exc
+        return None
+
+    outcomes = await asyncio.gather(*(cancel(start) for start in starts))
+    for start, outcome in zip(starts, outcomes, strict=True):
+        if outcome is None:
+            continue
+        assert outcome.status_code == 409
+        async with mutation_session_factory() as session:
+            await cancel_recurrent_lesson_occurrence(
+                session,
+                series_id,
+                RecurrentOccurrenceCancelRequest(
+                    occurrence_start=start,
+                    occurrence_end=start.replace(hour=10),
+                ),
+                actor,
+                teacher_id,
+            )
+
+    async with mutation_session_factory() as verification_session:
+        cancellations = (
+            await verification_session.scalars(
+                select(RecurrentCancels)
+                .where(RecurrentCancels.recurrent_event_id == series_id)
+                .order_by(RecurrentCancels.start)
+            )
+        ).all()
+    assert [cancellation.start for cancellation in cancellations] == [
+        datetime(2026, 12, 8, 9),
+        datetime(2026, 12, 15, 9),
+    ]

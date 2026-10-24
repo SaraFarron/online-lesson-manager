@@ -9,11 +9,14 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth.constants import Roles
+from backend.auth.models import User
 from backend.auth.service import get_user_by_id
 from backend.breaks.schemas import RecurrentBreakCreate
 from backend.constants import EventType
 from backend.events.booking_policy import prepare_lesson_write
 from backend.events.constants import RecurrenceMode
+from backend.events.management import build_event_revision
 from backend.events.models import (
     Event,
     RecurrentCancels,
@@ -34,14 +37,22 @@ from backend.events.schemas import (
     RecurrentEventUpdate,
 )
 from backend.events.time_utils import from_storage_utc, to_storage_utc
+from backend.events.utils import assert_can_assign_user, assert_owns_event
 from backend.events.validators import EventValidator
 from backend.exceptions import Conflict, ValidationError
+from backend.lessons.schemas import (
+    LessonCreate,
+    RecurrentOccurrenceCancelRequest,
+    RecurrentOccurrenceMoveRequest,
+)
 
 
 async def _run_serialized_schedule_mutation[ResultT](
     session: AsyncSession,
     teacher_id: uuid.UUID,
     operation: Callable[[], Awaitable[ResultT]],
+    *,
+    rollback_domain_errors: bool = False,
 ) -> ResultT:
     dialect_name = session.get_bind().dialect.name
     try:
@@ -58,8 +69,10 @@ async def _run_serialized_schedule_mutation[ResultT](
     try:
         return await operation()
     except Conflict, ValidationError:
-        # These domain rejections occur before displacement or event writes.
-        await session.commit()
+        if rollback_domain_errors:
+            await session.rollback()
+        else:
+            await session.commit()
         raise
     except BaseException:
         await session.rollback()
@@ -113,6 +126,7 @@ async def create_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> Event:
     return await _run_serialized_schedule_mutation(
@@ -124,6 +138,7 @@ async def create_event(
             validator,
             teacher_id,
             confirm_displacement=confirm_displacement,
+            displacement_token=displacement_token,
             actor_is_teacher=actor_is_teacher,
         ),
     )
@@ -136,7 +151,9 @@ async def _create_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    displacement_token: str | None = None,
     actor_is_teacher: bool = False,
+    commit: bool = True,
 ) -> Event:
     teacher_profile = None
     teacher_timezone = None
@@ -156,6 +173,7 @@ async def _create_event(
         teacher_id=teacher_id,
         user_id=event_data.user_id,
         confirm_displacement=confirm_displacement,
+        displacement_token=displacement_token,
         teacher_profile=teacher_profile,
         teacher_timezone=teacher_timezone,
     )
@@ -169,8 +187,11 @@ async def _create_event(
         event_type=event_data.event_type,
     )
     session.add(event)
-    await session.commit()
-    await session.refresh(event)
+    if commit:
+        await session.commit()
+        await session.refresh(event)
+    else:
+        await session.flush()
     return event
 
 
@@ -181,7 +202,10 @@ async def update_event(
     validator: EventValidator,
     teacher_id: uuid.UUID,
     *,
+    actor: User | None = None,
+    expected_revision: str | None = None,
     confirm_displacement: bool = False,
+    displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> Event:
     return await _run_serialized_schedule_mutation(
@@ -193,7 +217,10 @@ async def update_event(
             event_data,
             validator,
             teacher_id,
+            actor=actor,
+            expected_revision=expected_revision,
             confirm_displacement=confirm_displacement,
+            displacement_token=displacement_token,
             actor_is_teacher=actor_is_teacher,
         ),
     )
@@ -206,9 +233,22 @@ async def _update_event(
     validator: EventValidator,
     teacher_id: uuid.UUID,
     *,
+    actor: User | None = None,
+    expected_revision: str | None = None,
     confirm_displacement: bool = False,
+    displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> Event:
+    fresh_event = await session.get(Event, event.id, populate_existing=True)
+    if fresh_event is None or fresh_event.teacher_id != teacher_id:
+        raise ValidationError("Lesson or event not found")
+    event = fresh_event
+    if actor is not None:
+        assert_owns_event(actor, event)
+        await assert_can_assign_user(session, actor, event_data.user_id)
+    if expected_revision is not None:
+        _assert_expected_revision(expected_revision, build_event_revision(event, ()))
+
     teacher_profile = None
     teacher_timezone = None
     if validator.expected_event_type == EventType.LESSON:
@@ -228,6 +268,7 @@ async def _update_event(
         user_id=event_data.user_id,
         exclude_event_id=event.id,
         confirm_displacement=confirm_displacement,
+        displacement_token=displacement_token,
         teacher_profile=teacher_profile,
         teacher_timezone=teacher_timezone,
     )
@@ -243,20 +284,66 @@ async def _update_event(
     return event
 
 
-async def delete_event(session: AsyncSession, event: Event | RecurrentEvent) -> None:
+async def delete_event(
+    session: AsyncSession,
+    event: Event | RecurrentEvent,
+    *,
+    actor: User | None = None,
+    expected_revision: str | None = None,
+) -> None:
     await _run_serialized_schedule_mutation(
-        session, event.teacher_id, lambda: _delete_event(session, event)
+        session,
+        event.teacher_id,
+        lambda: _delete_event(session, event, actor, expected_revision),
     )
 
 
-async def _delete_event(session: AsyncSession, event: Event | RecurrentEvent) -> None:
+async def _delete_event(
+    session: AsyncSession,
+    event: Event | RecurrentEvent,
+    actor: User | None,
+    expected_revision: str | None,
+) -> None:
     if isinstance(event, RecurrentEvent):
+        fresh_recurrent = await session.get(
+            RecurrentEvent, event.id, populate_existing=True
+        )
+        if fresh_recurrent is None or fresh_recurrent.teacher_id != event.teacher_id:
+            raise ValidationError("Event not found")
+        if actor is not None:
+            assert_owns_event(actor, fresh_recurrent)
+        cancellations = list(
+            (
+                await session.scalars(
+                    select(RecurrentCancels)
+                    .where(RecurrentCancels.recurrent_event_id == fresh_recurrent.id)
+                    .order_by(RecurrentCancels.start, RecurrentCancels.id)
+                    .execution_options(populate_existing=True)
+                )
+            ).all()
+        )
+        if expected_revision is not None:
+            _assert_expected_revision(
+                expected_revision,
+                build_event_revision(fresh_recurrent, cancellations),
+            )
         await session.execute(
             delete(RecurrentCancels).where(
-                RecurrentCancels.recurrent_event_id == event.id
+                RecurrentCancels.recurrent_event_id == fresh_recurrent.id
             )
         )
-    await session.delete(event)
+        await session.delete(fresh_recurrent)
+    else:
+        fresh_one_off = await session.get(Event, event.id, populate_existing=True)
+        if fresh_one_off is None or fresh_one_off.teacher_id != event.teacher_id:
+            raise ValidationError("Event not found")
+        if actor is not None:
+            assert_owns_event(actor, fresh_one_off)
+        if expected_revision is not None:
+            _assert_expected_revision(
+                expected_revision, build_event_revision(fresh_one_off, ())
+            )
+        await session.delete(fresh_one_off)
     await session.commit()
 
 
@@ -267,6 +354,7 @@ async def create_recurrent_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
     return await _run_serialized_schedule_mutation(
@@ -278,6 +366,7 @@ async def create_recurrent_event(
             validator,
             teacher_id,
             confirm_displacement=confirm_displacement,
+            displacement_token=displacement_token,
             actor_is_teacher=actor_is_teacher,
         ),
     )
@@ -290,6 +379,7 @@ async def _create_recurrent_event(
     teacher_id: uuid.UUID,
     *,
     confirm_displacement: bool = False,
+    displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
     teacher = await get_user_by_id(session, teacher_id)
@@ -314,6 +404,7 @@ async def _create_recurrent_event(
         teacher_id=teacher_id,
         user_id=event_data.user_id,
         confirm_displacement=confirm_displacement,
+        displacement_token=displacement_token,
         teacher_profile=teacher_profile,
         teacher_timezone=teacher_timezone,
     )
@@ -343,7 +434,10 @@ async def update_recurrent_event(
     validator: EventValidator,
     teacher_id: uuid.UUID,
     *,
+    actor: User | None = None,
+    expected_revision: str | None = None,
     confirm_displacement: bool = False,
+    displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
     return await _run_serialized_schedule_mutation(
@@ -355,7 +449,10 @@ async def update_recurrent_event(
             event_data,
             validator,
             teacher_id,
+            actor=actor,
+            expected_revision=expected_revision,
             confirm_displacement=confirm_displacement,
+            displacement_token=displacement_token,
             actor_is_teacher=actor_is_teacher,
         ),
     )
@@ -368,9 +465,37 @@ async def _update_recurrent_event(
     validator: EventValidator,
     teacher_id: uuid.UUID,
     *,
+    actor: User | None = None,
+    expected_revision: str | None = None,
     confirm_displacement: bool = False,
+    displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
+    fresh_event = await session.get(
+        RecurrentEvent, recurrent_event.id, populate_existing=True
+    )
+    if fresh_event is None or fresh_event.teacher_id != teacher_id:
+        raise ValidationError("Recurring event not found")
+    recurrent_event = fresh_event
+    if actor is not None:
+        assert_owns_event(actor, recurrent_event)
+        await assert_can_assign_user(session, actor, event_data.user_id)
+    existing_cancellations = list(
+        (
+            await session.scalars(
+                select(RecurrentCancels)
+                .where(RecurrentCancels.recurrent_event_id == recurrent_event.id)
+                .order_by(RecurrentCancels.start, RecurrentCancels.id)
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+    )
+    if expected_revision is not None:
+        _assert_expected_revision(
+            expected_revision,
+            build_event_revision(recurrent_event, existing_cancellations),
+        )
+
     teacher_profile = None
     teacher_timezone = None
     if validator.expected_event_type == EventType.LESSON:
@@ -401,11 +526,6 @@ async def _update_recurrent_event(
     elif recurrence_changed:
         candidate_cancellations = []
     else:
-        existing_cancellations = await session.scalars(
-            select(RecurrentCancels).where(
-                RecurrentCancels.recurrent_event_id == recurrent_event.id
-            )
-        )
         candidate_cancellations = [
             from_storage_utc(cancellation.start)
             for cancellation in existing_cancellations
@@ -421,6 +541,7 @@ async def _update_recurrent_event(
         recurrence_mode=recurrent_event.recurrence_mode,
         canceled_starts=candidate_cancellations,
         confirm_displacement=confirm_displacement,
+        displacement_token=displacement_token,
         teacher_profile=teacher_profile,
         teacher_timezone=teacher_timezone,
     )
@@ -453,6 +574,184 @@ async def _update_recurrent_event(
     await session.commit()
     await session.refresh(recurrent_event)
     return recurrent_event
+
+
+async def cancel_recurrent_lesson_occurrence(
+    session: AsyncSession,
+    recurrent_event_id: uuid.UUID,
+    request: RecurrentOccurrenceCancelRequest,
+    actor: User,
+    teacher_id: uuid.UUID,
+) -> tuple[RecurrentCancels, str]:
+    async def operation() -> tuple[RecurrentCancels, str]:
+        recurrent_event, cancellations, occurrence = await _load_occurrence_action(
+            session,
+            recurrent_event_id,
+            request.occurrence_start,
+            request.occurrence_end,
+            actor,
+            teacher_id,
+        )
+        _ensure_occurrence_not_cancelled(cancellations, occurrence)
+        cancellation = RecurrentCancels(
+            recurrent_event_id=recurrent_event.id,
+            start=to_storage_utc(occurrence.start),
+            end=to_storage_utc(occurrence.end),
+        )
+        session.add(cancellation)
+        await session.flush()
+        cancellations.append(cancellation)
+        revision = build_event_revision(recurrent_event, cancellations)
+        await session.commit()
+        return cancellation, revision
+
+    return await _run_serialized_schedule_mutation(session, teacher_id, operation)
+
+
+async def move_recurrent_lesson_occurrence(
+    session: AsyncSession,
+    recurrent_event_id: uuid.UUID,
+    request: RecurrentOccurrenceMoveRequest,
+    actor: User,
+    teacher_id: uuid.UUID,
+    validator: EventValidator,
+) -> tuple[RecurrentCancels, Event, str]:
+    async def operation() -> tuple[RecurrentCancels, Event, str]:
+        recurrent_event, cancellations, occurrence = await _load_occurrence_action(
+            session,
+            recurrent_event_id,
+            request.occurrence_start,
+            request.occurrence_end,
+            actor,
+            teacher_id,
+        )
+        _ensure_occurrence_not_cancelled(cancellations, occurrence)
+        await assert_can_assign_user(session, actor, recurrent_event.user_id)
+
+        cancellation = RecurrentCancels(
+            recurrent_event_id=recurrent_event.id,
+            start=to_storage_utc(occurrence.start),
+            end=to_storage_utc(occurrence.end),
+        )
+        session.add(cancellation)
+        await session.flush()
+
+        replacement = await _create_event(
+            session,
+            LessonCreate(
+                start=request.replacement_start,
+                end=request.replacement_end,
+                user_id=recurrent_event.user_id,
+            ),
+            validator,
+            teacher_id,
+            actor_is_teacher=actor.role == Roles.TEACHER,
+            commit=False,
+        )
+        cancellations.append(cancellation)
+        revision = build_event_revision(recurrent_event, cancellations)
+        await session.commit()
+        await session.refresh(replacement)
+        return cancellation, replacement, revision
+
+    return await _run_serialized_schedule_mutation(
+        session, teacher_id, operation, rollback_domain_errors=True
+    )
+
+
+async def _load_occurrence_action(
+    session: AsyncSession,
+    recurrent_event_id: uuid.UUID,
+    occurrence_start: datetime,
+    occurrence_end: datetime,
+    actor: User,
+    teacher_id: uuid.UUID,
+) -> tuple[RecurrentEvent, list[RecurrentCancels], Occurrence]:
+    recurrent_event = await session.get(
+        RecurrentEvent, recurrent_event_id, populate_existing=True
+    )
+    if (
+        recurrent_event is None
+        or recurrent_event.event_type != EventType.LESSON.value
+        or recurrent_event.teacher_id != teacher_id
+    ):
+        raise ValidationError("Recurring lesson not found")
+    assert_owns_event(actor, recurrent_event)
+
+    cancellations = list(
+        (
+            await session.scalars(
+                select(RecurrentCancels)
+                .where(RecurrentCancels.recurrent_event_id == recurrent_event.id)
+                .order_by(RecurrentCancels.start, RecurrentCancels.id)
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+    )
+    start = from_storage_utc(to_storage_utc(occurrence_start))
+    end = from_storage_utc(to_storage_utc(occurrence_end))
+    try:
+        range_end = start + timedelta(microseconds=1)
+    except OverflowError as exc:
+        raise ValidationError(
+            "Occurrence start is outside the supported range"
+        ) from exc
+    source = OccurrenceSource(
+        kind=OccurrenceSourceKind.RECURRENT_EVENT,
+        id=recurrent_event.id,
+        teacher_id=recurrent_event.teacher_id,
+        user_id=recurrent_event.user_id,
+        event_type=EventType.LESSON,
+    )
+    series = RecurrenceSeries(
+        source=source,
+        start=from_storage_utc(recurrent_event.start),
+        end=from_storage_utc(recurrent_event.end),
+        interval=recurrent_event.interval,
+        interval_end=from_storage_utc(recurrent_event.interval_end),
+        recurrence_mode=recurrent_event.recurrence_mode,
+        recurrence_timezone=recurrent_event.recurrence_timezone,
+    )
+    occurrence = next(
+        (
+            item
+            for item in expand_recurrence(series, start, range_end)
+            if item.start == start and item.end == end
+        ),
+        None,
+    )
+    if occurrence is None:
+        raise ValidationError("Occurrence identity is not part of this series")
+    return recurrent_event, cancellations, occurrence
+
+
+def _ensure_occurrence_not_cancelled(
+    cancellations: list[RecurrentCancels], occurrence: Occurrence
+) -> None:
+    matching = [
+        cancellation
+        for cancellation in cancellations
+        if from_storage_utc(cancellation.start) == occurrence.start
+    ]
+    if matching:
+        if any(from_storage_utc(item.end) != occurrence.end for item in matching):
+            raise ValidationError("Stored cancellation does not match its occurrence")
+        raise Conflict(
+            {
+                "code": "occurrence_already_cancelled",
+                "message": "This lesson occurrence has already been cancelled",
+            }
+        )
+
+
+def _assert_expected_revision(expected: str, current: str) -> None:
+    if expected != current:
+        raise Conflict(
+            {
+                "code": "stale_event_revision",
+                "message": "This event changed; reload it before editing",
+            }
+        )
 
 
 async def _apply_displacements(

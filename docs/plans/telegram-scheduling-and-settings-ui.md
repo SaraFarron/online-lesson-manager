@@ -4,7 +4,7 @@
 
 Teachers and students can manage their authorized lessons and vacations, teachers can manage manual breaks, and both roles can edit saved preferences from Telegram without using Swagger.
 
-**Status:** Tasks 00–02 approved/verified; Tasks 03–11 are pending.
+**Status:** Tasks 00–03 approved/verified; Tasks 04–11 are pending.
 
 ## Scope (README.md sections covered)
 
@@ -120,7 +120,7 @@ Apply these in addition to each task's checks:
 
 **Reuse:** `_run_serialized_schedule_mutation`, cancellation validation, existing lesson admission and create/update services.
 
-**Acceptance:** [ ] Concurrent cancellations preserve both identities. [ ] Failed move rolls back cancellation and replacement. [ ] Repeat/stale/off-grid actions are explicit and safe; no failed request reports success. [ ] Common checks pass.
+**Acceptance:** [x] Guarded concurrent exact cancellations preserve both identities. [x] A failed move rolls back its cancellation and creates no replacement. [x] Repeated/off-grid actions are explicit; updates/deletes accept `If-Match` revisions and reject stale writes. [x] Break-displacement previews return a token bound to the submitted request and affected set; the bot flow must send it in `X-Displacement-Token`, while tokenless legacy confirmation remains compatible. [x] Focused real-DB tests, Ruff, formatting, changed-module mypy, and editor diagnostics pass. `uv run mypy backend` still reports the existing errors in `backend/auth/config.py`, `backend/database.py`, and `backend/events/dependencies.py`.
 
 **Out of scope:** Changing existing cancellation-clearing rules without approval. **Suitable for:** AI agent.
 

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Header, Query, status
 
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.breaks.dependencies import ValidatedBreak, ValidatedBreakExists
@@ -67,8 +67,9 @@ async def get_break(
     responses={
         status.HTTP_409_CONFLICT: {
             "description": (
-                "Non-mutating preview of lesson occurrences. Retry with "
-                "confirm_displacement=true to apply the break and cancellations."
+                "Non-mutating preview of lesson occurrences and a confirmation token. "
+                "Retry with confirm_displacement=true and the preview token in "
+                "X-Displacement-Token; the server rechecks the request and affected set."
             )
         }
     },
@@ -82,6 +83,13 @@ async def create_break(
         default=False,
         description="Confirm cancellation of overlapping lesson occurrences.",
     ),
+    displacement_token: Annotated[
+        str | None,
+        Header(
+            alias="X-Displacement-Token",
+            description="Token returned by the latest displacement preview.",
+        ),
+    ] = None,
 ) -> Any:
     assert_teacher_actor(user)
     teacher_id = resolve_teacher_id(user)
@@ -92,6 +100,7 @@ async def create_break(
         validator,
         teacher_id=teacher_id,
         confirm_displacement=confirm_displacement,
+        displacement_token=displacement_token,
     )
     return BreakPublic.model_validate(brk)
 
@@ -104,8 +113,9 @@ async def create_break(
     responses={
         status.HTTP_409_CONFLICT: {
             "description": (
-                "Non-mutating preview of lesson occurrences. Retry with "
-                "confirm_displacement=true to apply the update and cancellations."
+                "Non-mutating preview of lesson occurrences and a confirmation token. "
+                "Retry with confirm_displacement=true and the preview token in "
+                "X-Displacement-Token; the server rechecks the request and affected set."
             )
         }
     },
@@ -121,6 +131,20 @@ async def update_break(
         default=False,
         description="Confirm cancellation of overlapping lesson occurrences.",
     ),
+    displacement_token: Annotated[
+        str | None,
+        Header(
+            alias="X-Displacement-Token",
+            description="Token returned by the latest displacement preview.",
+        ),
+    ] = None,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> Any:
     assert_teacher_actor(user)
     brk = await exist_validator.validate(session, break_id)
@@ -133,7 +157,10 @@ async def update_break(
         data,
         create_validator,
         teacher_id=teacher_id,
+        actor=user,
         confirm_displacement=confirm_displacement,
+        displacement_token=displacement_token,
+        expected_revision=if_match,
     )
     return BreakPublic.model_validate(updated_brk)
 
@@ -148,11 +175,18 @@ async def delete_break(
     user: CurrentUser,
     break_id: uuid.UUID,
     validator: ValidatedBreakExists,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> None:
     assert_teacher_actor(user)
     brk = await validator.validate(session, break_id)
     assert_owns_event(user, brk)
-    await service.delete_event(session, brk)
+    await service.delete_event(session, brk, actor=user, expected_revision=if_match)
 
 
 recurrent_router = APIRouter(prefix="/recurrent-breaks", tags=["breaks"])
@@ -206,8 +240,9 @@ async def get_recurrent_break(
     responses={
         status.HTTP_409_CONFLICT: {
             "description": (
-                "Non-mutating preview of lesson occurrences. Retry with "
-                "confirm_displacement=true to apply the break and cancellations."
+                "Non-mutating preview of lesson occurrences and a confirmation token. "
+                "Retry with confirm_displacement=true and the preview token in "
+                "X-Displacement-Token; the server rechecks the request and affected set."
             )
         }
     },
@@ -221,6 +256,13 @@ async def create_recurrent_break(
         default=False,
         description="Confirm cancellation of overlapping lesson occurrences.",
     ),
+    displacement_token: Annotated[
+        str | None,
+        Header(
+            alias="X-Displacement-Token",
+            description="Token returned by the latest displacement preview.",
+        ),
+    ] = None,
 ) -> Any:
     assert_teacher_actor(user)
     teacher_id = resolve_teacher_id(user)
@@ -231,6 +273,7 @@ async def create_recurrent_break(
         validator,
         teacher_id=teacher_id,
         confirm_displacement=confirm_displacement,
+        displacement_token=displacement_token,
     )
     return RecurrentBreakPublic.model_validate(brk)
 
@@ -243,8 +286,9 @@ async def create_recurrent_break(
     responses={
         status.HTTP_409_CONFLICT: {
             "description": (
-                "Non-mutating preview of lesson occurrences. Retry with "
-                "confirm_displacement=true to apply the update and cancellations."
+                "Non-mutating preview of lesson occurrences and a confirmation token. "
+                "Retry with confirm_displacement=true and the preview token in "
+                "X-Displacement-Token; the server rechecks the request and affected set."
             )
         }
     },
@@ -260,6 +304,20 @@ async def update_recurrent_break(
         default=False,
         description="Confirm cancellation of overlapping lesson occurrences.",
     ),
+    displacement_token: Annotated[
+        str | None,
+        Header(
+            alias="X-Displacement-Token",
+            description="Token returned by the latest displacement preview.",
+        ),
+    ] = None,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> Any:
     assert_teacher_actor(user)
     brk = await exist_validator.validate_recurrent(session, break_id)
@@ -272,7 +330,10 @@ async def update_recurrent_break(
         data,
         create_validator,
         teacher_id=teacher_id,
+        actor=user,
         confirm_displacement=confirm_displacement,
+        displacement_token=displacement_token,
+        expected_revision=if_match,
     )
     return RecurrentBreakPublic.model_validate(updated_brk)
 
@@ -287,8 +348,15 @@ async def delete_recurrent_break(
     user: CurrentUser,
     break_id: uuid.UUID,
     validator: ValidatedBreakExists,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> None:
     assert_teacher_actor(user)
     brk = await validator.validate_recurrent(session, break_id)
     assert_owns_event(user, brk)
-    await service.delete_event(session, brk)
+    await service.delete_event(session, brk, actor=user, expected_revision=if_match)

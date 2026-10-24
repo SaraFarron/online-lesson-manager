@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Header, Query, status
 
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.constants import EventType
@@ -85,13 +85,26 @@ async def update_vacation(
     data: VacationUpdate,
     create_validator: ValidatedVacation,
     exist_validator: ValidatedVacationExists,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> Any:
     vacation = await exist_validator.validate(session, vacation_id)
     teacher_id = resolve_teacher_id(user)
     assert_owns_event(user, vacation)
     await assert_can_assign_user(session, user, data.user_id)
     updated_vacation = await service.update_event(
-        session, vacation, data, create_validator, teacher_id=teacher_id
+        session,
+        vacation,
+        data,
+        create_validator,
+        teacher_id=teacher_id,
+        actor=user,
+        expected_revision=if_match,
     )
     return VacationPublic.model_validate(updated_vacation)
 
@@ -106,7 +119,16 @@ async def delete_vacation(
     user: CurrentUser,
     vacation_id: uuid.UUID,
     validator: ValidatedVacationExists,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Management revision returned by the event detail read.",
+        ),
+    ] = None,
 ) -> None:
     vacation = await validator.validate(session, vacation_id)
     assert_owns_event(user, vacation)
-    await service.delete_event(session, vacation)
+    await service.delete_event(
+        session, vacation, actor=user, expected_revision=if_match
+    )
