@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from backend.auth import service
@@ -12,9 +12,15 @@ from backend.auth.dependencies import (
     SessionDep,
     SuperUser,
 )
-from backend.auth.exceptions import EmailAlreadyExists, UserNotFound
+from backend.auth.exceptions import (
+    EmailAlreadyExists,
+    InsufficientPermissions,
+    UserNotFound,
+)
 from backend.auth.schemas import (
     StudentJoinTeacher,
+    StudentPickerItem,
+    StudentPickerPage,
     StudentProfileCreate,
     StudentProfilePublic,
     StudentProfileUpdate,
@@ -121,6 +127,35 @@ async def join_teacher(
 ) -> Any:
     return await service.link_student_to_teacher(
         session, current_user, data.teacher_code
+    )
+
+
+@router.get(
+    "/teacher/students",
+    response_model=StudentPickerPage,
+    summary="List the authenticated teacher's active students for selection",
+)
+async def list_teacher_students(
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+) -> StudentPickerPage:
+    if current_user.role != Roles.TEACHER:
+        raise InsufficientPermissions()
+
+    students, total = await service.get_teacher_students(
+        session, current_user.id, skip=skip, limit=limit
+    )
+    return StudentPickerPage(
+        items=[
+            StudentPickerItem(
+                id=student.id,
+                display_label=student.full_name or f"Student {str(student.id)[:8]}",
+            )
+            for student in students
+        ],
+        total=total,
     )
 
 

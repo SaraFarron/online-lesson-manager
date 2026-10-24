@@ -111,6 +111,32 @@ async def get_users(
     return list(users_result.scalars().all()), total
 
 
+async def get_teacher_students(
+    session: AsyncSession,
+    teacher_id: uuid.UUID,
+    *,
+    skip: int = 0,
+    limit: int = 100,
+) -> tuple[list[User], int]:
+    filters = (
+        User.teacher_id == teacher_id,
+        User.role == Roles.STUDENT,
+        User.is_active.is_(True),
+    )
+    total_result = await session.execute(
+        select(func.count()).select_from(User).where(*filters)
+    )
+    total = total_result.scalar_one()
+    students_result = await session.execute(
+        select(User)
+        .where(*filters)
+        .order_by(User.full_name, User.id)
+        .offset(skip)
+        .limit(limit)
+    )
+    return list(students_result.scalars().all()), total
+
+
 async def create_user(session: AsyncSession, data: UserCreate) -> User:
     user = User(
         email=data.email,

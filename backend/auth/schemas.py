@@ -122,6 +122,16 @@ class UserList(BaseModel):
     total: int
 
 
+class StudentPickerItem(BaseModel):
+    id: uuid.UUID
+    display_label: str
+
+
+class StudentPickerPage(BaseModel):
+    items: list[StudentPickerItem]
+    total: int
+
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 

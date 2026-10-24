@@ -4,7 +4,7 @@
 
 Teachers and students can manage their authorized lessons and vacations, teachers can manage manual breaks, and both roles can edit saved preferences from Telegram without using Swagger.
 
-**Status:** Contract approved; implementation and verification are pending.
+**Status:** Task 00 approved and Task 01 verified; Tasks 02–11 are pending.
 
 ## Scope (README.md sections covered)
 
@@ -18,7 +18,7 @@ Teachers and students can manage their authorized lessons and vacations, teacher
 - [Booking-policy plan](./scheduling-policy-and-plan-reconciliation.md) and [AGENTS.md](../../AGENTS.md#feature-status-vs-product-spec) describe implemented work windows, duration authorization, daily/consecutive limits, and database-backed mutation serialization. Do not reimplement these in the bot.
 - [Lesson routes](../../backend/lessons/router.py), [break routes](../../backend/breaks/router.py), and [vacation routes](../../backend/vacations/router.py) provide mutations. They do not currently provide the authorized detail/list reads needed for editing. Recurring lesson/break updates accept full recurrence data; vacations have one-off routes only.
 - [Schedule reads](../../backend/schedule/service.py) intentionally hide vacation-suppressed occurrences. Their response is a display snapshot, not an editable series representation: it lacks subject IDs, recurrence metadata, and cancellation lists. Do not repurpose it as an unrestricted management API.
-- [Auth routes](../../backend/auth/router.py) expose owner-only profile reads/updates and self PATCH; the general users list is superuser-only. There is no teacher student-picker endpoint. Do not relax owner-only profile access to populate the picker.
+- [Auth routes](../../backend/auth/router.py) expose owner-only profile reads/updates and self PATCH, plus a bounded active-student picker for the authenticated teacher; the general users list remains superuser-only. Do not relax owner-only profile access to populate the picker.
 - [BackendClient](../../telegram/api.py) supports onboarding, account/profile reads, and schedules. Its generic response parsing expects JSON and its error mapping discards structured backend details; add explicit mutation/204/error support rather than displaying arbitrary response bodies.
 - Reuse [dialogs](../../telegram/dialogs.py), [onboarding parsers/widgets](../../telegram/onboarding.py), [clock/timezone parsers](../../telegram/inputs.py), [schedule dialogs](../../telegram/schedule_dialogs.py), and [runtime isolation/edit middleware](../../telegram/runtime.py).
 - Backend authorization remains in `resolve_teacher_id`, `assert_can_assign_user`, `assert_owns_event`, and `assert_teacher_actor` in [event utilities](../../backend/events/utils.py). The existing generic event dependency is not a substitute for domain-specific dependencies on live routes.
@@ -92,7 +92,7 @@ Apply these in addition to each task's checks:
 
 **Reuse:** Auth role dependencies and `assert_can_assign_user`; do not call the admin user list or broaden `OwnedProfileUser`.
 
-**Acceptance:** [ ] Multiple pages and empty rosters work. [ ] Students/unrelated teachers cannot enumerate another roster; inactive/de-linked subjects cannot bypass mutation authorization. [ ] Common checks pass.
+**Acceptance:** [x] Multiple pages and empty rosters work. [x] Students/unrelated teachers cannot enumerate another roster; inactive/de-linked subjects cannot bypass mutation authorization. [x] Ruff checks and formatting pass; changed backend modules type-check. `mypy backend` still reports existing errors in `backend/auth/config.py`, `backend/database.py`, and `backend/events/dependencies.py`.
 
 **Out of scope:** Full student profile/history/deletion. **Suitable for:** AI agent.
 

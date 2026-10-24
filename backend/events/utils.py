@@ -31,6 +31,7 @@ async def assert_can_assign_user(
         target = await get_user_by_id(session, user_id)
         if (
             target is not None
+            and target.is_active
             and target.role == Roles.STUDENT
             and target.teacher_id == actor.id
         ):
