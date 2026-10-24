@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 import time
 import uuid
 from collections.abc import Callable
 from datetime import date
-from typing import Any, Literal, Self, TypeVar
+from typing import Annotated, Any, Literal, Self, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
@@ -11,6 +13,7 @@ from pydantic import (
     AwareDatetime,
     BaseModel,
     ConfigDict,
+    EmailStr,
     Field,
     ValidationError,
     field_validator,
@@ -25,10 +28,28 @@ class BackendUnavailable(RuntimeError):
         )
 
 
+class BackendOutcomeUnknown(BackendUnavailable):
+    def __init__(self) -> None:
+        RuntimeError.__init__(
+            self,
+            "The save outcome is unknown. Reload the latest data before trying again; "
+            "do not repeat the action.",
+        )
+
+
 class BackendError(RuntimeError):
-    def __init__(self, status: int, detail: str) -> None:
+    def __init__(
+        self,
+        status: int,
+        detail: str,
+        *,
+        code: str | None = None,
+        displacement_preview: BreakDisplacementPreview | None = None,
+    ) -> None:
         self.status = status
         self.detail = detail
+        self.code = code
+        self.displacement_preview = displacement_preview
         super().__init__(detail)
 
 
@@ -74,6 +95,10 @@ class Token(BaseModel):
     token_type: Literal["bearer"]
 
 
+class NoContent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class Account(BaseModel):
     id: uuid.UUID
     full_name: str | None
@@ -97,6 +122,306 @@ class TeacherProfile(BaseModel):
 class StudentProfile(BaseModel):
     notification_lesson: int | None
     notification_homework: int | None
+
+
+class StudentPickerItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    display_label: str
+
+
+class StudentPickerPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[StudentPickerItem]
+    total: int = Field(ge=0)
+
+
+ManagementResource = Literal[
+    "lessons", "recurrent-lessons", "breaks", "recurrent-breaks", "vacations"
+]
+
+
+class EventManagementItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    event_type: Literal["LESSON", "BREAK", "VACATION"]
+    start: AwareDatetime
+    end: AwareDatetime
+    user_id: uuid.UUID
+    subject_label: str = Field(min_length=1)
+    is_recurrent: bool
+    cancelled_occurrences: int = Field(ge=0)
+    visibility_status: (
+        Literal["visible", "hidden_by_vacation", "not_applicable"] | None
+    ) = None
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.start >= self.end:
+            raise ValueError("Managed event start must be before end")
+        return self
+
+
+class EventManagementPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[EventManagementItem]
+    total: int = Field(ge=0)
+
+
+class RecurrentCancel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: AwareDatetime
+    end: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.start >= self.end:
+            raise ValueError("Cancellation start must be before end")
+        return self
+
+
+class ManagedOccurrence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: AwareDatetime
+    end: AwareDatetime
+    status: Literal["visible", "hidden_by_vacation", "cancelled"]
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.start >= self.end:
+            raise ValueError("Occurrence start must be before end")
+        return self
+
+
+class EventManagementDetail(EventManagementItem):
+    interval: int | None = Field(default=None, gt=0, strict=True)
+    interval_end: AwareDatetime | None = None
+    recurrence_mode: Literal["UTC_STEP", "TEACHER_LOCAL"] | None = None
+    recurrence_timezone: str | None = None
+    cancels: list[RecurrentCancel] = Field(default_factory=list)
+    revision: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    inspected_occurrence: ManagedOccurrence | None = None
+
+    @model_validator(mode="after")
+    def validate_recurrence_shape(self) -> Self:
+        recurrence_fields = (self.interval, self.interval_end, self.recurrence_mode)
+        if self.is_recurrent and any(value is None for value in recurrence_fields):
+            raise ValueError("Recurring event details require recurrence metadata")
+        if not self.is_recurrent and (
+            any(value is not None for value in recurrence_fields)
+            or self.recurrence_timezone is not None
+            or self.cancels
+        ):
+            raise ValueError("One-off event details cannot contain recurrence metadata")
+        return self
+
+
+class EventWriteResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    start: AwareDatetime
+    end: AwareDatetime
+    user_id: uuid.UUID
+    event_type: Literal["LESSON", "BREAK", "VACATION"]
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.start >= self.end:
+            raise ValueError("Event start must be before end")
+        return self
+
+
+class RecurrentEventWriteResult(EventWriteResult):
+    interval: int = Field(gt=0, strict=True)
+    interval_end: AwareDatetime
+
+
+class EventCreatePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: AwareDatetime
+    end: AwareDatetime | None = None
+    user_id: uuid.UUID
+    event_type: Literal["LESSON", "BREAK", "VACATION"]
+
+
+class EventUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: AwareDatetime
+    end: AwareDatetime
+    user_id: uuid.UUID
+    event_type: Literal["LESSON", "BREAK", "VACATION"] | None = None
+
+
+class RecurrentEventCreatePayload(EventCreatePayload):
+    interval: int = Field(gt=0, strict=True)
+    interval_end: AwareDatetime
+
+
+class RecurrentEventUpdatePayload(EventUpdatePayload):
+    interval: int = Field(gt=0, strict=True)
+    interval_end: AwareDatetime
+    cancels: list[RecurrentCancel] | None = None
+
+
+class OccurrenceActionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cancelled_occurrence: RecurrentCancel
+    revision: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    replacement: EventWriteResult | None = None
+
+
+class RecurrentOccurrenceCancelPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    occurrence_start: AwareDatetime
+    occurrence_end: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.occurrence_start >= self.occurrence_end:
+            raise ValueError("Occurrence start must be before end")
+        return self
+
+
+class RecurrentOccurrenceMovePayload(RecurrentOccurrenceCancelPayload):
+    replacement_start: AwareDatetime
+    replacement_end: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_replacement(self) -> Self:
+        if self.replacement_start >= self.replacement_end:
+            raise ValueError("Replacement start must be before end")
+        return self
+
+
+class DisplacedOccurrence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_kind: Literal["event", "recurrent_event"]
+    source_id: uuid.UUID
+    user_id: uuid.UUID
+    event_type: Literal["LESSON"]
+    start: AwareDatetime
+    end: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.start >= self.end:
+            raise ValueError("Affected occurrence start must be before end")
+        return self
+
+
+class BreakDisplacementPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Literal["break_displacement_confirmation_required"]
+    message: Literal["Confirm cancellation of overlapping lesson occurrences"]
+    confirmation_token: str = Field(pattern=r"^[0-9a-f]{64}$")
+    affected_occurrences: list[DisplacedOccurrence] = Field(min_length=1)
+
+
+class SelfProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str | None = Field(default=None, max_length=256)
+    email: EmailStr | None = None
+    timezone: str | None = None
+    notification_lessons_today: int | None = Field(
+        default=None, ge=0, le=1439, strict=True
+    )
+
+    @field_validator("email", "timezone", mode="before")
+    @classmethod
+    def reject_explicit_null_credentials(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("Email and timezone cannot be null")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError("Invalid timezone") from exc
+        return value
+
+
+class TeacherProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,56}$")
+    work_start: str | None = Field(default=None, pattern=r"^[0-9]{2}:[0-9]{2}$")
+    work_end: str | None = Field(default=None, pattern=r"^[0-9]{2}:[0-9]{2}$")
+    working_days: list[Annotated[int, Field(ge=1, le=7, strict=True)]] | None = Field(
+        default=None, min_length=1, max_length=7
+    )
+    lesson_length: int | None = Field(default=None, gt=0, strict=True)
+    between_lessons_break: int | None = Field(default=None, ge=0, strict=True)
+    max_consecutive_lessons: int | None = Field(default=None, gt=0, strict=True)
+    max_lessons_per_day: int | None = Field(default=None, gt=0, strict=True)
+
+    @field_validator(
+        "code",
+        "work_start",
+        "work_end",
+        "working_days",
+        "lesson_length",
+        "between_lessons_break",
+        "max_consecutive_lessons",
+        "max_lessons_per_day",
+        mode="before",
+    )
+    @classmethod
+    def reject_explicit_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("Teacher preferences cannot be null")
+        return value
+
+    @model_validator(mode="after")
+    def validate_work_days_and_times(self) -> Self:
+        if self.working_days is not None and (
+            any(type(day) is not int or not 1 <= day <= 7 for day in self.working_days)
+            or len(set(self.working_days)) != len(self.working_days)
+        ):
+            raise ValueError("Working days must be unique ISO weekdays")
+        for value in (self.work_start, self.work_end):
+            if value is not None:
+                hour, minute = (int(part) for part in value.split(":"))
+                if hour > 23 or minute > 59:
+                    raise ValueError("Work time is invalid")
+        if (
+            self.work_start is not None
+            and self.work_end is not None
+            and self.work_end <= self.work_start
+        ):
+            raise ValueError("Work end must be later than work start")
+        if (
+            self.max_consecutive_lessons is not None
+            and self.max_lessons_per_day is not None
+            and self.max_consecutive_lessons > self.max_lessons_per_day
+        ):
+            raise ValueError("Consecutive lesson limit cannot exceed daily limit")
+        return self
+
+
+class StudentProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    notification_lesson: int | None = Field(default=None, ge=1, le=600, strict=True)
+    notification_homework: int | None = Field(default=None, ge=1, strict=True)
 
 
 class TeacherConfirmation(BaseModel):
@@ -188,7 +513,7 @@ class ScheduleResponse(BaseModel):
         return self
 
 
-ErrorContext = Literal["default", "schedule"]
+ErrorContext = Literal["default", "schedule", "scheduling"]
 DEFAULT_ERROR_MESSAGES = {
     400: "Account inactive or request not allowed.",
     401: "Authentication failed. Check bot configuration or restart with /start.",
@@ -204,6 +529,27 @@ SCHEDULE_ERROR_MESSAGES = {
     404: "The linked teacher is not available for schedule viewing.",
     409: "The linked teacher cannot provide a schedule.",
     422: "The schedule request or calendar data is invalid.",
+}
+SCHEDULING_ERROR_MESSAGES = {
+    400: "This scheduling action is not allowed for this account.",
+    401: "Authentication failed. Restart with /start and reload the event.",
+    403: "This account does not have permission to manage this event.",
+    404: "The selected student or event is no longer available.",
+    409: "The request conflicts with the current schedule. Reload and try again.",
+    422: "Check the date, time, and selected student.",
+}
+POLICY_ERROR_MESSAGES = {
+    "Teacher work hours are not configured": "The teacher has not configured working hours.",
+    "Teacher working days are not configured": "The teacher has not configured working days.",
+    "Lesson starts on a non-working day": "That date is not one of the teacher's working days.",
+    "Lesson starts before the teacher's work hours": "That time is before the teacher's working hours.",
+    "Lesson ends after the teacher's work hours": "That time is after the teacher's working hours.",
+    "Lesson cannot cross local midnight": "A lesson cannot cross local midnight in the teacher's timezone.",
+    "Students must use the teacher's configured lesson duration": "Use the lesson duration configured by the teacher.",
+    "Default lesson duration is outside the supported range": "The teacher's configured lesson duration is outside the supported range.",
+    "Event overlaps an applicable vacation": "That time falls within an applicable vacation.",
+    "Event overlaps an existing non-lesson event": "That time overlaps another scheduled event.",
+    "Event overlaps an existing event": "That time overlaps another scheduled event.",
 }
 
 
@@ -233,49 +579,128 @@ class BackendClient:
         token: str | None = None,
         body: dict[str, Any] | None = None,
         params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
         error_context: ErrorContext = "default",
+        _ambiguous_write: bool = False,
     ) -> Model:
         probe = await self.breaker.enter()
         failed = False
-        headers = (
+        request_headers = (
             {"X-Bot-Service-Key": self.credential}
             if service
             else {"Authorization": f"Bearer {token}"}
             if token
             else {}
         )
+        if headers:
+            request_headers.update(headers)
         try:
             try:
                 response = await self.http.request(
-                    method, path, headers=headers, params=params, json=body
+                    method, path, headers=request_headers, params=params, json=body
                 )
             except httpx.TransportError as exc:
                 failed = True
+                if _ambiguous_write:
+                    raise BackendOutcomeUnknown() from exc
                 raise BackendUnavailable() from exc
             if response.status_code >= 500:
                 failed = True
+                if _ambiguous_write:
+                    raise BackendOutcomeUnknown()
                 raise BackendUnavailable()
             if response.is_error:
-                # Do not display arbitrary backend payloads or echo rejected input.
-                messages = (
-                    SCHEDULE_ERROR_MESSAGES
-                    if error_context == "schedule"
-                    else DEFAULT_ERROR_MESSAGES
-                )
-                raise BackendError(
-                    response.status_code,
-                    messages.get(response.status_code, "Backend rejected the request."),
-                )
+                raise self._backend_error(response, error_context)
+            if response.status_code == httpx.codes.NO_CONTENT:
+                if model is NoContent:
+                    return model()
+                failed = True
+                if _ambiguous_write:
+                    raise BackendOutcomeUnknown()
+                raise BackendUnavailable()
+            if model is NoContent:
+                failed = True
+                if _ambiguous_write:
+                    raise BackendOutcomeUnknown()
+                raise BackendUnavailable()
             try:
                 return model.model_validate_json(response.content)
             except ValidationError as exc:
                 failed = True
+                if _ambiguous_write:
+                    raise BackendOutcomeUnknown() from exc
                 raise BackendUnavailable() from exc
         except asyncio.CancelledError:
             failed = True
             raise
         finally:
             await self.breaker.finish(failed, probe)
+
+    @staticmethod
+    def _backend_error(
+        response: httpx.Response, error_context: ErrorContext
+    ) -> BackendError:
+        try:
+            response_body = response.json()
+        except ValueError:
+            response_body = None
+
+        detail = (
+            response_body.get("detail") if isinstance(response_body, dict) else None
+        )
+        code = detail.get("code") if isinstance(detail, dict) else None
+        if code == "break_displacement_confirmation_required":
+            try:
+                preview = BreakDisplacementPreview.model_validate(detail)
+            except ValidationError:
+                pass
+            else:
+                return BackendError(
+                    response.status_code,
+                    "Review the affected lessons before confirming this break.",
+                    code=preview.code,
+                    displacement_preview=preview,
+                )
+
+        if code == "stale_event_revision":
+            message = "This event changed. Reload it before editing."
+        elif code == "occurrence_already_cancelled":
+            message = "This lesson occurrence is already cancelled. Reload the series."
+        elif (
+            response.status_code == 409
+            and detail == "Schedule is being changed; retry this request."
+        ):
+            message = "The schedule is being changed. Reload and try again."
+        elif isinstance(detail, str) and detail in POLICY_ERROR_MESSAGES:
+            message = POLICY_ERROR_MESSAGES[detail]
+        elif isinstance(detail, str) and detail.startswith(
+            "Teacher's daily lesson limit of "
+        ):
+            message = "The teacher's daily lesson limit would be exceeded."
+        elif isinstance(detail, str) and detail.startswith(
+            "Teacher's consecutive lesson limit of "
+        ):
+            message = "The teacher's consecutive lesson limit would be exceeded."
+        else:
+            messages = {
+                "default": DEFAULT_ERROR_MESSAGES,
+                "schedule": SCHEDULE_ERROR_MESSAGES,
+                "scheduling": SCHEDULING_ERROR_MESSAGES,
+            }[error_context]
+            message = messages.get(
+                response.status_code, "Backend rejected the request."
+            )
+
+        return BackendError(
+            response.status_code,
+            message,
+            code=(
+                code
+                if isinstance(code, str)
+                and code in {"stale_event_revision", "occurrence_already_cancelled"}
+                else None
+            ),
+        )
 
     async def session(
         self,
@@ -336,6 +761,276 @@ class BackendClient:
                 params=params,
                 error_context=error_context,
             )
+
+    async def write(
+        self,
+        method: Literal["POST", "PUT", "PATCH"],
+        path: str,
+        model: type[Model],
+        sender_id: int,
+        chat_id: int,
+        payload: BaseModel,
+        *,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        revision: str | None = None,
+        confirm_displacement: bool = False,
+        displacement_token: str | None = None,
+        error_context: ErrorContext = "scheduling",
+    ) -> Model:
+        if sender_id not in self.tokens:
+            await self.session(sender_id, chat_id, error_context=error_context)
+        request_headers = dict(headers or {})
+        if revision is not None:
+            request_headers["If-Match"] = revision
+        if displacement_token is not None:
+            request_headers["X-Displacement-Token"] = displacement_token
+        if confirm_displacement:
+            params = {**(params or {}), "confirm_displacement": "true"}
+
+        async def send() -> Model:
+            return await self.request(
+                method,
+                path,
+                model,
+                token=self.tokens[sender_id],
+                body=payload.model_dump(mode="json", exclude_unset=True),
+                params=params,
+                headers=request_headers,
+                error_context=error_context,
+                _ambiguous_write=True,
+            )
+
+        try:
+            return await send()
+        except BackendError as exc:
+            if exc.status != 401:
+                raise
+            # A received 401 definitively rejects the write, so one renewed-token
+            # attempt is safe. Transport failures and 5xx responses are never retried.
+            await self.session(sender_id, chat_id, error_context=error_context)
+            return await send()
+
+    async def delete(
+        self,
+        path: str,
+        sender_id: int,
+        chat_id: int,
+        *,
+        revision: str | None = None,
+        error_context: ErrorContext = "scheduling",
+    ) -> None:
+        if sender_id not in self.tokens:
+            await self.session(sender_id, chat_id, error_context=error_context)
+        request_headers = {"If-Match": revision} if revision is not None else None
+
+        async def send() -> NoContent:
+            return await self.request(
+                "DELETE",
+                path,
+                NoContent,
+                token=self.tokens[sender_id],
+                headers=request_headers,
+                error_context=error_context,
+                _ambiguous_write=True,
+            )
+
+        try:
+            await send()
+        except BackendError as exc:
+            if exc.status != 401:
+                raise
+            await self.session(sender_id, chat_id, error_context=error_context)
+            await send()
+
+    async def read_student_picker(
+        self,
+        sender_id: int,
+        chat_id: int,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> StudentPickerPage:
+        return await self.read(
+            "/api/v1/auth/teacher/students",
+            StudentPickerPage,
+            sender_id,
+            chat_id,
+            params={"skip": str(skip), "limit": str(limit)},
+            error_context="scheduling",
+        )
+
+    async def read_management_page(
+        self,
+        sender_id: int,
+        chat_id: int,
+        resource: ManagementResource,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        subject_id: uuid.UUID | None = None,
+    ) -> EventManagementPage:
+        params = {"skip": str(skip), "limit": str(limit)}
+        if subject_id is not None:
+            params["subject_id"] = str(subject_id)
+        return await self.read(
+            f"/api/v1/{resource}/",
+            EventManagementPage,
+            sender_id,
+            chat_id,
+            params=params,
+            error_context="scheduling",
+        )
+
+    async def read_management_detail(
+        self,
+        sender_id: int,
+        chat_id: int,
+        resource: ManagementResource,
+        event_id: uuid.UUID,
+        *,
+        occurrence_start: AwareDatetime | None = None,
+    ) -> EventManagementDetail:
+        params = (
+            {"occurrence_start": occurrence_start.isoformat()}
+            if occurrence_start is not None
+            else None
+        )
+        return await self.read(
+            f"/api/v1/{resource}/{event_id}",
+            EventManagementDetail,
+            sender_id,
+            chat_id,
+            params=params,
+            error_context="scheduling",
+        )
+
+    async def write_management_event(
+        self,
+        method: Literal["POST", "PUT"],
+        resource: ManagementResource,
+        sender_id: int,
+        chat_id: int,
+        payload: BaseModel,
+        model: type[Model],
+        *,
+        event_id: uuid.UUID | None = None,
+        revision: str | None = None,
+        confirm_displacement: bool = False,
+        displacement_token: str | None = None,
+    ) -> Model:
+        if method == "PUT" and event_id is None:
+            raise ValueError("Updating a managed event requires its ID")
+        if method == "POST" and (event_id is not None or revision is not None):
+            raise ValueError(
+                "Creating a managed event cannot include an ID or revision"
+            )
+        path = f"/api/v1/{resource}/"
+        if event_id is not None:
+            path += str(event_id)
+        return await self.write(
+            method,
+            path,
+            model,
+            sender_id,
+            chat_id,
+            payload,
+            revision=revision,
+            confirm_displacement=confirm_displacement,
+            displacement_token=displacement_token,
+        )
+
+    async def delete_management_event(
+        self,
+        resource: ManagementResource,
+        event_id: uuid.UUID,
+        sender_id: int,
+        chat_id: int,
+        *,
+        revision: str,
+    ) -> None:
+        await self.delete(
+            f"/api/v1/{resource}/{event_id}",
+            sender_id,
+            chat_id,
+            revision=revision,
+        )
+
+    async def cancel_recurrent_occurrence(
+        self,
+        sender_id: int,
+        chat_id: int,
+        lesson_id: uuid.UUID,
+        payload: RecurrentOccurrenceCancelPayload,
+    ) -> OccurrenceActionResult:
+        return await self.write(
+            "POST",
+            f"/api/v1/recurrent-lessons/{lesson_id}/occurrences/cancel",
+            OccurrenceActionResult,
+            sender_id,
+            chat_id,
+            payload,
+        )
+
+    async def move_recurrent_occurrence(
+        self,
+        sender_id: int,
+        chat_id: int,
+        lesson_id: uuid.UUID,
+        payload: RecurrentOccurrenceMovePayload,
+    ) -> OccurrenceActionResult:
+        return await self.write(
+            "POST",
+            f"/api/v1/recurrent-lessons/{lesson_id}/occurrences/move",
+            OccurrenceActionResult,
+            sender_id,
+            chat_id,
+            payload,
+        )
+
+    async def update_me(
+        self, sender_id: int, chat_id: int, payload: SelfProfileUpdate
+    ) -> Account:
+        return await self.write(
+            "PATCH",
+            "/api/v1/auth/me",
+            Account,
+            sender_id,
+            chat_id,
+            payload,
+        )
+
+    async def update_teacher_profile(
+        self,
+        sender_id: int,
+        chat_id: int,
+        user_id: uuid.UUID,
+        payload: TeacherProfileUpdate,
+    ) -> TeacherProfile:
+        return await self.write(
+            "PUT",
+            f"/api/v1/auth/users/{user_id}/teacher-profile",
+            TeacherProfile,
+            sender_id,
+            chat_id,
+            payload,
+        )
+
+    async def update_student_profile(
+        self,
+        sender_id: int,
+        chat_id: int,
+        user_id: uuid.UUID,
+        payload: StudentProfileUpdate,
+    ) -> StudentProfile:
+        return await self.write(
+            "PUT",
+            f"/api/v1/auth/users/{user_id}/student-profile",
+            StudentProfile,
+            sender_id,
+            chat_id,
+            payload,
+        )
 
     async def read_schedule_day(
         self,

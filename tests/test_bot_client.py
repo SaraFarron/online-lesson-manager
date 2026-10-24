@@ -3,15 +3,26 @@ from datetime import date, timedelta
 
 import httpx
 import pytest
+from pydantic import BaseModel
 
 from backend.auth.utils import create_access_token
 from telegram.api import (
     BackendClient,
     BackendError,
+    BackendOutcomeUnknown,
     BackendUnavailable,
     CircuitBreaker,
+    EventCreatePayload,
+    EventWriteResult,
+    RecurrentEventCreatePayload,
+    RecurrentEventWriteResult,
+    RecurrentOccurrenceCancelPayload,
+    RecurrentOccurrenceMovePayload,
     Registration,
     ScheduleResponse,
+    SelfProfileUpdate,
+    StudentProfileUpdate,
+    TeacherProfileUpdate,
     Token,
 )
 from telegram.runtime import build_dispatcher
@@ -228,6 +239,411 @@ async def test_schedule_server_and_malformed_responses_are_unavailable() -> None
         status[0] = 0
         with pytest.raises(BackendUnavailable):
             await api.read_schedule_day(123, 456)
+
+
+async def test_typed_management_reads_writes_profiles_and_204_delete(
+    client, bot_service_key
+) -> None:
+    api = BackendClient(client, bot_service_key)
+    teacher_id = 5000000001
+    student_id = 5000000002
+    teacher = await api.register(
+        Registration(
+            telegram_user_id=teacher_id,
+            telegram_private_chat_id=teacher_id,
+            full_name="Management Teacher",
+            role="TEACHER",
+            timezone="UTC",
+        )
+    )
+    student = await api.register(
+        Registration(
+            telegram_user_id=student_id,
+            telegram_private_chat_id=student_id,
+            full_name="Management Student",
+            role="STUDENT",
+            timezone="UTC",
+            teacher_code=teacher.teacher.code,
+        )
+    )
+
+    picker = await api.read_student_picker(teacher_id, teacher_id)
+    assert picker.total == 1
+    assert picker.items[0].id == student.account.id
+
+    lesson = await api.write_management_event(
+        "POST",
+        "lessons",
+        teacher_id,
+        teacher_id,
+        EventCreatePayload(
+            start="2035-01-08T10:00:00Z",
+            end="2035-01-08T11:00:00Z",
+            user_id=student.account.id,
+            event_type="LESSON",
+        ),
+        EventWriteResult,
+    )
+    page = await api.read_management_page(teacher_id, teacher_id, "lessons")
+    assert page.total == 1
+    assert page.items[0].id == lesson.id
+
+    detail = await api.read_management_detail(
+        teacher_id, teacher_id, "lessons", lesson.id
+    )
+    assert detail.revision
+    await api.delete_management_event(
+        "lessons", lesson.id, teacher_id, teacher_id, revision=detail.revision
+    )
+    assert (
+        await api.read_management_page(teacher_id, teacher_id, "lessons")
+    ).total == 0
+
+    series = await api.write_management_event(
+        "POST",
+        "recurrent-lessons",
+        teacher_id,
+        teacher_id,
+        RecurrentEventCreatePayload(
+            start="2035-01-08T10:00:00Z",
+            end="2035-01-08T11:00:00Z",
+            user_id=student.account.id,
+            event_type="LESSON",
+            interval=7,
+            interval_end="2035-01-22T10:00:00Z",
+        ),
+        RecurrentEventWriteResult,
+    )
+    moved = await api.move_recurrent_occurrence(
+        teacher_id,
+        teacher_id,
+        series.id,
+        RecurrentOccurrenceMovePayload(
+            occurrence_start="2035-01-08T10:00:00Z",
+            occurrence_end="2035-01-08T11:00:00Z",
+            replacement_start="2035-01-09T10:00:00Z",
+            replacement_end="2035-01-09T11:00:00Z",
+        ),
+    )
+    assert moved.replacement is not None
+    cancelled = await api.cancel_recurrent_occurrence(
+        teacher_id,
+        teacher_id,
+        series.id,
+        RecurrentOccurrenceCancelPayload(
+            occurrence_start="2035-01-15T10:00:00Z",
+            occurrence_end="2035-01-15T11:00:00Z",
+        ),
+    )
+    assert cancelled.cancelled_occurrence.start.isoformat().startswith("2035-01-15")
+    series_detail = await api.read_management_detail(
+        teacher_id, teacher_id, "recurrent-lessons", series.id
+    )
+    assert series_detail.cancelled_occurrences == 2
+
+    teacher_profile = await api.update_teacher_profile(
+        teacher_id,
+        teacher_id,
+        teacher.account.id,
+        TeacherProfileUpdate(work_start="08:30"),
+    )
+    assert teacher_profile.work_start == "08:30"
+
+    account = await api.update_me(
+        student_id,
+        student_id,
+        SelfProfileUpdate(notification_lessons_today=None),
+    )
+    assert account.id == student.account.id
+    student_profile = await api.update_student_profile(
+        student_id,
+        student_id,
+        student.account.id,
+        StudentProfileUpdate(notification_lesson=None),
+    )
+    assert student_profile.notification_lesson is None
+
+
+async def test_lost_event_create_response_is_reconciled_by_read_not_replayed(
+    client, bot_service_key
+) -> None:
+    create_attempts = 0
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        nonlocal create_attempts
+        response = await client.send(request)
+        if request.method == "POST" and request.url.path == "/api/v1/lessons/":
+            create_attempts += 1
+            raise httpx.ReadTimeout("response lost after commit", request=request)
+        return response
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, bot_service_key)
+        teacher_id = 5000000010
+        teacher = await api.register(
+            Registration(
+                telegram_user_id=teacher_id,
+                telegram_private_chat_id=teacher_id,
+                full_name="Uncertain Write Teacher",
+                role="TEACHER",
+                timezone="UTC",
+            )
+        )
+        with pytest.raises(BackendOutcomeUnknown):
+            await api.write_management_event(
+                "POST",
+                "lessons",
+                teacher_id,
+                teacher_id,
+                EventCreatePayload(
+                    start="2035-01-08T10:00:00Z",
+                    end="2035-01-08T11:00:00Z",
+                    user_id=teacher.account.id,
+                    event_type="LESSON",
+                ),
+                EventWriteResult,
+            )
+
+        page = await api.read_management_page(teacher_id, teacher_id, "lessons")
+
+    assert create_attempts == 1
+    assert page.total == 1
+
+
+class _WritePayload(BaseModel):
+    name: str
+
+
+async def test_write_retries_once_only_after_definitive_401() -> None:
+    requests: list[httpx.Request] = []
+    write_count = 0
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        nonlocal write_count
+        requests.append(request)
+        if request.url.path == "/api/v1/telegram/session":
+            return httpx.Response(
+                200, json={"access_token": "renewed", "token_type": "bearer"}
+            )
+        write_count += 1
+        if write_count == 1:
+            return httpx.Response(401, json={"detail": "not displayed"})
+        return httpx.Response(
+            200, json={"access_token": "saved", "token_type": "bearer"}
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "expired-token"
+        result = await api.write(
+            "POST",
+            "/api/v1/lessons/",
+            Token,
+            123,
+            456,
+            _WritePayload(name="lesson"),
+            revision="a" * 64,
+            displacement_token="b" * 64,
+            confirm_displacement=True,
+        )
+
+    assert result.access_token == "saved"
+    writes = [request for request in requests if request.url.path == "/api/v1/lessons/"]
+    assert len(writes) == 2
+    assert writes[0].headers["If-Match"] == "a" * 64
+    assert writes[0].headers["X-Displacement-Token"] == "b" * 64
+    assert writes[0].url.params["confirm_displacement"] == "true"
+    assert writes[0].content == b'{"name":"lesson"}'
+    assert (
+        sum(request.url.path == "/api/v1/telegram/session" for request in requests) == 1
+    )
+
+
+@pytest.mark.parametrize("failure", ["transport", "server"])
+async def test_ambiguous_write_is_not_replayed(failure: str) -> None:
+    calls = 0
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if failure == "transport":
+            raise httpx.ReadTimeout("private transport details", request=request)
+        return httpx.Response(503, json={"detail": "private server details"})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "user-jwt"
+        with pytest.raises(BackendOutcomeUnknown) as error:
+            await api.write(
+                "POST",
+                "/api/v1/lessons/",
+                Token,
+                123,
+                456,
+                _WritePayload(name="lesson"),
+            )
+
+    assert calls == 1
+    assert "outcome is unknown" in str(error.value)
+    assert "Reload the latest data" in str(error.value)
+    assert "private" not in str(error.value)
+
+
+async def test_scheduling_errors_are_safe_and_displacement_preview_is_typed() -> None:
+    payload = {
+        "detail": {
+            "code": "break_displacement_confirmation_required",
+            "message": "Confirm cancellation of overlapping lesson occurrences",
+            "confirmation_token": "a" * 64,
+            "affected_occurrences": [
+                {
+                    "source_kind": "recurrent_event",
+                    "source_id": "00000000-0000-0000-0000-000000000001",
+                    "user_id": "00000000-0000-0000-0000-000000000002",
+                    "event_type": "LESSON",
+                    "start": "2035-01-08T10:00:00Z",
+                    "end": "2035-01-08T11:00:00Z",
+                }
+            ],
+        }
+    }
+    response = [httpx.Response(409, json=payload)]
+
+    async def transport(_request: httpx.Request) -> httpx.Response:
+        return response[0]
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "user-jwt"
+        with pytest.raises(BackendError) as preview_error:
+            await api.read(
+                "/api/v1/breaks/",
+                EventWriteResult,
+                123,
+                456,
+                error_context="scheduling",
+            )
+        preview = preview_error.value.displacement_preview
+        assert preview is not None
+        assert preview.code == "break_displacement_confirmation_required"
+        assert len(preview.affected_occurrences) == 1
+
+        response[0] = httpx.Response(
+            409,
+            json={
+                "detail": {
+                    "code": "break_displacement_confirmation_required",
+                    "message": "arbitrary message",
+                    "confirmation_token": "not-a-token",
+                    "affected_occurrences": [],
+                }
+            },
+        )
+        with pytest.raises(BackendError) as invalid_preview_error:
+            await api.read(
+                "/api/v1/breaks/",
+                EventWriteResult,
+                123,
+                456,
+                error_context="scheduling",
+            )
+        assert invalid_preview_error.value.displacement_preview is None
+        assert invalid_preview_error.value.code is None
+        assert "arbitrary message" not in str(invalid_preview_error.value)
+
+        response[0] = httpx.Response(
+            409,
+            json={"detail": {"code": "stale_event_revision", "message": "private"}},
+        )
+        with pytest.raises(BackendError) as stale_error:
+            await api.read(
+                "/api/v1/lessons/1",
+                EventWriteResult,
+                123,
+                456,
+                error_context="scheduling",
+            )
+        assert stale_error.value.code == "stale_event_revision"
+        assert str(stale_error.value) == "This event changed. Reload it before editing."
+        assert "private" not in str(stale_error.value)
+
+        response[0] = httpx.Response(
+            409, json={"detail": "Schedule is being changed; retry this request."}
+        )
+        with pytest.raises(BackendError) as contention_error:
+            await api.read(
+                "/api/v1/lessons/",
+                EventWriteResult,
+                123,
+                456,
+                error_context="scheduling",
+            )
+        assert contention_error.value.displacement_preview is None
+        assert "being changed" in str(contention_error.value)
+
+        response[0] = httpx.Response(
+            422, json={"detail": "Lesson starts before the teacher's work hours"}
+        )
+        with pytest.raises(BackendError) as policy_error:
+            await api.read(
+                "/api/v1/lessons/",
+                EventWriteResult,
+                123,
+                456,
+                error_context="scheduling",
+            )
+        assert (
+            str(policy_error.value)
+            == "That time is before the teacher's working hours."
+        )
+
+
+@pytest.mark.parametrize(
+    ("status", "detail", "expected"),
+    [
+        (
+            422,
+            "Teacher working days are not configured",
+            "The teacher has not configured working days.",
+        ),
+        (
+            422,
+            "Students must use the teacher's configured lesson duration",
+            "Use the lesson duration configured by the teacher.",
+        ),
+        (
+            422,
+            "Teacher's daily lesson limit of 6 would be exceeded",
+            "The teacher's daily lesson limit would be exceeded.",
+        ),
+        (
+            422,
+            "Teacher's consecutive lesson limit of 4 would be exceeded",
+            "The teacher's consecutive lesson limit would be exceeded.",
+        ),
+        (
+            422,
+            "Event overlaps an existing event",
+            "That time overlaps another scheduled event.",
+        ),
+    ],
+)
+def test_known_booking_policy_errors_are_safely_mapped(
+    status: int, detail: str, expected: str
+) -> None:
+    error = BackendClient._backend_error(
+        httpx.Response(status, json={"detail": detail}), "scheduling"
+    )
+    assert str(error) == expected
+    assert detail not in str(error)
 
 
 async def test_breaker_opens_and_allows_one_half_open_probe() -> None:

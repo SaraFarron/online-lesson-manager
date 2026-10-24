@@ -134,7 +134,7 @@ Apply these in addition to each task's checks:
 
 **Reuse:** Existing HTTP client, circuit breaker, tokens, `BackendError`, safe-read auth renewal.
 
-**Acceptance:** [ ] 204, structured 409, validation, stale writes, 401, transport failure and lost response tests pass without duplicate creates or raw payload disclosure. [ ] Common bot checks pass.
+**Acceptance:** [x] 204, structured 409, validation, stale writes, 401, transport failure and lost response tests pass without duplicate creates or raw payload disclosure. [x] Common bot checks pass (`199 passed, 4 skipped`; Ruff check, Telegram/test formatting, and `mypy telegram` pass).
 
 **Out of scope:** Offline mutation queues and backend imports. **Suitable for:** AI agent.
 
