@@ -240,9 +240,11 @@ For an omitted-year February 29 that cannot be represented in the next calendar 
 
 **Reuse:** Existing bot integration fixtures and booking/concurrency tests.
 
-**Acceptance:** [ ] Every new action is reachable from the role home and has a tested success/error/cancel path. [ ] Common checks pass and evidence is recorded. [ ] Optional real-bot readability smoke test is reported separately, not assumed.
+**Acceptance:** [x] Every new action is reachable from the role home and has tested success/error/cancel paths. [x] Common checks pass and evidence is recorded: full suite 265 passed, 4 skipped; Ruff check/format and `mypy telegram` pass. [x] Optional real-bot readability smoke test is explicitly reported separately; it was not run.
 
 **Out of scope:** Automatic breaks, homework, notification delivery, HTMX, offline cache. **Suitable for:** AI agent; human for live UX acceptance.
+
+**Execution:** Added a real-dispatcher cross-flow test with one teacher, two students, and an unrelated teacher. It exercises settings, booking and daily-limit rejection, role-scoped schedules, vacation hide/unhide, break displacement preview/cancel/confirm, UTC/local boundaries, restart recovery, stale callbacks, and measured message edits. Existing focused integration tests cover whole-series/occurrence edits and ambiguous writes. Verification used the simulated Bot API transport and real ASGI backend; no live Telegram readability smoke test was run.
 
 ## Open questions / implementation gates
 

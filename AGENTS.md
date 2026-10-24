@@ -102,8 +102,17 @@ a README-described feature.
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
 | Homework (assign/submit/mark done) | **Not started** | `backend/homework/` is an empty package. |
 | Student profile view for teacher (history, delete w/ confirm) | **Not started** | No action-log table or endpoint. |
-| Telegram bot | **Partial** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, editable post-onboarding account/profile settings, retry/recovery and edit-in-place screens. Live schedule viewing includes previous/next-week navigation; homework actions, notification delivery and offline schedule cache are not implemented. |
+| Telegram bot | **Partial** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, editable post-onboarding settings, lesson/event management, manual breaks, vacations, retry/recovery and edit-in-place screens. Live schedule viewing includes previous/next-week navigation; homework actions, notification delivery and offline schedule cache are not implemented. |
 | HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |
+
+## Scheduling and Telegram handoff
+
+The implemented Telegram scheduling/settings scope and cross-flow evidence are
+tracked in [telegram-scheduling-and-settings-ui](docs/plans/telegram-scheduling-and-settings-ui.md).
+The next two follow-ons are [automatic between-lesson breaks](docs/plans/automatic-between-lesson-breaks.md)
+and [homework](docs/plans/homework-backend-and-telegram-ui.md). These remain
+separate work; do not describe automatic breaks, notification delivery, or
+homework actions as implemented.
 
 ## Scheduling Foundation Boundaries
 
