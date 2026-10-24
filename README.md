@@ -142,11 +142,14 @@ successful local signup. If a registration response is lost, the bot checks
 the backend session before resubmitting. Teacher workdays/hours, lesson
 duration defaults, and daily/consecutive lesson limits are enforced by the
 backend. Notification delivery, automatic break creation, offline schedule
-cache, homework actions, account linking/transfers, and
-post-onboarding settings UI remain unimplemented. Authenticated day/week
-schedule reads are available through the backend and Telegram bot as described
-below. Shared temporal conflict checks and vacation/break policies are
-implemented as described in the scheduling handoff below.
+cache, homework actions, and account linking/transfers remain unimplemented.
+Teachers and students can edit their saved account and role preferences from
+Settings in the Telegram role home. Account and role preferences are saved
+separately; timezone changes do not move stored event instants, and notification
+preferences do not imply delivery. Authenticated day/week schedule reads are
+available through the backend and Telegram bot as described below. Shared
+temporal conflict checks and vacation/break policies are implemented as
+described in the scheduling handoff below.
 
 Verification: `uv run pytest -q tests` covers simulated Telegram updates with
 recorded Bot API calls, the real ASGI backend, and an isolated SQLite database,

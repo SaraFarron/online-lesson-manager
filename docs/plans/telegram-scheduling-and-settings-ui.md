@@ -224,9 +224,11 @@ For an omitted-year February 29 that cannot be represented in the next calendar 
 
 **Reuse:** Existing self PATCH, owner profile PUT, merged validation, onboarding setting parsers.
 
-**Acceptance:** [ ] Omitted values and invitations stay unchanged; null only disables allowed notifications. [ ] Back/Cancel, invalid merged limits, expired auth and partial failures never report a false all-saved result. [ ] Existing onboarding regressions pass.
+**Acceptance:** [x] Omitted values and invitations stay unchanged; null only disables allowed notifications. [x] Back/Cancel, invalid merged limits, expired auth and partial failures never report a false all-saved result. [x] Existing onboarding regressions pass; full suite: 264 passed, 4 skipped; Ruff check/format and `mypy telegram` pass.
 
 **Out of scope:** New settings, account linking, teacher transfers. **Suitable for:** AI agent.
+
+**Execution:** Added fresh-loaded Telegram settings for both roles. Account and role-profile preferences use separate changed-fields-only writes and authoritative reloads; settings remain preferences-only, timezone changes preserve stored instants, and automatic breaks remain explicitly pending. Unknown writes require reload/reconciliation without replay.
 
 ## Task 11: Verify full Telegram scheduling and document handoff
 

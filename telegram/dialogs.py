@@ -15,6 +15,7 @@ from telegram.inputs import digest_clock, parse_timezone
 from telegram.lesson_dialogs import open_lesson_creation
 from telegram.onboarding import begin_student, begin_teacher
 from telegram.schedule_dialogs import open_today, open_week
+from telegram.settings_dialogs import open_settings
 from telegram.vacation_dialogs import open_vacation_management
 
 
@@ -86,6 +87,8 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         and view.account.role in {"TEACHER", "STUDENT"},
         "can_manage_breaks": view is not None and view.account.role == "TEACHER",
         "can_manage_vacations": view is not None
+        and view.account.role in {"TEACHER", "STUDENT"},
+        "can_edit_settings": view is not None
         and view.account.role in {"TEACHER", "STUDENT"},
     }
 
@@ -179,6 +182,12 @@ def build_dialog() -> Dialog:
                 id="manage_vacations",
                 on_click=open_vacation_management,
                 when="can_manage_vacations",
+            ),
+            Button(
+                Const("Settings"),
+                id="settings",
+                on_click=open_settings,
+                when="can_edit_settings",
             ),
             Row(
                 Button(

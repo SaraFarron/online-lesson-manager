@@ -16,6 +16,7 @@ from telegram.invitations import create_teacher_invitation, parse_teacher_start_
 from telegram.lesson_dialogs import build_lesson_dialog
 from telegram.onboarding import Wizard, build_wizard
 from telegram.schedule_dialogs import build_schedule_dialog
+from telegram.settings_dialogs import build_settings_dialog
 from telegram.vacation_dialogs import build_vacation_dialog
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,7 @@ def build_dispatcher(client: BackendClient | None = None) -> Dispatcher:
     dispatcher.include_router(build_event_management_dialog())
     dispatcher.include_router(build_break_dialog())
     dispatcher.include_router(build_vacation_dialog())
+    dispatcher.include_router(build_settings_dialog())
     dispatcher.include_router(build_wizard())
     fallback = Router(name="stale-callbacks")
     fallback.callback_query.register(orphan_callback)

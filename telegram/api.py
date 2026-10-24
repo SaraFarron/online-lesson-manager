@@ -593,7 +593,7 @@ class ScheduleResponse(BaseModel):
         return self
 
 
-ErrorContext = Literal["default", "schedule", "scheduling"]
+ErrorContext = Literal["default", "schedule", "scheduling", "settings"]
 DEFAULT_ERROR_MESSAGES = {
     400: "Account inactive or request not allowed.",
     401: "Authentication failed. Check bot configuration or restart with /start.",
@@ -617,6 +617,14 @@ SCHEDULING_ERROR_MESSAGES = {
     404: "The selected student or event is no longer available.",
     409: "The request conflicts with the current schedule. Reload and try again.",
     422: "Check the date, time, and selected student.",
+}
+SETTINGS_ERROR_MESSAGES = {
+    400: "This account cannot update these settings.",
+    401: "Authentication failed. Reload settings or restart with /start.",
+    403: "This account cannot update the selected profile.",
+    404: "The account or profile is no longer available.",
+    409: "Settings changed or conflict with saved values. Reload and review them.",
+    422: "Invalid settings. Review the values and merged limits before saving.",
 }
 POLICY_ERROR_MESSAGES = {
     "Teacher work hours are not configured": "The teacher has not configured working hours.",
@@ -776,6 +784,7 @@ class BackendClient:
                 "default": DEFAULT_ERROR_MESSAGES,
                 "schedule": SCHEDULE_ERROR_MESSAGES,
                 "scheduling": SCHEDULING_ERROR_MESSAGES,
+                "settings": SETTINGS_ERROR_MESSAGES,
             }[error_context]
             message = messages.get(
                 response.status_code, "Backend rejected the request."
@@ -1131,6 +1140,7 @@ class BackendClient:
             sender_id,
             chat_id,
             payload,
+            error_context="settings",
         )
 
     async def update_teacher_profile(
@@ -1147,6 +1157,7 @@ class BackendClient:
             sender_id,
             chat_id,
             payload,
+            error_context="settings",
         )
 
     async def update_student_profile(
@@ -1163,6 +1174,7 @@ class BackendClient:
             sender_id,
             chat_id,
             payload,
+            error_context="settings",
         )
 
     async def read_schedule_day(
