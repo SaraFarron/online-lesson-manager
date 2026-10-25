@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.constants import EventType
@@ -13,10 +13,16 @@ from backend.events.occurrences import (
     OccurrenceSource,
     OccurrenceSourceKind,
     RecurrenceSeries,
+    derive_automatic_break,
     expand_recurrence,
     sort_occurrences,
 )
-from backend.events.time_utils import from_storage_utc, normalize_utc, to_storage_utc
+from backend.events.time_utils import (
+    from_storage_utc,
+    intervals_overlap,
+    normalize_utc,
+    to_storage_utc,
+)
 from backend.exceptions import ValidationError
 
 MAX_RANGE_DURATION = timedelta(days=31)
@@ -27,12 +33,20 @@ async def load_raw_occurrences(
     teacher_id: UUID,
     range_start: datetime,
     range_end: datetime,
+    *,
+    include_automatic_breaks: bool = False,
 ) -> list[Occurrence]:
     """Load active occurrences for one teacher over a half-open UTC range."""
     start, end = _normalize_range(range_start, range_end)
     if end - start > MAX_RANGE_DURATION:
         raise ValidationError("Occurrence query range cannot exceed 31 days")
-    return await _load_raw_occurrences(session, teacher_id, start, end)
+    return await _load_raw_occurrences(
+        session,
+        teacher_id,
+        start,
+        end,
+        include_automatic_breaks=include_automatic_breaks,
+    )
 
 
 async def load_raw_occurrences_for_validation(
@@ -42,11 +56,17 @@ async def load_raw_occurrences_for_validation(
     range_end: datetime,
     *,
     max_occurrences: int = MAX_OCCURRENCES_PER_QUERY,
+    include_automatic_breaks: bool = False,
 ) -> list[Occurrence]:
     """Load a finite validation horizon without the schedule-view range limit."""
     start, end = _normalize_range(range_start, range_end)
     return await _load_raw_occurrences(
-        session, teacher_id, start, end, max_occurrences=max_occurrences
+        session,
+        teacher_id,
+        start,
+        end,
+        max_occurrences=max_occurrences,
+        include_automatic_breaks=include_automatic_breaks,
     )
 
 
@@ -70,12 +90,25 @@ async def _load_raw_occurrences(
     end: datetime,
     *,
     max_occurrences: int = MAX_OCCURRENCES_PER_QUERY,
+    include_automatic_breaks: bool = False,
 ) -> list[Occurrence]:
     if not 0 <= max_occurrences <= MAX_OCCURRENCES_PER_QUERY:
         raise ValidationError(
             f"Occurrence limit must be between 0 and {MAX_OCCURRENCES_PER_QUERY}"
         )
-    stored_start = to_storage_utc(start)
+    source_start = start
+    if include_automatic_breaks:
+        max_break_minutes = await _max_post_break_minutes(session, teacher_id)
+        if max_break_minutes:
+            try:
+                padding = timedelta(minutes=max_break_minutes)
+                source_start = start - padding
+            except (OverflowError, ValueError) as exc:
+                raise ValidationError(
+                    "Automatic-break query range is outside the supported datetime range"
+                ) from exc
+
+    stored_start = to_storage_utc(source_start)
     stored_end = to_storage_utc(end)
     events = (
         await session.scalars(
@@ -129,6 +162,7 @@ async def _load_raw_occurrences(
             teacher_id=recurrent_event.teacher_id,
             user_id=recurrent_event.user_id,
             event_type=_event_type(recurrent_event.event_type),
+            post_break_minutes=recurrent_event.post_break_minutes,
         )
         series = RecurrenceSeries(
             source=source,
@@ -142,7 +176,7 @@ async def _load_raw_occurrences(
         remaining = max_occurrences - generated_count
         series_occurrences = expand_recurrence(
             series,
-            start,
+            source_start,
             end,
             max_occurrences=max(1, remaining),
         )
@@ -177,7 +211,40 @@ async def _load_raw_occurrences(
             if occurrence.start not in canceled_starts
         )
 
+    if include_automatic_breaks:
+        visible_occurrences: list[Occurrence] = []
+        automatic_breaks: list[Occurrence] = []
+        for occurrence in occurrences:
+            if intervals_overlap(occurrence.start, occurrence.end, start, end):
+                visible_occurrences.append(occurrence)
+            if occurrence.source.event_type == EventType.LESSON:
+                automatic_break = derive_automatic_break(occurrence)
+                if automatic_break is not None and intervals_overlap(
+                    automatic_break.start, automatic_break.end, start, end
+                ):
+                    automatic_breaks.append(automatic_break)
+        occurrences = visible_occurrences + automatic_breaks
+        if len(occurrences) > max_occurrences:
+            raise ValidationError(
+                "Occurrence query including automatic breaks exceeds the "
+                f"{max_occurrences} occurrence limit"
+            )
+
     return sort_occurrences(occurrences)
+
+
+async def _max_post_break_minutes(session: AsyncSession, teacher_id: UUID) -> int:
+    durations = union_all(
+        select(Event.post_break_minutes.label("minutes")).where(
+            Event.teacher_id == teacher_id,
+            Event.event_type == EventType.LESSON.value,
+        ),
+        select(RecurrentEvent.post_break_minutes.label("minutes")).where(
+            RecurrentEvent.teacher_id == teacher_id,
+            RecurrentEvent.event_type == EventType.LESSON.value,
+        ),
+    ).subquery()
+    return int(await session.scalar(select(func.max(durations.c.minutes))) or 0)
 
 
 def _one_off_occurrence(event: Event) -> Occurrence:
@@ -192,6 +259,7 @@ def _one_off_occurrence(event: Event) -> Occurrence:
             teacher_id=event.teacher_id,
             user_id=event.user_id,
             event_type=_event_type(event.event_type),
+            post_break_minutes=event.post_break_minutes,
         ),
         start=start,
         end=end,

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -6,9 +6,13 @@ from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.models import User
+from backend.events.constants import RecurrenceMode
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from backend.events.occurrences import OccurrenceSourceKind
-from backend.events.range_service import load_raw_occurrences
+from backend.events.range_service import (
+    load_raw_occurrences,
+    load_raw_occurrences_for_validation,
+)
 from backend.events.time_utils import from_storage_utc
 from backend.exceptions import ValidationError
 
@@ -332,3 +336,223 @@ async def test_range_service_does_not_query_events_for_another_teacher(
     )
 
     assert results == []
+
+
+async def test_range_service_derives_only_overlapping_one_off_breaks(
+    db_session: AsyncSession,
+) -> None:
+    teacher = _user("TEACHER", "automatic-break-range-teacher@test.com")
+    student = _user(
+        "STUDENT", "automatic-break-range-student@test.com", teacher_id=teacher.id
+    )
+    db_session.add_all([teacher, student])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Event(
+                teacher_id=teacher.id,
+                user_id=student.id,
+                event_type="LESSON",
+                start=datetime(2026, 10, 2, 9),
+                end=datetime(2026, 10, 2, 9, 55),
+                post_break_minutes=10,
+            ),
+            Event(
+                teacher_id=teacher.id,
+                user_id=student.id,
+                event_type="LESSON",
+                start=datetime(2026, 10, 2, 8),
+                end=datetime(2026, 10, 2, 9, 50),
+                post_break_minutes=10,
+            ),
+            Event(
+                teacher_id=teacher.id,
+                user_id=student.id,
+                event_type="LESSON",
+                start=datetime(2026, 10, 2, 8),
+                end=datetime(2026, 10, 2, 9, 45),
+            ),
+            Event(
+                teacher_id=teacher.id,
+                user_id=student.id,
+                event_type="LESSON",
+                start=datetime(2026, 10, 2, 10, 5),
+                end=datetime(2026, 10, 2, 10, 15),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    statements: list[str] = []
+
+    def count_statement(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ) -> None:
+        statements.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", count_statement)
+    try:
+        occurrences = await load_raw_occurrences(
+            db_session,
+            teacher.id,
+            datetime(2026, 10, 2, 10),
+            datetime(2026, 10, 2, 10, 10),
+            include_automatic_breaks=True,
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count_statement)
+
+    assert len(statements) == 4
+    assert len(occurrences) == 2
+    automatic_break, current_lesson = occurrences
+    assert automatic_break.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+    assert automatic_break.start == datetime(2026, 10, 2, 9, 55, tzinfo=UTC)
+    assert automatic_break.end == datetime(2026, 10, 2, 10, 5, tzinfo=UTC)
+    assert current_lesson.source.kind == OccurrenceSourceKind.EVENT
+    assert current_lesson.start == datetime(2026, 10, 2, 10, 5, tzinfo=UTC)
+
+
+async def test_range_service_derives_recurring_break_across_dst_fold(
+    db_session: AsyncSession,
+) -> None:
+    teacher = _user("TEACHER", "automatic-break-dst-teacher@test.com")
+    student = _user(
+        "STUDENT", "automatic-break-dst-student@test.com", teacher_id=teacher.id
+    )
+    db_session.add_all([teacher, student])
+    await db_session.flush()
+    series = RecurrentEvent(
+        teacher_id=teacher.id,
+        user_id=student.id,
+        event_type="LESSON",
+        start=datetime(2026, 10, 18, 0, 30),
+        end=datetime(2026, 10, 18, 1, 30),
+        interval=7,
+        interval_end=datetime(2026, 11, 15, 0, 30),
+        recurrence_mode=RecurrenceMode.TEACHER_LOCAL.value,
+        recurrence_timezone="Europe/Berlin",
+        post_break_minutes=30,
+    )
+    db_session.add(series)
+    await db_session.commit()
+
+    occurrences = await load_raw_occurrences(
+        db_session,
+        teacher.id,
+        datetime(2026, 10, 25, 1, 45),
+        datetime(2026, 10, 25, 2, 15),
+        include_automatic_breaks=True,
+    )
+
+    assert len(occurrences) == 1
+    automatic_break = occurrences[0]
+    assert automatic_break.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+    assert automatic_break.source.parent_kind == OccurrenceSourceKind.RECURRENT_EVENT
+    assert automatic_break.source.parent_start == datetime(
+        2026, 10, 25, 0, 30, tzinfo=UTC
+    )
+    assert (automatic_break.start, automatic_break.end) == (
+        datetime(2026, 10, 25, 1, 30, tzinfo=UTC),
+        datetime(2026, 10, 25, 2, 0, tzinfo=UTC),
+    )
+
+
+async def test_canceled_recurring_occurrence_has_no_automatic_break(
+    db_session: AsyncSession,
+) -> None:
+    teacher = _user("TEACHER", "automatic-break-cancel-teacher@test.com")
+    student = _user(
+        "STUDENT", "automatic-break-cancel-student@test.com", teacher_id=teacher.id
+    )
+    db_session.add_all([teacher, student])
+    await db_session.flush()
+    series = RecurrentEvent(
+        teacher_id=teacher.id,
+        user_id=student.id,
+        event_type="LESSON",
+        start=datetime(2026, 10, 18, 0, 30),
+        end=datetime(2026, 10, 18, 1, 30),
+        interval=7,
+        interval_end=datetime(2026, 11, 15, 0, 30),
+        recurrence_mode=RecurrenceMode.TEACHER_LOCAL.value,
+        recurrence_timezone="Europe/Berlin",
+        post_break_minutes=30,
+    )
+    db_session.add(series)
+    await db_session.flush()
+    db_session.add(
+        RecurrentCancels(
+            recurrent_event_id=series.id,
+            start=datetime(2026, 10, 25, 0, 30),
+            end=datetime(2026, 10, 25, 1, 30),
+        )
+    )
+    await db_session.commit()
+
+    occurrences = await load_raw_occurrences(
+        db_session,
+        teacher.id,
+        datetime(2026, 10, 25, 1, 45),
+        datetime(2026, 10, 25, 2, 15),
+        include_automatic_breaks=True,
+    )
+
+    assert occurrences == []
+
+
+async def test_range_service_counts_derived_breaks_toward_query_budget(
+    db_session: AsyncSession,
+) -> None:
+    teacher = _user("TEACHER", "automatic-break-budget-teacher@test.com")
+    db_session.add(teacher)
+    await db_session.flush()
+    db_session.add(
+        Event(
+            teacher_id=teacher.id,
+            user_id=teacher.id,
+            event_type="LESSON",
+            start=datetime(2026, 10, 2, 9),
+            end=datetime(2026, 10, 2, 10),
+            post_break_minutes=5,
+        )
+    )
+    await db_session.commit()
+
+    with pytest.raises(ValidationError, match="including automatic breaks"):
+        await load_raw_occurrences_for_validation(
+            db_session,
+            teacher.id,
+            datetime(2026, 10, 2, 9, 58),
+            datetime(2026, 10, 2, 10, 3),
+            max_occurrences=1,
+            include_automatic_breaks=True,
+        )
+
+
+async def test_range_service_rejects_automatic_break_padding_overflow(
+    db_session: AsyncSession,
+) -> None:
+    teacher = _user("TEACHER", "automatic-break-overflow-teacher@test.com")
+    db_session.add(teacher)
+    await db_session.flush()
+    db_session.add(
+        Event(
+            teacher_id=teacher.id,
+            user_id=teacher.id,
+            event_type="LESSON",
+            start=datetime.min,
+            end=datetime.min + timedelta(minutes=1),
+            post_break_minutes=10,
+        )
+    )
+    await db_session.commit()
+
+    with pytest.raises(ValidationError, match="outside the supported datetime range"):
+        await load_raw_occurrences(
+            db_session,
+            teacher.id,
+            datetime.min + timedelta(minutes=2),
+            datetime.min + timedelta(minutes=5),
+            include_automatic_breaks=True,
+        )

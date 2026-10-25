@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -7,9 +7,11 @@ import pytest
 from backend.constants import EventType
 from backend.events.constants import RecurrenceMode
 from backend.events.occurrences import (
+    Occurrence,
     OccurrenceSource,
     OccurrenceSourceKind,
     RecurrenceSeries,
+    derive_automatic_break,
     expand_recurrence,
 )
 from backend.exceptions import ValidationError
@@ -230,6 +232,98 @@ def test_adjacent_queries_return_the_same_shared_occurrence_identity() -> None:
     right_occurrence = right_by_identity[identity]
     assert left_occurrence.start == right_occurrence.start
     assert left_occurrence.end == right_occurrence.end
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [OccurrenceSourceKind.EVENT, OccurrenceSourceKind.RECURRENT_EVENT],
+)
+def test_derived_break_identity_tracks_parent_occurrence(
+    kind: OccurrenceSourceKind,
+) -> None:
+    parent_start = _datetime("2026-10-25T00:30:00+00:00")
+    lesson = Occurrence(
+        source=OccurrenceSource(
+            kind=kind,
+            id=UUID(int=7),
+            teacher_id=UUID(int=8),
+            user_id=UUID(int=9),
+            event_type=EventType.LESSON,
+            post_break_minutes=30,
+        ),
+        start=parent_start,
+        end=_datetime("2026-10-25T01:30:00+00:00"),
+    )
+
+    automatic_break = derive_automatic_break(lesson)
+
+    assert automatic_break is not None
+    assert (automatic_break.start, automatic_break.end) == (
+        lesson.end,
+        lesson.end + timedelta(minutes=30),
+    )
+    assert automatic_break.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+    assert automatic_break.source.parent_kind == kind
+    assert automatic_break.identity == (
+        OccurrenceSourceKind.AUTOMATIC_BREAK,
+        lesson.source.id,
+        lesson.start,
+    )
+
+
+def test_zero_duration_does_not_create_a_derived_break() -> None:
+    lesson = Occurrence(
+        source=OccurrenceSource(
+            kind=OccurrenceSourceKind.EVENT,
+            id=UUID(int=7),
+            teacher_id=UUID(int=8),
+            user_id=UUID(int=9),
+            event_type=EventType.LESSON,
+        ),
+        start=_datetime("2026-10-25T00:30:00+00:00"),
+        end=_datetime("2026-10-25T01:30:00+00:00"),
+    )
+
+    assert derive_automatic_break(lesson) is None
+
+
+def test_derived_break_uses_elapsed_utc_minutes_across_dst_fold() -> None:
+    lesson = Occurrence(
+        source=OccurrenceSource(
+            kind=OccurrenceSourceKind.EVENT,
+            id=UUID(int=7),
+            teacher_id=UUID(int=8),
+            user_id=UUID(int=9),
+            event_type=EventType.LESSON,
+            post_break_minutes=30,
+        ),
+        start=_datetime("2026-10-25T00:30:00+00:00"),
+        end=_datetime("2026-10-25T01:30:00+00:00"),
+    )
+
+    automatic_break = derive_automatic_break(lesson)
+
+    assert automatic_break is not None
+    assert automatic_break.end == _datetime("2026-10-25T02:00:00+00:00")
+
+
+def test_derived_break_reports_datetime_overflow() -> None:
+    maximum = datetime.max.replace(tzinfo=UTC)
+    lesson = Occurrence(
+        source=OccurrenceSource(
+            kind=OccurrenceSourceKind.EVENT,
+            id=UUID(int=7),
+            teacher_id=UUID(int=8),
+            user_id=UUID(int=9),
+            event_type=EventType.LESSON,
+            post_break_minutes=1,
+        ),
+        start=maximum - timedelta(minutes=1),
+        end=maximum,
+    )
+
+    with pytest.raises(ValidationError, match="outside the supported datetime range"):
+        derive_automatic_break(lesson)
 
 
 @pytest.mark.parametrize(

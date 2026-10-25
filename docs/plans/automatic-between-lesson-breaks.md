@@ -118,9 +118,19 @@ still reports existing errors in `backend/auth/config.py`,
 
 **Reuse:** `Occurrence`, `expand_recurrence`, range candidate loading and cancellation filtering.
 
-**Acceptance:** [ ] Exact one-off/recurring, DST, range-edge, zero, canceled occurrence and overflow cases pass. [ ] No per-occurrence DB queries; complete bounded results. [ ] Common checks pass.
+**Acceptance:** [x] Exact one-off/recurring, DST, range-edge, zero, canceled occurrence and overflow cases pass. [x] No per-occurrence DB queries; complete bounded results reject over-budget ranges. [x] Targeted tests, Ruff, and touched-file formatting pass.
 
 **Out of scope:** General derived-event framework. **Suitable for:** AI agent.
+
+**Execution:** Added an explicit automatic-break source kind and stable
+parent-occurrence identity. The shared range loader can opt in to deriving
+elapsed-UTC break intervals, loads earlier parent occurrences through a single
+duration aggregate, applies cancellations before derivation, filters half-open
+range edges, and counts derived rows against the query budget. Thirty-six
+focused occurrence/range tests passed, including DST, cancellation, overflow,
+and a fixed query-count assertion; Ruff, changed-service mypy, and Telegram
+mypy passed. Full `mypy backend` retains the three existing unrelated errors
+recorded above.
 
 ## Task 03: Wire automatic-break lifecycle into serialized mutations
 

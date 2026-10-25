@@ -24,6 +24,7 @@ _LOCAL_TIME_SEARCH_PADDING = timedelta(days=3)
 class OccurrenceSourceKind(StrEnum):
     EVENT = "event"
     RECURRENT_EVENT = "recurrent_event"
+    AUTOMATIC_BREAK = "automatic_break"
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +34,9 @@ class OccurrenceSource:
     teacher_id: UUID
     user_id: UUID
     event_type: EventType
+    post_break_minutes: int = 0
+    parent_kind: OccurrenceSourceKind | None = None
+    parent_start: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +47,20 @@ class Occurrence:
 
     @property
     def identity(self) -> tuple[OccurrenceSourceKind, UUID, datetime]:
-        return self.source.kind, self.source.id, self.start
+        if self.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK:
+            if (
+                self.source.parent_kind
+                not in {
+                    OccurrenceSourceKind.EVENT,
+                    OccurrenceSourceKind.RECURRENT_EVENT,
+                }
+                or self.source.parent_start is None
+            ):
+                raise ValidationError("Automatic break has no valid parent identity")
+            identity_start = normalize_utc(self.source.parent_start)
+        else:
+            identity_start = self.start
+        return self.source.kind, self.source.id, identity_start
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +72,42 @@ class RecurrenceSeries:
     interval_end: datetime
     recurrence_mode: RecurrenceMode | str
     recurrence_timezone: str | None
+
+
+def derive_automatic_break(lesson: Occurrence) -> Occurrence | None:
+    """Derive a break interval with identity tied to its parent occurrence."""
+    if lesson.source.event_type != EventType.LESSON:
+        return None
+    minutes = lesson.source.post_break_minutes
+    if type(minutes) is not int or minutes < 0:
+        raise ValidationError("Lesson has an invalid post-break duration")
+    if minutes == 0:
+        return None
+
+    break_start = normalize_utc(lesson.end)
+    try:
+        break_end = break_start + timedelta(minutes=minutes)
+    except OverflowError as exc:
+        raise ValidationError(
+            "Automatic break end is outside the supported datetime range"
+        ) from exc
+
+    if lesson.source.kind not in {
+        OccurrenceSourceKind.EVENT,
+        OccurrenceSourceKind.RECURRENT_EVENT,
+    }:
+        raise ValidationError("Automatic break parent has an invalid source kind")
+
+    source = OccurrenceSource(
+        kind=OccurrenceSourceKind.AUTOMATIC_BREAK,
+        id=lesson.source.id,
+        teacher_id=lesson.source.teacher_id,
+        user_id=lesson.source.user_id,
+        event_type=EventType.BREAK,
+        parent_kind=lesson.source.kind,
+        parent_start=normalize_utc(lesson.start),
+    )
+    return Occurrence(source=source, start=break_start, end=break_end)
 
 
 def expand_recurrence(
