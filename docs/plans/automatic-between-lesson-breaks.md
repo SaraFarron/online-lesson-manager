@@ -228,9 +228,20 @@ mypy passed. Commit: `af69c02`.
 
 **Reuse:** Existing merged preference validation, teacher guard and occurrence validators.
 
-**Acceptance:** [ ] Nonzero/zero transitions and conflicts preserve unrelated preferences. [ ] Concurrent booking uses a coherent policy snapshot; no partial retrofit. [ ] Common checks pass.
+**Acceptance:** [x] Nonzero/zero transitions and conflicts preserve unrelated preferences. [x] Concurrent booking uses a coherent policy snapshot; no partial retrofit. [x] Common checks pass.
 
 **Out of scope:** Rewriting old lesson times. **Suitable for:** AI agent.
+
+**Execution:** Teacher preference updates now run under the same
+database-backed schedule guard as lesson writes, refresh the profile after
+acquiring the guard, and preserve saved snapshots on existing one-off and
+recurring lessons. API schema/route descriptions state the future-only scope.
+Regression coverage verifies zero/nonzero changes, conflicting bookings,
+unrelated profile values, and concurrent guard contention/retry. Focused
+backend and bot suites passed (60 passed, 5 PostgreSQL-only skips); repository
+Ruff, touched-file format, changed-file mypy, and Telegram mypy passed. Full
+backend mypy retains its three previously recorded unrelated baseline errors.
+Commit: `dbeb54b`.
 
 ## Task 07: Update Telegram models and schedule rendering
 
