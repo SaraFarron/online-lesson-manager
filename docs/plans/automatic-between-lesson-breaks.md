@@ -203,9 +203,20 @@ under Task 01.
 
 **Reuse:** `get_schedule`, `shape_schedule`, role filters and vacation visibility; management reads from the UI milestone.
 
-**Acceptance:** [ ] Teachers see approved auto-break rows; students see only approved own scope. [ ] Row selection never edits/deletes the parent accidentally. [ ] Complete pagination and old manual-break identities remain correct; common checks pass.
+**Acceptance:** [x] Teachers see approved auto-break rows; students see only approved own scope. [x] Row selection never edits/deletes the parent accidentally. [x] Complete pagination and old manual-break identities remain correct; common checks pass.
 
 **Out of scope:** Raw teacher-wide data in student responses. **Suitable for:** AI agent.
+
+**Execution:** Schedule responses now identify derived breaks with their parent
+kind and occurrence start; authorization and vacation visibility are applied
+before shaping, and students receive only their own parent-linked rows.
+One-off and recurring break-management reads/updates/deletes reject parent
+lesson IDs as read-only, while cross-teacher requests retain the not-found
+response. Added coverage for schedule serialization, student scope, parent
+vacation visibility, manual-break identities, and read-only mutation attempts.
+Focused schedule, visibility, break-management, and Telegram schedule suites
+passed (62 passed). Changed-file Ruff check/format and backend plus Telegram
+mypy passed. Commit: `af69c02`.
 
 ## Task 06: Implement safe post-break preference updates
 
