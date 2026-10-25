@@ -394,8 +394,8 @@ async def test_break_displacement_confirmation_is_bound_to_preview(
         "/api/v1/lessons/",
         headers=_headers(teacher_token),
         json={
-            "start": "2026-12-01T09:30:00Z",
-            "end": "2026-12-01T10:00:00Z",
+            "start": "2026-12-01T09:35:00Z",
+            "end": "2026-12-01T10:05:00Z",
             "user_id": student_a[0],
         },
     )

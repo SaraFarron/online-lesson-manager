@@ -739,10 +739,17 @@ async def next_preview(
 
 def _occurrence_label(occurrence: DisplacedOccurrence, timezone: str) -> str:
     kind = "One-time lesson" if occurrence.source_kind == "event" else "Weekly lesson"
-    return (
+    label = (
         f"{kind} · {_format_datetime(occurrence.start, timezone)} – "
         f"{_format_datetime(occurrence.end, timezone)}"
     )
+    if occurrence.automatic_break is not None:
+        label += (
+            f"\n  Reserved {occurrence.automatic_break.duration_minutes}-minute "
+            f"break · {_format_datetime(occurrence.automatic_break.start, timezone)} – "
+            f"{_format_datetime(occurrence.automatic_break.end, timezone)}"
+        )
+    return label
 
 
 async def displacement_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:

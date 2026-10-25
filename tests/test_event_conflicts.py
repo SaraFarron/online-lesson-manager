@@ -47,6 +47,7 @@ async def _teacher_and_students(
     suffix: str,
     timezone: str = "UTC",
     work_start: str = "09:00",
+    break_minutes: int = 0,
 ) -> tuple[str, str, list[tuple[str, str]]]:
     teacher_id, teacher_token = await _register_and_login(
         client, f"{suffix}-teacher@test.com", "TEACHER", timezone
@@ -57,6 +58,7 @@ async def _teacher_and_students(
             "code": f"join-{suffix}",
             "work_start": work_start,
             "working_days": [1, 2, 3, 4, 5, 6, 7],
+            "between_lessons_break": break_minutes,
         },
         headers=_headers(teacher_token),
     )
@@ -141,6 +143,198 @@ async def test_later_recurrence_conflict_cancellation_and_adjacency(
         "/api/v1/lessons/", headers=headers, json=overlapping_payload
     )
     assert allowed_after_cancel.status_code == 201, allowed_after_cancel.text
+
+
+async def test_automatic_break_admission_boundaries_and_full_series_horizon(
+    client: AsyncClient,
+) -> None:
+    _, teacher_token, students = await _teacher_and_students(
+        client, "auto-break-admission", break_minutes=5
+    )
+    student_id = students[0][0]
+    headers = _headers(teacher_token)
+
+    first = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T10:00:00Z",
+            "end": "2026-12-01T10:30:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert first.status_code == 201, first.text
+
+    too_early = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T10:34:00Z",
+            "end": "2026-12-01T11:04:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert too_early.status_code == 422
+    at_boundary = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T10:35:00Z",
+            "end": "2026-12-01T11:05:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert at_boundary.status_code == 201, at_boundary.text
+
+    later = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-02T11:04:00Z",
+            "end": "2026-12-02T11:34:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert later.status_code == 201, later.text
+    candidate_break_conflict = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-02T10:30:00Z",
+            "end": "2026-12-02T11:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert candidate_break_conflict.status_code == 422
+
+    final_day = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2027-01-26T10:04:00Z",
+            "end": "2027-01-26T10:34:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert final_day.status_code == 201, final_day.text
+    full_series_conflict = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2027-01-05T09:30:00Z",
+            "end": "2027-01-05T10:00:00Z",
+            "interval": 7,
+            "interval_end": "2027-01-27T09:30:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert full_series_conflict.status_code == 422
+
+
+async def test_vacation_only_overlapping_reserved_break_does_not_block_lesson(
+    client: AsyncClient,
+) -> None:
+    _, teacher_token, students = await _teacher_and_students(
+        client, "vacation-auto-break", break_minutes=5
+    )
+    student_id = students[0][0]
+    headers = _headers(teacher_token)
+    vacation = await client.post(
+        "/api/v1/vacations/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T10:02:00Z",
+            "end": "2026-12-01T10:04:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert vacation.status_code == 201, vacation.text
+
+    lesson = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T09:30:00Z",
+            "end": "2026-12-01T10:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert lesson.status_code == 201, lesson.text
+
+
+async def test_zero_break_allows_exact_adjacency_and_manual_break_preview_is_safe(
+    client: AsyncClient,
+) -> None:
+    _, teacher_token, students = await _teacher_and_students(
+        client, "zero-break-admission"
+    )
+    student_id = students[0][0]
+    headers = _headers(teacher_token)
+    lesson = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T09:00:00Z",
+            "end": "2026-12-01T09:30:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert lesson.status_code == 201, lesson.text
+    adjacent = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T09:30:00Z",
+            "end": "2026-12-01T10:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert adjacent.status_code == 201, adjacent.text
+
+    break_teacher_id, break_teacher_token, break_students = await _teacher_and_students(
+        client, "manual-auto-break", break_minutes=5
+    )
+    break_headers = _headers(break_teacher_token)
+    break_student_id = break_students[0][0]
+    break_lesson = await client.post(
+        "/api/v1/lessons/",
+        headers=break_headers,
+        json={
+            "start": "2026-12-02T09:00:00Z",
+            "end": "2026-12-02T09:30:00Z",
+            "user_id": break_student_id,
+        },
+    )
+    assert break_lesson.status_code == 201, break_lesson.text
+
+    overlapping_parent_and_break = await client.post(
+        "/api/v1/breaks/",
+        headers=break_headers,
+        json={
+            "start": "2026-12-02T09:29:00Z",
+            "end": "2026-12-02T09:32:00Z",
+            "user_id": break_teacher_id,
+        },
+    )
+    assert overlapping_parent_and_break.status_code == 409
+    affected = overlapping_parent_and_break.json()["detail"]["affected_occurrences"]
+    assert len(affected) == 1
+    assert affected[0]["automatic_break"] == {
+        "start": "2026-12-02T09:30:00+00:00",
+        "end": "2026-12-02T09:35:00+00:00",
+        "duration_minutes": 5,
+    }
+
+    auto_break_only = await client.post(
+        "/api/v1/breaks/",
+        headers=break_headers,
+        json={
+            "start": "2026-12-02T09:32:00Z",
+            "end": "2026-12-02T09:34:00Z",
+            "user_id": break_teacher_id,
+        },
+    )
+    assert auto_break_only.status_code == 422
 
 
 async def test_recurring_conflicts_cover_full_horizon_and_reject_self_overlap(
@@ -424,7 +618,7 @@ async def test_one_off_break_preview_and_confirmed_update_displace_lessons(
     db_session: AsyncSession,
 ) -> None:
     teacher_id, teacher_token, students = await _teacher_and_students(
-        client, "break-one-off"
+        client, "break-one-off", break_minutes=5
     )
     student_id = students[0][0]
     headers = _headers(teacher_token)
@@ -478,6 +672,13 @@ async def test_one_off_break_preview_and_confirmed_update_displace_lessons(
     assert {item["source_id"] for item in affected} == {
         str(lesson_id),
         str(recurring_lesson_id),
+    }
+    assert next(item for item in affected if item["source_id"] == str(lesson_id))[
+        "automatic_break"
+    ] == {
+        "start": "2026-12-01T09:30:00+00:00",
+        "end": "2026-12-01T09:35:00+00:00",
+        "duration_minutes": 5,
     }
     assert await db_session.get(Event, lesson_id) is not None
     assert (

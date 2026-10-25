@@ -355,6 +355,99 @@ async def test_concurrent_conflicting_event_mutations_are_serialized(
 
 
 @pytest.mark.asyncio
+async def test_concurrent_lesson_and_reserved_break_booking_are_serialized(
+    mutation_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with mutation_session_factory() as seed_session:
+        teacher = User(role="TEACHER", timezone="UTC")
+        seed_session.add(teacher)
+        await seed_session.flush()
+        student = User(role="STUDENT", timezone="UTC", teacher_id=teacher.id)
+        seed_session.add(student)
+        await seed_session.commit()
+
+    validator = EventValidator(expected_event_type=EventType.LESSON)
+    async with mutation_session_factory() as seed_session:
+        moving_lesson = await create_event(
+            seed_session,
+            EventCreate(
+                start=datetime(2026, 10, 26, 12),
+                end=datetime(2026, 10, 26, 13),
+                user_id=student.id,
+                event_type=EventType.LESSON,
+            ),
+            validator,
+            teacher_id=teacher.id,
+            actor_is_teacher=True,
+        )
+
+    parent_lesson = EventCreate(
+        start=datetime(2026, 10, 26, 9),
+        end=datetime(2026, 10, 26, 10),
+        user_id=student.id,
+        event_type=EventType.LESSON,
+    )
+    start_together = asyncio.Barrier(2)
+
+    async def attempt_create() -> Event | Conflict | ValidationError:
+        await start_together.wait()
+        async with mutation_session_factory() as session:
+            try:
+                return await create_event(
+                    session,
+                    parent_lesson,
+                    validator,
+                    teacher_id=teacher.id,
+                    actor_is_teacher=True,
+                )
+            except (Conflict, ValidationError) as exc:
+                return exc
+
+    async def attempt_move() -> Event | Conflict | ValidationError:
+        await start_together.wait()
+        async with mutation_session_factory() as session:
+            current = await session.get(Event, moving_lesson.id)
+            assert current is not None
+            try:
+                return await update_event(
+                    session,
+                    current,
+                    EventUpdate(
+                        start=datetime(2026, 10, 26, 10, 4),
+                        end=datetime(2026, 10, 26, 11, 4),
+                        user_id=student.id,
+                    ),
+                    validator,
+                    teacher_id=teacher.id,
+                    actor_is_teacher=True,
+                )
+            except (Conflict, ValidationError) as exc:
+                return exc
+
+    outcomes = await asyncio.gather(attempt_create(), attempt_move())
+    assert sum(isinstance(outcome, Event) for outcome in outcomes) == 1
+    assert (
+        sum(isinstance(outcome, (Conflict, ValidationError)) for outcome in outcomes)
+        == 1
+    )
+
+    async with mutation_session_factory() as verification_session:
+        events = (
+            await verification_session.scalars(
+                select(Event).where(Event.teacher_id == teacher.id)
+            )
+        ).all()
+    if len(events) == 2:
+        assert sorted(event.start for event in events) == [
+            datetime(2026, 10, 26, 9),
+            datetime(2026, 10, 26, 12),
+        ]
+    else:
+        assert len(events) == 1
+        assert events[0].start == datetime(2026, 10, 26, 10, 4)
+
+
+@pytest.mark.asyncio
 async def test_concurrent_occurrence_cancellations_preserve_both_identities(
     mutation_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

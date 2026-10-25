@@ -168,9 +168,30 @@ the three existing unrelated errors recorded above.
 
 **Reuse:** `validate_schedule_change`, raw validation range loader and `validate_lesson_limits`.
 
-**Acceptance:** [ ] With five minutes, a 10:00 lesson end allows next start at 10:05, rejects 10:04; zero permits exact adjacency when other rules allow. [ ] Concurrent create/move cannot steal reserved time; full-series and manual-break collision cases pass. [ ] Common checks pass.
+**Acceptance:** [x] With five minutes, a 10:00 lesson end allows next start at 10:05, rejects 10:04; zero permits exact adjacency when other rules allow. [x] Concurrent create/move cannot steal reserved time; full-series and manual-break collision cases pass. [x] Common checks pass.
 
 **Out of scope:** Teacher override without approved confirmation semantics. **Suitable for:** AI agent.
+
+**Execution:** Candidate lesson writes now carry their saved break duration and
+are checked together with their derived reservations against lessons, manual
+breaks, and existing derived breaks. Existing parent series and their derived
+rows are excluded together during updates; work-window and daily/consecutive
+policies continue to receive lessons only. Validation ranges cover whole policy
+days and the final recurrence reservation, and derived rows count against the
+validation budget. Manual-break previews include each displaced lesson's
+attached automatic interval; overlaps with that linked interval are part of
+the same parent confirmation, while an automatic-break-only collision rejects
+without creating a cancellation target. Telegram preview parsing and rendering
+were updated with the optional attached interval.
+
+The 5-minute 10:04 rejection / 10:05 acceptance, zero-minute exact adjacency,
+custom-duration candidate break, existing-break overlap, final-series-occurrence
+collision, vacation display-only behavior, linked and auto-only manual-break
+cases, saved-duration moves, and a competing create-versus-move write were
+verified. The focused regression run passed (83 passed, 5 PostgreSQL-only
+skips). Changed-file Ruff checks, backend changed-service mypy, and full
+Telegram mypy passed. The full backend mypy baseline still has the three unrelated errors recorded
+under Task 01.
 
 ## Task 05: Expose authorized automatic breaks consistently
 

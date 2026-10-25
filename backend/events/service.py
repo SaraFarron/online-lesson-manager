@@ -182,6 +182,7 @@ async def _create_event(
         displacement_token=displacement_token,
         teacher_profile=teacher_profile,
         teacher_timezone=teacher_timezone,
+        post_break_minutes=saved_post_break_minutes,
     )
     await _apply_displacements(session, displaced, teacher_id)
 
@@ -278,6 +279,7 @@ async def _update_event(
         displacement_token=displacement_token,
         teacher_profile=teacher_profile,
         teacher_timezone=teacher_timezone,
+        post_break_minutes=event.post_break_minutes,
     )
     await _apply_displacements(session, displaced, teacher_id)
 
@@ -414,6 +416,11 @@ async def _create_recurrent_event(
         displacement_token=displacement_token,
         teacher_profile=teacher_profile,
         teacher_timezone=teacher_timezone,
+        post_break_minutes=(
+            teacher_profile.between_lessons_break
+            if event_data.event_type == EventType.LESSON and teacher_profile is not None
+            else None
+        ),
     )
     await _apply_displacements(session, displaced, teacher_id)
 
@@ -556,6 +563,7 @@ async def _update_recurrent_event(
         displacement_token=displacement_token,
         teacher_profile=teacher_profile,
         teacher_timezone=teacher_timezone,
+        post_break_minutes=recurrent_event.post_break_minutes,
     )
     await _apply_displacements(session, displaced, teacher_id)
 
@@ -774,6 +782,7 @@ async def _apply_displacements(
         occurrence.source.id
         for occurrence in occurrences
         if occurrence.source.kind == OccurrenceSourceKind.EVENT
+        and occurrence.source.event_type == EventType.LESSON
     ]
     if one_off_ids:
         await session.execute(
@@ -790,6 +799,7 @@ async def _apply_displacements(
         )
         for occurrence in occurrences
         if occurrence.source.kind == OccurrenceSourceKind.RECURRENT_EVENT
+        and occurrence.source.event_type == EventType.LESSON
     )
 
 

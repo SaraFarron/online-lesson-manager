@@ -25,6 +25,7 @@ from backend.events.occurrences import (
     OccurrenceSource,
     OccurrenceSourceKind,
     RecurrenceSeries,
+    derive_automatic_break,
     expand_recurrence,
     sort_occurrences,
 )
@@ -60,6 +61,7 @@ async def validate_schedule_change(
     displacement_token: str | None = None,
     lesson_preferences: TeacherBookingPreferences | None = None,
     teacher_timezone: str | None = None,
+    post_break_minutes: int | None = None,
 ) -> list[Occurrence]:
     event_type = await _event_type(session, data, expected_event_type, exclude_event_id)
     if event_type == EventType.LESSON and (
@@ -76,10 +78,27 @@ async def validate_schedule_change(
         recurrence_timezone=recurrence_timezone,
         recurrence_mode=recurrence_mode,
         canceled_starts=canceled_starts,
+        post_break_minutes=post_break_minutes,
     )
+    candidate_lessons = candidate_occurrences
+    candidate_breaks = (
+        [
+            automatic_break
+            for occurrence in candidate_lessons
+            if (automatic_break := derive_automatic_break(occurrence)) is not None
+        ]
+        if event_type == EventType.LESSON
+        else []
+    )
+    candidate_reservations = [*candidate_lessons, *candidate_breaks]
+    candidate_count += len(candidate_breaks)
+    if candidate_count > MAX_OCCURRENCES_PER_QUERY:
+        raise ValidationError(
+            f"Occurrence query exceeds the {MAX_OCCURRENCES_PER_QUERY} occurrence limit"
+        )
 
     if isinstance(data, RecurrentEventWrite):
-        _reject_self_overlap(candidate_occurrences)
+        _reject_self_overlap(candidate_reservations)
 
     policy_timezone = teacher_timezone
     if (
@@ -91,14 +110,19 @@ async def validate_schedule_change(
     ):
         policy_timezone = recurrence_timezone
     policy_range = (
-        lesson_policy_range(candidate_occurrences, policy_timezone)
+        lesson_policy_range(candidate_lessons, policy_timezone)
         if event_type == EventType.LESSON
         and lesson_preferences is not None
         and policy_timezone is not None
         else None
     )
     query_start = normalize_utc(data.start)
-    query_end = range_end
+    query_end = max(
+        range_end,
+        max(
+            (occurrence.end for occurrence in candidate_reservations), default=range_end
+        ),
+    )
     if policy_range is not None:
         query_start = min(query_start, policy_range[0])
         query_end = max(query_end, policy_range[1])
@@ -109,6 +133,7 @@ async def validate_schedule_change(
         query_start,
         query_end,
         max_occurrences=MAX_OCCURRENCES_PER_QUERY - candidate_count,
+        include_automatic_breaks=True,
     )
     if exclude_event_id is not None:
         excluded_kind = (
@@ -120,8 +145,15 @@ async def validate_schedule_change(
             occurrence
             for occurrence in existing
             if not (
-                occurrence.source.kind == excluded_kind
-                and occurrence.source.id == exclude_event_id
+                (
+                    occurrence.source.kind == excluded_kind
+                    and occurrence.source.id == exclude_event_id
+                )
+                or (
+                    occurrence.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+                    and occurrence.source.parent_kind == excluded_kind
+                    and occurrence.source.id == exclude_event_id
+                )
             )
         ]
 
@@ -132,21 +164,33 @@ async def validate_schedule_change(
         and policy_timezone is not None
     ):
         validate_lesson_work_window(
-            candidate_occurrences, lesson_preferences, policy_timezone
+            candidate_lessons, lesson_preferences, policy_timezone
         )
         validate_lesson_limits(
-            candidate_occurrences, existing, lesson_preferences, policy_timezone
+            candidate_lessons, existing, lesson_preferences, policy_timezone
         )
 
-    overlaps = _find_overlaps(candidate_occurrences, existing)
+    overlaps = _find_overlaps(candidate_reservations, existing)
     if isinstance(data, EventWrite):
-        vacation_overlaps = [
+        vacation_check_candidates = (
+            candidate_lessons
+            if event_type == EventType.LESSON
+            else candidate_reservations
+        )
+        vacation_overlaps = _find_overlaps(
+            vacation_check_candidates,
+            [
+                occurrence
+                for occurrence in existing
+                if occurrence.source.event_type == EventType.VACATION
+            ],
+        )
+        applicable_vacation_overlaps = [
             occurrence
-            for occurrence in overlaps
-            if occurrence.source.event_type == EventType.VACATION
-            and _vacation_applies(occurrence, data.user_id, teacher_id)
+            for occurrence in vacation_overlaps
+            if _vacation_applies(occurrence, data.user_id, teacher_id)
         ]
-        if vacation_overlaps:
+        if applicable_vacation_overlaps:
             raise ValidationError("Event overlaps an applicable vacation")
 
         if event_type == EventType.VACATION:
@@ -171,10 +215,25 @@ async def validate_schedule_change(
             for occurrence in overlaps
             if occurrence.source.event_type == EventType.LESSON
         ]
+        linked_automatic_breaks = {
+            (lesson.source.kind, lesson.source.id, normalize_utc(lesson.start))
+            for lesson in lesson_overlaps
+        }
         blocking_overlaps = [
             occurrence
             for occurrence in overlaps
             if occurrence.source.event_type != EventType.LESSON
+            and not (
+                occurrence.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+                and occurrence.source.parent_kind is not None
+                and occurrence.source.parent_start is not None
+                and (
+                    occurrence.source.parent_kind,
+                    occurrence.source.id,
+                    normalize_utc(occurrence.source.parent_start),
+                )
+                in linked_automatic_breaks
+            )
         ]
         if blocking_overlaps:
             raise ValidationError("Event overlaps an existing non-lesson event")
@@ -206,6 +265,7 @@ async def _candidate_occurrences(
     recurrence_timezone: str | None,
     recurrence_mode: RecurrenceMode | str | None,
     canceled_starts: Sequence[datetime],
+    post_break_minutes: int | None,
 ) -> tuple[list[Occurrence], datetime, int]:
     source_kind = (
         OccurrenceSourceKind.RECURRENT_EVENT
@@ -213,12 +273,21 @@ async def _candidate_occurrences(
         else OccurrenceSourceKind.EVENT
     )
     source_id = UUID(int=0)
+    if event_type == EventType.LESSON:
+        if post_break_minutes is None:
+            raise ValidationError("Lesson break duration is required for validation")
+        if type(post_break_minutes) is not int or post_break_minutes < 0:
+            raise ValidationError("Lesson break duration must be a nonnegative integer")
+    else:
+        post_break_minutes = 0
+
     source = OccurrenceSource(
         kind=source_kind,
         id=source_id,
         teacher_id=teacher_id,
         user_id=data.user_id,
         event_type=event_type,
+        post_break_minutes=post_break_minutes,
     )
     start = normalize_utc(data.start)
     if data.end is None:
@@ -258,11 +327,15 @@ async def _candidate_occurrences(
         ) from exc
     occurrences = expand_recurrence(series, start, range_end)
     canceled = {normalize_utc(value) for value in canceled_starts}
-    return (
-        [item for item in occurrences if item.start not in canceled],
-        range_end,
-        len(occurrences),
-    )
+    active_occurrences = [item for item in occurrences if item.start not in canceled]
+    if event_type == EventType.LESSON and post_break_minutes:
+        try:
+            range_end += timedelta(minutes=post_break_minutes)
+        except OverflowError as exc:
+            raise ValidationError(
+                "Recurrence conflict horizon is outside the supported range"
+            ) from exc
+    return active_occurrences, range_end, len(occurrences)
 
 
 async def _event_type(
@@ -389,14 +462,7 @@ def _break_confirmation_token(
         "exclude_event_id": str(exclude_event_id) if exclude_event_id else None,
         "request": data.model_dump(mode="json"),
         "affected_occurrences": [
-            {
-                "source_kind": occurrence.source.kind.value,
-                "source_id": str(occurrence.source.id),
-                "user_id": str(occurrence.source.user_id),
-                "event_type": occurrence.source.event_type.value,
-                "start": normalize_utc(occurrence.start).isoformat(),
-                "end": normalize_utc(occurrence.end).isoformat(),
-            }
+            _affected_occurrence_data(occurrence)
             for occurrence in sorted(
                 occurrences,
                 key=lambda item: (
@@ -412,6 +478,25 @@ def _break_confirmation_token(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _affected_occurrence_data(occurrence: Occurrence) -> dict[str, object]:
+    data: dict[str, object] = {
+        "source_kind": occurrence.source.kind.value,
+        "source_id": str(occurrence.source.id),
+        "user_id": str(occurrence.source.user_id),
+        "event_type": occurrence.source.event_type.value,
+        "start": normalize_utc(occurrence.start).isoformat(),
+        "end": normalize_utc(occurrence.end).isoformat(),
+    }
+    automatic_break = derive_automatic_break(occurrence)
+    if automatic_break is not None:
+        data["automatic_break"] = {
+            "start": automatic_break.start.isoformat(),
+            "end": automatic_break.end.isoformat(),
+            "duration_minutes": occurrence.source.post_break_minutes,
+        }
+    return data
+
+
 def _break_conflict_detail(
     occurrences: Sequence[Occurrence], confirmation_token: str
 ) -> dict[str, object]:
@@ -420,14 +505,6 @@ def _break_conflict_detail(
         "message": "Confirm cancellation of overlapping lesson occurrences",
         "confirmation_token": confirmation_token,
         "affected_occurrences": [
-            {
-                "source_kind": occurrence.source.kind.value,
-                "source_id": str(occurrence.source.id),
-                "user_id": str(occurrence.source.user_id),
-                "event_type": occurrence.source.event_type.value,
-                "start": normalize_utc(occurrence.start).isoformat(),
-                "end": normalize_utc(occurrence.end).isoformat(),
-            }
-            for occurrence in occurrences
+            _affected_occurrence_data(item) for item in occurrences
         ],
     }

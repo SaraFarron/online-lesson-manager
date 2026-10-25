@@ -384,6 +384,20 @@ class LocalIntervalResolution(BaseModel):
         return self
 
 
+class AutomaticBreakPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: AwareDatetime
+    end: AwareDatetime
+    duration_minutes: int = Field(gt=0, strict=True)
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.start >= self.end:
+            raise ValueError("Automatic break start must be before end")
+        return self
+
+
 class DisplacedOccurrence(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -393,6 +407,7 @@ class DisplacedOccurrence(BaseModel):
     event_type: Literal["LESSON"]
     start: AwareDatetime
     end: AwareDatetime
+    automatic_break: AutomaticBreakPreview | None = None
 
     @model_validator(mode="after")
     def validate_interval(self) -> Self:

@@ -378,3 +378,46 @@ async def test_deleting_series_removes_derived_breaks_but_not_manual_breaks(
     )
     assert [item.source.id for item in occurrences] == [manual.id]
     assert occurrences[0].source.event_type == EventType.BREAK
+
+
+async def test_move_into_saved_automatic_break_is_rejected_without_mutation(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student, _ = await _accounts(db_session, break_minutes=5)
+    blocking_lesson = await create_event(
+        db_session,
+        LessonCreate(
+            start=_at(2, 9),
+            end=_at(2, 10),
+            user_id=student.id,
+        ),
+        default_lesson_validator,
+        teacher.id,
+    )
+    moving_lesson = await create_event(
+        db_session,
+        LessonCreate(
+            start=_at(2, 12),
+            end=_at(2, 13),
+            user_id=student.id,
+        ),
+        default_lesson_validator,
+        teacher.id,
+    )
+
+    with pytest.raises(ValidationError):
+        await update_event(
+            db_session,
+            moving_lesson,
+            LessonUpdate(
+                user_id=student.id,
+                start=_at(2, 10, 4),
+                end=_at(2, 11, 4),
+            ),
+            default_lesson_validator,
+            teacher.id,
+        )
+
+    await db_session.refresh(moving_lesson)
+    assert moving_lesson.start == _at(2, 12).replace(tzinfo=None)
+    assert blocking_lesson.post_break_minutes == 5

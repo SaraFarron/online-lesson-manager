@@ -509,6 +509,11 @@ async def test_scheduling_errors_are_safe_and_displacement_preview_is_typed() ->
                     "event_type": "LESSON",
                     "start": "2035-01-08T10:00:00Z",
                     "end": "2035-01-08T11:00:00Z",
+                    "automatic_break": {
+                        "start": "2035-01-08T11:00:00Z",
+                        "end": "2035-01-08T11:05:00Z",
+                        "duration_minutes": 5,
+                    },
                 }
             ],
         }
@@ -535,6 +540,8 @@ async def test_scheduling_errors_are_safe_and_displacement_preview_is_typed() ->
         assert preview is not None
         assert preview.code == "break_displacement_confirmation_required"
         assert len(preview.affected_occurrences) == 1
+        assert preview.affected_occurrences[0].automatic_break is not None
+        assert preview.affected_occurrences[0].automatic_break.duration_minutes == 5
 
         response[0] = httpx.Response(
             409,

@@ -89,6 +89,7 @@ class NoConflictValidation:
         displacement_token: str | None = None,
         lesson_preferences: TeacherBookingPreferences | None = None,
         teacher_timezone: str | None = None,
+        post_break_minutes: int | None = None,
     ) -> list[Occurrence]:
         return await validate_schedule_change(
             session,
@@ -103,6 +104,7 @@ class NoConflictValidation:
             displacement_token=displacement_token,
             lesson_preferences=lesson_preferences,
             teacher_timezone=teacher_timezone,
+            post_break_minutes=post_break_minutes,
         )
 
 
@@ -134,6 +136,7 @@ class EventValidator:
         displacement_token: str | None = None,
         teacher_profile: TeacherBookingPreferences | None = None,
         teacher_timezone: str | None = None,
+        post_break_minutes: int | None = None,
     ) -> list[Occurrence]:
         for validator in self.validators:
             await validator.validate(
@@ -152,6 +155,7 @@ class EventValidator:
             displacement_token=displacement_token,
             lesson_preferences=teacher_profile,
             teacher_timezone=teacher_timezone,
+            post_break_minutes=post_break_minutes,
         )
         return displaced
 
