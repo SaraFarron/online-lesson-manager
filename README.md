@@ -99,6 +99,15 @@ Registration checks the invitation again; bad settings return 422 and cannot
 leave a partial account. Existing accounts are never reassigned by registration.
 
 Apply schema changes using `uv run alembic upgrade head` before using these routes.
+Before deploying the automatic-break backend, apply migration
+`2026-10-25_lesson_post_break_snapshot.py`. It adds a nonnegative
+`post_break_minutes` snapshot to one-off and recurring events; existing rows
+receive zero and are not backfilled. New lesson writes snapshot the teacher's
+current preference, so changing that preference affects future writes only.
+The migration refuses downgrade while either table contains a nonzero snapshot
+and makes no changes on refusal. A zero-only downgrade removes the snapshot
+columns; do not force rollback or discard nonzero values without an explicitly
+approved data-remediation plan.
 For local manual checks, run `uv run fastapi dev backend/main.py` and use `/docs`;
 authorize Telegram routes with the service key and user routes with a user JWT.
 The bot is a separate process: `uv run python -m telegram`. It uses aiogram 3 /
@@ -141,8 +150,10 @@ Backend outages show an unavailable/retry screen, never offline login or
 successful local signup. If a registration response is lost, the bot checks
 the backend session before resubmitting. Teacher workdays/hours, lesson
 duration defaults, and daily/consecutive lesson limits are enforced by the
-backend. Notification delivery, automatic break creation, offline schedule
-cache, homework actions, and account linking/transfers remain unimplemented.
+backend. Automatic post-lesson breaks are derived from each lesson's saved
+duration snapshot and shown in Telegram booking and management flows.
+Notification delivery, free-slot selection, offline schedule cache, homework
+actions, and account linking/transfers remain unimplemented.
 Teachers and students can edit their saved account and role preferences from
 Settings in the Telegram role home. Account and role preferences are saved
 separately; timezone changes do not move stored event instants, and notification
@@ -238,11 +249,11 @@ intermediate mismatch returns authentication errors, not offline success.
 следующих этапа):
 
 1. [Telegram: управление расписанием и настройками](./docs/plans/telegram-scheduling-and-settings-ui.md) — реализовано; проверка и критерии завершения записаны в плане.
-2. [Автоматические перерывы после уроков, включая Telegram UI](./docs/plans/automatic-between-lesson-breaks.md) — следующий этап; автоматическое создание перерывов пока не реализовано.
-3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md) — последующий этап; backend и интерфейс пока не реализованы.
+2. [Автоматические перерывы после уроков, включая Telegram UI](./docs/plans/automatic-between-lesson-breaks.md) —
+   реализовано и проверено на SQLite/PostgreSQL; наследуемые уроки не изменяются автоматически.
+3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md) — следующий этап; backend и интерфейс пока не реализованы.
 
-Из ещё не реализованных этапов рекомендуемый порядок: автоматические
-перерывы, затем домашние задания.
+Следующий рекомендуемый нереализованный этап — домашние задания.
 
 ## Фронтенд
 В случае если до фронтенда дойдет, первые версии нужно делать без использования каких то больших фреймворков типо react. Из шаблона проектов есть начальные файлы в templates - используется htmx. Этого должно быть достаточно на первое время.
@@ -278,7 +289,12 @@ intermediate mismatch returns authentication errors, not offline success.
 Начало и конец рабочего дня - настройка учителя. Ученики не могут добавить урок вне рабочего дня его учителя. По умолчанию - 9 утра и 6 вечера
 Рабочие дни - настройка учителя. Учитель может выбрать дни недели, в которые он работает. Ученики не могут добавить урок в нерабочие дни. По умолчанию рабочие дни с понедельника по пятницу.
 Длительноть урока по умолчанию - настройка учителя. При создании урока он создается с длительностью этой настройки. Поменять длительность урока может только учитель. По умолчанию - 1 час.
-Перерыв между уроками - настройка учителя. Если = 0, то никаких перерывов не добавляется. Эта настройка автоматически добавляет перерыв после каждого поставленного урока у учителя и удаляет его при удалении. Технически, это может хранится в базе как отдельное поле, означающее длительность перерыва после урока, или как отдельная строка в таблице ивентов. По умолчанию 5 минут.
+Перерыв между уроками - настройка учителя. Если = 0, то никаких перерывов
+не добавляется. Эта настройка автоматически добавляет перерыв после каждого
+поставленного урока у учителя и удаляет его при удалении. В текущей реализации
+длительность фиксируется в снимке урока или серии; изменение настройки влияет
+только на новые записи, существующие уроки автоматически не изменяются. По
+умолчанию 5 минут.
 Максимальное количество уроков подряд - настройка учителя. Считается, что уроки стоят подряд, если один идет сразу за другим, или между ними стоит только перерыв по настройке "Перерыв между уроками". Ученик не может поставить урок так, чтобы цепочка уроков подряд превышала эту настройку. По умолчанию 4.
 Максимальное количество уроков в день - настройка учителя. Запрещает ученику ставить урок в день, когда уже запланировано количество уроков, указанное в этой настройке. По умолчанию - 6.
 Уведомления о количестве уроков сегодня - сообщает пользователю о расписании на день. Если пользователь учитель - добавляет имя ученика напротив каждого урока. Можно настроить время, когда это уведомление приходит. По умолчанию - 9 утра.
@@ -475,9 +491,11 @@ UTC-step events. Schedule mutations acquire a persistent per-teacher database
 guard before validation and hold it through writes/displacement; SQLite and
 PostgreSQL transaction behavior is covered by concurrent mutation tests.
 
-Automatic break creation and free-slot selection are not implemented.
-An arbitrary-date picker, an HTMX schedule UI, offline schedule caching, and
-notification delivery are also pending. Telegram week navigation is available
-for earlier and later Monday–Sunday weeks. Treat the remaining work as separate
-follow-on work; booking-policy enforcement does not automatically create
-between-lesson breaks.
+Automatic post-lesson breaks are implemented as derived, read-only reservations
+from each lesson's snapshotted duration. Legacy lessons and series keep a
+zero-minute snapshot; preference changes apply to future writes only. A
+reservation may extend beyond work hours or local midnight, follows its parent
+lesson's cancellation and visibility, and does not count as a lesson.
+Free-slot selection, an arbitrary-date picker, an HTMX schedule UI, offline
+schedule caching, and notification delivery remain pending. Telegram week
+navigation is available for earlier and later Monday–Sunday weeks.
