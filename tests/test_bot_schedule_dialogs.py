@@ -58,6 +58,7 @@ async def test_registered_teacher_can_navigate_and_refresh_in_place(
                 event_type="LESSON",
                 start=datetime(2026, 10, 20, 9),
                 end=datetime(2026, 10, 20, 10),
+                post_break_minutes=5,
             )
         )
         await db_session.commit()
@@ -66,11 +67,15 @@ async def test_registered_teacher_can_navigate_and_refresh_in_place(
         assert "Tuesday, October 20, 2026" in driver.session.last_message.text
         assert "Updated at 2026-10-20 00:01 (UTC)" in driver.session.last_message.text
         assert "Personal lesson" in driver.session.last_message.text
+        assert "10:00–10:05  Automatic break (read-only)  [UPCOMING]" in (
+            driver.session.last_message.text
+        )
         assert driver.session.last_message.text.count("No events") == 6
 
         await driver.click("Today")
         assert "Today's schedule" in driver.session.last_message.text
         assert "Personal lesson" in driver.session.last_message.text
+        assert "Automatic break (read-only)" in driver.session.last_message.text
         await driver.click("Back to home")
         assert "TEACHER:" in driver.session.last_message.text
         assert "Lesson booking and schedule viewing are available" in (

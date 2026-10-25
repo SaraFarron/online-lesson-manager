@@ -18,6 +18,10 @@ _EVENT_LABELS = {
     "BREAK": "Break",
     "VACATION": "Vacation",
 }
+_AUTOMATIC_BREAK_LABELS: dict[ViewerRole, str] = {
+    "TEACHER": "Automatic break (read-only)",
+    "STUDENT": "Teacher's automatic break (read-only)",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,7 +125,11 @@ def _render_item(item: ScheduleItem, role: ViewerRole, zone: ZoneInfo) -> _TextL
         unit = "day" if days_later == 1 else "days"
         interval += f" (+{days_later} {unit})"
 
-    event_label = _EVENT_LABELS[item.event_type]
+    event_label = (
+        _AUTOMATIC_BREAK_LABELS[role]
+        if item.source_kind == "automatic_break"
+        else _EVENT_LABELS[item.event_type]
+    )
     subject = ""
     markup_subject = ""
     if role == "TEACHER" and item.event_type == "LESSON":

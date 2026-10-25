@@ -34,6 +34,27 @@ def _item(
     )
 
 
+def _automatic_break(
+    source_id: int,
+    start: datetime,
+    end: datetime,
+    parent_start: datetime,
+    *,
+    parent_kind: str = "event",
+    status: str = "upcoming",
+) -> ScheduleItem:
+    return ScheduleItem(
+        source_kind="automatic_break",
+        source_id=UUID(f"00000000-0000-0000-0000-{source_id:012d}"),
+        event_type="BREAK",
+        parent_kind=parent_kind,
+        parent_start=parent_start,
+        start=start,
+        end=end,
+        status=status,
+    )
+
+
 def _response(
     days: list[ScheduleDay],
     *,
@@ -106,6 +127,125 @@ def test_automatic_break_schedule_items_require_parent_reference() -> None:
             end=datetime.fromisoformat("2026-10-19T10:05:00+00:00"),
             status="upcoming",
         )
+    with pytest.raises(ValidationError):
+        ScheduleItem(
+            source_kind="event",
+            source_id=UUID("00000000-0000-0000-0000-000000000001"),
+            event_type="BREAK",
+            parent_kind="event",
+            parent_start=datetime.fromisoformat("2026-10-19T09:00:00+00:00"),
+            start=datetime.fromisoformat("2026-10-19T10:00:00+00:00"),
+            end=datetime.fromisoformat("2026-10-19T10:05:00+00:00"),
+            status="upcoming",
+        )
+
+
+def test_automatic_and_manual_breaks_have_distinct_read_only_labels() -> None:
+    lesson = _item(
+        1,
+        "2026-10-19T02:00:00+00:00",
+        "2026-10-19T03:00:00+00:00",
+        status="past",
+    )
+    automatic_break = _automatic_break(
+        1,
+        datetime.fromisoformat("2026-10-19T03:00:00+00:00"),
+        datetime.fromisoformat("2026-10-19T03:05:00+00:00"),
+        datetime.fromisoformat("2026-10-19T02:00:00+00:00"),
+    )
+    manual_break = _item(
+        2,
+        "2026-10-19T03:05:00+00:00",
+        "2026-10-19T04:05:00+00:00",
+        event_type="BREAK",
+        subject_label=None,
+    )
+    assert lesson.source_id == automatic_break.source_id
+    assert lesson.source_kind != automatic_break.source_kind
+    day = ScheduleDay(
+        date=date(2026, 10, 19),
+        items=[lesson, automatic_break, manual_break],
+    )
+    response = _response(
+        [day],
+        timezone="Asia/Bangkok",
+        generated_at="2026-10-18T00:00:00+00:00",
+    )
+
+    teacher_text = _visible_text(format_schedule_pages(response, "TEACHER")[0])
+    student_text = _visible_text(format_schedule_pages(response, "STUDENT")[0])
+
+    assert "09:00–10:00  Lesson — Student  [PAST]" in teacher_text
+    assert "10:00–10:05  Automatic break (read-only)  [UPCOMING]" in teacher_text
+    assert "10:05–11:05  Break  [UPCOMING]" in teacher_text
+    assert "10:00–10:05  Teacher's automatic break (read-only)  [UPCOMING]" in (
+        student_text
+    )
+    assert "10:00–10:05  Automatic break" not in student_text
+
+
+def test_automatic_break_local_times_disambiguate_dst_fold() -> None:
+    day = ScheduleDay(
+        date=date(2026, 11, 1),
+        items=[
+            _automatic_break(
+                1,
+                datetime.fromisoformat("2026-11-01T05:30:00+00:00"),
+                datetime.fromisoformat("2026-11-01T05:45:00+00:00"),
+                datetime.fromisoformat("2026-11-01T04:30:00+00:00"),
+            ),
+            _automatic_break(
+                2,
+                datetime.fromisoformat("2026-11-01T06:30:00+00:00"),
+                datetime.fromisoformat("2026-11-01T06:45:00+00:00"),
+                datetime.fromisoformat("2026-11-01T05:30:00+00:00"),
+                parent_kind="recurrent_event",
+            ),
+        ],
+    )
+    response = _response(
+        [day],
+        timezone="America/New_York",
+        generated_at="2026-11-01T04:00:00+00:00",
+    )
+
+    text = _visible_text(format_schedule_pages(response, "TEACHER")[0])
+
+    assert "01:30 EDT (UTC-04:00)" in text
+    assert "01:30 EST (UTC-05:00)" in text
+    assert text.count("Automatic break (read-only)") == 2
+
+
+def test_automatic_breaks_paginate_without_omitting_rows() -> None:
+    items = []
+    for index in range(160):
+        start = datetime(2026, 10, 19, 8, tzinfo=UTC) + timedelta(minutes=index * 5)
+        items.append(
+            _automatic_break(
+                index + 1,
+                start,
+                start + timedelta(minutes=3),
+                start - timedelta(hours=1),
+            )
+        )
+    days = [ScheduleDay(date=date(2026, 10, 19), items=items)] + [
+        ScheduleDay(date=date(2026, 10, day), items=[]) for day in range(20, 26)
+    ]
+    response = _response(
+        days,
+        period="week",
+        generated_at="2026-10-18T00:00:00+00:00",
+    )
+
+    pages = format_schedule_pages(response, "STUDENT")
+    visible_pages = [_visible_text(page) for page in pages]
+    all_text = "\n".join(visible_pages)
+
+    assert len(pages) > 1
+    assert all(_utf16_length(page) <= MAX_MESSAGE_UTF16_UNITS for page in visible_pages)
+    assert all_text.count("Teacher's automatic break (read-only)") == 160
+    assert all_text.count("[UPCOMING]") == 160
+    assert all(f"{item.start:%H:%M}–{item.end:%H:%M}" in all_text for item in items)
 
 
 def test_teacher_names_are_html_escaped_but_student_labels_are_suppressed() -> None:
@@ -154,6 +294,12 @@ def test_now_divider_is_only_on_current_date_and_between_status_groups() -> None
                     "2026-10-19T15:00:00+00:00",
                     status="upcoming",
                 ),
+                _automatic_break(
+                    4,
+                    datetime.fromisoformat("2026-10-19T15:00:00+00:00"),
+                    datetime.fromisoformat("2026-10-19T15:05:00+00:00"),
+                    datetime.fromisoformat("2026-10-19T14:00:00+00:00"),
+                ),
             ],
         ),
         ScheduleDay(date=date(2026, 10, 20), items=[]),
@@ -172,6 +318,9 @@ def test_now_divider_is_only_on_current_date_and_between_status_groups() -> None
     assert plain.index("[PAST]") < plain.index("NOW")
     assert plain.index("NOW") < plain.index("[ONGOING]")
     assert plain.index("[ONGOING]") < plain.index("[UPCOMING]")
+    assert plain.index("[UPCOMING]") < plain.index(
+        "Teacher's automatic break (read-only)"
+    )
 
 
 def test_current_empty_day_keeps_empty_state_and_now_divider() -> None:
@@ -273,6 +422,10 @@ def test_oversized_week_paginates_complete_rows_with_safe_labels_and_budget() ->
         for index, page in enumerate(visible_pages, start=1)
     )
     assert all(_utf16_length(page) <= MAX_MESSAGE_UTF16_UNITS for page in visible_pages)
+    assert all(
+        f"Page {index}/{len(pages)}" in page
+        for index, page in enumerate(visible_pages, start=1)
+    )
     assert sum(page.count("[UPCOMING]") for page in visible_pages) == 160
     assert all(
         f"Student {index:03d}" in "\n".join(visible_pages) for index in range(160)
