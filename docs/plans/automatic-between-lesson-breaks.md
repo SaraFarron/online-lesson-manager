@@ -253,9 +253,18 @@ Commit: `dbeb54b`.
 
 **Reuse:** `BackendClient`, `ScheduleItem`, `format_schedule_pages`, event details from the UI plan.
 
-**Acceptance:** [ ] Exact teacher/student text, DST times, identity handling and long-week pagination pass with no omitted events. [ ] Existing schedule/onboarding tests and common checks pass.
+**Acceptance:** [x] Exact teacher/student text, DST times, identity handling and long-week pagination pass with no omitted events. [x] Existing schedule/onboarding tests and common checks pass.
 
 **Out of scope:** Offline caching. **Suitable for:** AI agent.
+
+**Execution:** Automatic schedule rows are now labeled read-only with
+role-specific text; manual breaks retain their existing label. Formatting uses
+viewer-local times and the existing NOW divider. Tests cover shared parent IDs
+with distinct source kinds, DST fold offsets, invalid parent metadata, and a
+160-row week paginated without omissions or Telegram UTF-16 budget violations.
+The real bot schedule dialog displays the row on refresh. Focused Telegram
+schedule/client tests passed (42 passed); repository Ruff, touched-file format,
+and full Telegram mypy passed. Commit: `ea3c246`.
 
 ## Task 08: Integrate automatic breaks into Telegram booking and Settings
 
