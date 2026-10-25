@@ -276,9 +276,21 @@ and full Telegram mypy passed. Commit: `ea3c246`.
 
 **Reuse:** Scheduling/settings dialogs, error mapper, safe mutation/reload flow.
 
-**Acceptance:** [ ] Both roles create/move/cancel lessons and observe correct auto-break results. [ ] Teachers change break preference with correct scope/confirmation; students cannot mutate teacher settings or auto breaks. [ ] Same-message/error/common checks pass.
+**Acceptance:** [x] Both roles create/move/cancel lessons and observe correct auto-break results. [x] Teachers change break preference with correct scope/confirmation; students cannot mutate teacher settings or auto breaks. [x] Same-message/error/common checks pass.
 
 **Out of scope:** New preference fields or bot-side admission logic. **Suitable for:** AI agent.
+
+**Execution:** Student booking context now includes the teacher's saved
+between-lesson preference. Booking and management reviews show the computed
+reservation (including zero-break behavior); teacher-only custom durations are
+explained as lesson/series-scoped. Move and cancellation confirmations describe
+the associated reservation, manual-break previews label automatic reservations
+read-only, and automatic-break conflicts have specific actionable messages.
+Settings no longer claim breaks are pending and explain the future-only scope
+before and after saving. Teacher and student integration flows, authorization
+boundaries, and conflict messaging passed in the focused suite (78 passed).
+Repository Ruff, changed-file format, changed-file backend mypy, and Telegram
+mypy passed. Commit: `be9ad8c`.
 
 ## Task 09: Verify full lifecycle, migrations, and Telegram acceptance
 
