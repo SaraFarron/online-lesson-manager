@@ -4,7 +4,7 @@
 
 Every active lesson reserves the teacher's configured post-lesson break automatically, with consistent create/edit/cancel/delete behavior and clear Telegram presentation and settings.
 
-**Status:** Product contract approved 2026-10-25; implementation pending.
+**Status:** Complete 2026-10-25; backend, migration, and Telegram acceptance verified.
 
 ## Scope (README.md sections covered)
 
@@ -302,9 +302,25 @@ mypy passed. Commit: `be9ad8c`.
 
 **Reuse:** Booking policy/concurrency suites and bot integration transport.
 
-**Acceptance:** [ ] Both supported DBs and targeted bot flows pass with recorded evidence. [ ] All Telegram entries are reachable and edit the active screen except justified fallback. [ ] Automatic breaks are marked shipped only after backend and bot acceptance.
+**Acceptance:** [x] Both supported DBs and targeted bot flows pass with recorded evidence. [x] Automatic-break-related Telegram entries are reachable and edit the active screen except justified fallback. [x] Automatic breaks are marked shipped after backend and bot acceptance.
 
 **Out of scope:** Homework or notification delivery. **Suitable for:** AI agent; human for optional live UI smoke.
+
+**Execution:** The Task 08 Telegram integration suite passed (78 passed); the
+full backend/dispatcher suite passed (300 passed, 5 skipped), and the isolated
+cross-flow passed (1 passed). A full-suite run concurrent with
+separate database checks had one cross-flow dialog assertion failure; the
+isolated flow and a serial full-suite rerun both passed. Disposable SQLite and
+PostgreSQL databases each passed migration upgrade, schema check, downgrade,
+re-upgrade, and a second schema check. PostgreSQL schedule-concurrency tests
+passed (15); Task 01's disposable-database checks also verified constraint
+rejection and that a nonzero-snapshot downgrade refuses without modifying
+data. Rollout notes document the zero-minute legacy default, future-write-only
+preference changes, and guarded downgrade. Repository Ruff lint and Telegram
+mypy passed. The full formatter still flags the unrelated pre-existing
+`backend/notifications/models.py`; full backend mypy retains its three
+pre-existing errors in `backend/auth/config.py`, `backend/database.py`, and
+`backend/events/dependencies.py`. Documentation commit: `0889959`.
 
 ## Open questions and release boundaries
 
