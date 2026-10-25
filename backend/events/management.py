@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.constants import EventType
-from backend.events.constants import RecurrenceMode
+from backend.events.constants import (
+    AUTOMATIC_BREAK_READ_ONLY_DETAIL,
+    RecurrenceMode,
+)
 from backend.events.management_schemas import (
     EventManagementDetail,
     EventManagementItem,
@@ -128,6 +131,14 @@ async def get_managed_event(
         event = await session.get(RecurrentEvent, event_id)
     else:
         event = await session.get(Event, event_id)
+    if (
+        event is not None
+        and event.teacher_id == teacher_id
+        and event_type == EventType.BREAK
+        and event.event_type == EventType.LESSON.value
+        and event.post_break_minutes > 0
+    ):
+        raise ValidationError(AUTOMATIC_BREAK_READ_ONLY_DETAIL)
     if event is None or event.event_type != event_type.value:
         raise ValidationError(f"{event_type.value.title()} not found")
 

@@ -3,6 +3,9 @@ from html import unescape
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+import pytest
+from pydantic import ValidationError
+
 from telegram.api import ScheduleDay, ScheduleItem, ScheduleResponse
 from telegram.schedule_format import (
     MAX_LABEL_CODEPOINTS,
@@ -68,7 +71,6 @@ def test_week_includes_all_empty_days_and_snapshot_context() -> None:
         period="week",
         generated_at="2026-10-19T12:00:00+00:00",
     )
-
     pages = format_schedule_pages(response, "STUDENT")
 
     assert len(pages) == 1
@@ -80,6 +82,30 @@ def test_week_includes_all_empty_days_and_snapshot_context() -> None:
         datetime(2026, 10, day).strftime("%A, %B %d, %Y") in plain
         for day in range(19, 26)
     )
+
+
+def test_automatic_break_schedule_items_require_parent_reference() -> None:
+    item = ScheduleItem(
+        source_kind="automatic_break",
+        source_id=UUID("00000000-0000-0000-0000-000000000001"),
+        event_type="BREAK",
+        parent_kind="event",
+        parent_start=datetime.fromisoformat("2026-10-19T09:00:00+00:00"),
+        start=datetime.fromisoformat("2026-10-19T10:00:00+00:00"),
+        end=datetime.fromisoformat("2026-10-19T10:05:00+00:00"),
+        status="upcoming",
+    )
+    assert item.parent_kind == "event"
+
+    with pytest.raises(ValidationError):
+        ScheduleItem(
+            source_kind="automatic_break",
+            source_id=UUID("00000000-0000-0000-0000-000000000001"),
+            event_type="BREAK",
+            start=datetime.fromisoformat("2026-10-19T10:00:00+00:00"),
+            end=datetime.fromisoformat("2026-10-19T10:05:00+00:00"),
+            status="upcoming",
+        )
 
 
 def test_teacher_names_are_html_escaped_but_student_labels_are_suppressed() -> None:

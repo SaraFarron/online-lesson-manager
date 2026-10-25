@@ -230,3 +230,29 @@ def test_teacher_lesson_item_rejects_non_lesson_event_type() -> None:
             status=ScheduleEventStatus.UPCOMING,
             subject_label="Should not be serialized",
         )
+
+
+def test_automatic_break_schedule_item_requires_parent_identity() -> None:
+    automatic_break = ScheduleItem(
+        source_kind=OccurrenceSourceKind.AUTOMATIC_BREAK,
+        source_id=UUID("00000000-0000-0000-0000-000000000010"),
+        event_type=EventType.BREAK,
+        parent_kind=OccurrenceSourceKind.RECURRENT_EVENT,
+        parent_start=datetime(2026, 10, 19, 9, tzinfo=UTC),
+        start=datetime(2026, 10, 19, 10, tzinfo=UTC),
+        end=datetime(2026, 10, 19, 10, 5, tzinfo=UTC),
+        status=ScheduleEventStatus.UPCOMING,
+    )
+
+    assert automatic_break.model_dump(mode="json")["parent_start"] == (
+        "2026-10-19T09:00:00+00:00"
+    )
+    with pytest.raises(ValidationError):
+        ScheduleItem(
+            source_kind=OccurrenceSourceKind.AUTOMATIC_BREAK,
+            source_id=UUID("00000000-0000-0000-0000-000000000010"),
+            event_type=EventType.BREAK,
+            start=datetime(2026, 10, 19, 10, tzinfo=UTC),
+            end=datetime(2026, 10, 19, 10, 5, tzinfo=UTC),
+            status=ScheduleEventStatus.UPCOMING,
+        )

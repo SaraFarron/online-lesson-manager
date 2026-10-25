@@ -9,6 +9,7 @@ from backend.auth.service import get_user_by_id
 from backend.constants import EventType
 from backend.events.booking_policy import TeacherBookingPreferences
 from backend.events.conflicts import validate_schedule_change
+from backend.events.constants import AUTOMATIC_BREAK_READ_ONLY_DETAIL
 from backend.events.models import Event, RecurrentEvent
 from backend.events.occurrences import Occurrence
 from backend.events.schemas import (
@@ -169,8 +170,22 @@ class EventExistsValidator:
         self.EVENT_TYPE = event_type
         self.expected_event_type = expected_event_type
 
-    async def validate(self, session: AsyncSession, event_id: UUID) -> Event:
+    async def validate(
+        self,
+        session: AsyncSession,
+        event_id: UUID,
+        *,
+        teacher_id: UUID | None = None,
+    ) -> Event:
         event = await session.get(Event, event_id)
+        if (
+            event is not None
+            and (teacher_id is None or event.teacher_id == teacher_id)
+            and self.expected_event_type == EventType.BREAK
+            and event.event_type == EventType.LESSON.value
+            and event.post_break_minutes > 0
+        ):
+            raise ValidationError(AUTOMATIC_BREAK_READ_ONLY_DETAIL)
         if event is None or (
             self.expected_event_type is not None
             and event.event_type != self.expected_event_type.value
@@ -179,9 +194,21 @@ class EventExistsValidator:
         return event
 
     async def validate_recurrent(
-        self, session: AsyncSession, event_id: UUID
+        self,
+        session: AsyncSession,
+        event_id: UUID,
+        *,
+        teacher_id: UUID | None = None,
     ) -> RecurrentEvent:
         recurrent_event = await session.get(RecurrentEvent, event_id)
+        if (
+            recurrent_event is not None
+            and (teacher_id is None or recurrent_event.teacher_id == teacher_id)
+            and self.expected_event_type == EventType.BREAK
+            and recurrent_event.event_type == EventType.LESSON.value
+            and recurrent_event.post_break_minutes > 0
+        ):
+            raise ValidationError(AUTOMATIC_BREAK_READ_ONLY_DETAIL)
         if recurrent_event is None or (
             self.expected_event_type is not None
             and recurrent_event.event_type != self.expected_event_type.value

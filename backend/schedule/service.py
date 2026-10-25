@@ -53,6 +53,7 @@ async def get_schedule(
         teacher_id,
         range_start,
         range_end,
+        include_automatic_breaks=True,
     )
     visible_occurrences = filter_vacation_visibility(
         raw_occurrences, teacher_id

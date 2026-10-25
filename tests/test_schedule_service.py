@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.constants import EventType
-from backend.events.models import Event
+from backend.events.constants import RecurrenceMode
+from backend.events.models import Event, RecurrentEvent
+from backend.events.occurrences import OccurrenceSourceKind
 from backend.schedule.schemas import (
     SchedulePeriod,
     ScheduleResponse,
@@ -146,6 +148,129 @@ async def test_vacation_visibility_is_applied_before_student_scope(
     assert await db_session.get(Event, alice_lesson.id) is not None
 
 
+async def test_schedule_exposes_authorized_parent_linked_automatic_breaks(
+    db_session: AsyncSession,
+) -> None:
+    teacher = _user(Roles.TEACHER, "Teacher")
+    alice = _user(Roles.STUDENT, "Alice", teacher_id=teacher.id)
+    bob = _user(Roles.STUDENT, "Bob", teacher_id=teacher.id)
+    db_session.add_all([teacher, alice, bob])
+    await db_session.flush()
+
+    alice_lesson = Event(
+        teacher_id=teacher.id,
+        user_id=alice.id,
+        event_type=EventType.LESSON.value,
+        start=datetime(2026, 10, 19, 9),
+        end=datetime(2026, 10, 19, 10),
+        post_break_minutes=5,
+    )
+    bob_lesson = Event(
+        teacher_id=teacher.id,
+        user_id=bob.id,
+        event_type=EventType.LESSON.value,
+        start=datetime(2026, 10, 19, 11),
+        end=datetime(2026, 10, 19, 12),
+        post_break_minutes=5,
+    )
+    vacation_overlapping_only_auto_break = Event(
+        teacher_id=teacher.id,
+        user_id=alice.id,
+        event_type=EventType.VACATION.value,
+        start=datetime(2026, 10, 19, 10, 2),
+        end=datetime(2026, 10, 19, 10, 4),
+    )
+    vacation_hiding_parent = Event(
+        teacher_id=teacher.id,
+        user_id=alice.id,
+        event_type=EventType.VACATION.value,
+        start=datetime(2026, 10, 19, 12, 30),
+        end=datetime(2026, 10, 19, 12, 45),
+    )
+    hidden_lesson = Event(
+        teacher_id=teacher.id,
+        user_id=alice.id,
+        event_type=EventType.LESSON.value,
+        start=datetime(2026, 10, 19, 12),
+        end=datetime(2026, 10, 19, 13),
+        post_break_minutes=5,
+    )
+    series = RecurrentEvent(
+        teacher_id=teacher.id,
+        user_id=alice.id,
+        event_type=EventType.LESSON.value,
+        start=datetime(2026, 10, 19, 14),
+        end=datetime(2026, 10, 19, 15),
+        interval=7,
+        interval_end=datetime(2026, 10, 27, 14),
+        recurrence_mode=RecurrenceMode.UTC_STEP.value,
+        recurrence_timezone=None,
+        post_break_minutes=5,
+    )
+    manual_break = Event(
+        teacher_id=teacher.id,
+        user_id=teacher.id,
+        event_type=EventType.BREAK.value,
+        start=datetime(2026, 10, 19, 16),
+        end=datetime(2026, 10, 19, 17),
+    )
+    db_session.add_all(
+        [
+            alice_lesson,
+            bob_lesson,
+            vacation_overlapping_only_auto_break,
+            vacation_hiding_parent,
+            hidden_lesson,
+            series,
+            manual_break,
+        ]
+    )
+    await db_session.commit()
+
+    teacher_result = await get_schedule(
+        db_session, teacher, SchedulePeriod.DAY, DAY, NOW
+    )
+    alice_result = await get_schedule(db_session, alice, SchedulePeriod.DAY, DAY, NOW)
+
+    teacher_items = teacher_result.days[0].items
+    auto_breaks = [
+        item
+        for item in teacher_items
+        if item.source_kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+    ]
+    assert {
+        (item.source_id, item.parent_kind, item.parent_start) for item in auto_breaks
+    } == {
+        (
+            alice_lesson.id,
+            OccurrenceSourceKind.EVENT,
+            datetime(2026, 10, 19, 9, tzinfo=UTC),
+        ),
+        (
+            bob_lesson.id,
+            OccurrenceSourceKind.EVENT,
+            datetime(2026, 10, 19, 11, tzinfo=UTC),
+        ),
+        (
+            series.id,
+            OccurrenceSourceKind.RECURRENT_EVENT,
+            datetime(2026, 10, 19, 14, tzinfo=UTC),
+        ),
+    }
+    assert all(item.event_type == EventType.BREAK for item in auto_breaks)
+    assert any(item.source_id == manual_break.id for item in teacher_items)
+    assert not any(item.source_id == hidden_lesson.id for item in teacher_items)
+
+    alice_items = alice_result.days[0].items
+    assert {item.source_id for item in alice_items} >= {alice_lesson.id, series.id}
+    assert all(item.source_id != bob_lesson.id for item in alice_items)
+    assert {
+        item.source_id
+        for item in alice_items
+        if item.source_kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+    } == {alice_lesson.id, series.id}
+
+
 async def test_missing_or_blank_student_name_uses_neutral_fallback(
     db_session: AsyncSession,
 ) -> None:
@@ -267,7 +392,7 @@ async def test_database_query_count_is_bounded_and_read_only(
     select_count = sum(
         statement.lstrip().upper().startswith("SELECT") for statement in statements
     )
-    assert select_count == 4
+    assert select_count == 5
     assert sum(len(day.items) for day in result.days) == 10
     assert not db_session.new
     assert not db_session.dirty

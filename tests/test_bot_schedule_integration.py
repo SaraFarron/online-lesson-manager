@@ -394,6 +394,8 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
                 "end",
                 "status",
                 "subject_label",
+                "parent_kind",
+                "parent_start",
             }
             assert all(set(item) <= allowed_item_fields for item in teacher_items)
             assert str(alice_tuesday.id) not in actual_ids

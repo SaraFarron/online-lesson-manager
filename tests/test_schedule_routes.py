@@ -178,6 +178,54 @@ async def test_dst_day_and_week_bounds_and_start_date_filter_over_http(
     assert len(week.json()["days"]) == 7
 
 
+async def test_schedule_route_serializes_automatic_break_parent_reference(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    fixed_schedule_clock: datetime,
+) -> None:
+    teacher = await _user(db_session, Roles.TEACHER)
+    student = await _user(db_session, Roles.STUDENT, teacher_id=teacher.id)
+    lesson = Event(
+        teacher_id=teacher.id,
+        user_id=student.id,
+        event_type="LESSON",
+        start=datetime(2026, 10, 19, 9),
+        end=datetime(2026, 10, 19, 10),
+        post_break_minutes=5,
+    )
+    db_session.add(lesson)
+    await db_session.commit()
+
+    teacher_response = await client.get(
+        "/api/v1/schedule/day?date=2026-10-19",
+        headers=_auth_header(teacher),
+    )
+    student_response = await client.get(
+        "/api/v1/schedule/day?date=2026-10-19",
+        headers=_auth_header(student),
+    )
+
+    assert teacher_response.status_code == 200, teacher_response.text
+    assert student_response.status_code == 200, student_response.text
+    for response in (teacher_response, student_response):
+        assert response.json()["generated_at"] == fixed_schedule_clock.isoformat()
+        automatic_break = next(
+            item
+            for item in response.json()["days"][0]["items"]
+            if item["source_kind"] == "automatic_break"
+        )
+        assert automatic_break == {
+            "source_kind": "automatic_break",
+            "source_id": str(lesson.id),
+            "event_type": "BREAK",
+            "parent_kind": "event",
+            "parent_start": "2026-10-19T09:00:00+00:00",
+            "start": "2026-10-19T10:00:00+00:00",
+            "end": "2026-10-19T10:05:00+00:00",
+            "status": "upcoming",
+        }
+
+
 async def test_invalid_recurrence_data_returns_explicit_http_error_not_partial_schedule(
     client: AsyncClient,
     db_session: AsyncSession,

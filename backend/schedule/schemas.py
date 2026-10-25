@@ -38,6 +38,8 @@ class ScheduleItem(BaseModel):
     source_kind: OccurrenceSourceKind
     source_id: UUID
     event_type: EventType
+    parent_kind: OccurrenceSourceKind | None = None
+    parent_start: UtcTimestamp | None = None
     start: UtcTimestamp
     end: UtcTimestamp
     status: ScheduleEventStatus
@@ -46,9 +48,23 @@ class ScheduleItem(BaseModel):
     def validate_interval(self) -> ScheduleItem:
         if self.start >= self.end:
             raise ValueError("Schedule item start must be before end")
+        if self.source_kind == OccurrenceSourceKind.AUTOMATIC_BREAK:
+            if (
+                self.event_type != EventType.BREAK
+                or self.parent_kind
+                not in {
+                    OccurrenceSourceKind.EVENT,
+                    OccurrenceSourceKind.RECURRENT_EVENT,
+                }
+                or self.parent_start is None
+                or self.parent_start >= self.start
+            ):
+                raise ValueError("Automatic breaks require a valid parent occurrence")
+        elif self.parent_kind is not None or self.parent_start is not None:
+            raise ValueError("Only automatic breaks can include a parent occurrence")
         return self
 
-    @field_serializer("start", "end", when_used="json")
+    @field_serializer("start", "end", "parent_start", when_used="json-unless-none")
     def serialize_utc_timestamps(self, value: datetime) -> str:
         return normalize_utc(value).isoformat()
 

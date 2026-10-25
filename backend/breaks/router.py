@@ -147,8 +147,8 @@ async def update_break(
     ] = None,
 ) -> Any:
     assert_teacher_actor(user)
-    brk = await exist_validator.validate(session, break_id)
     teacher_id = resolve_teacher_id(user)
+    brk = await exist_validator.validate(session, break_id, teacher_id=teacher_id)
     assert_owns_event(user, brk)
     await assert_can_assign_user(session, user, data.user_id)
     updated_brk = await service.update_event(
@@ -184,7 +184,8 @@ async def delete_break(
     ] = None,
 ) -> None:
     assert_teacher_actor(user)
-    brk = await validator.validate(session, break_id)
+    teacher_id = resolve_teacher_id(user)
+    brk = await validator.validate(session, break_id, teacher_id=teacher_id)
     assert_owns_event(user, brk)
     await service.delete_event(session, brk, actor=user, expected_revision=if_match)
 
@@ -320,8 +321,10 @@ async def update_recurrent_break(
     ] = None,
 ) -> Any:
     assert_teacher_actor(user)
-    brk = await exist_validator.validate_recurrent(session, break_id)
     teacher_id = resolve_teacher_id(user)
+    brk = await exist_validator.validate_recurrent(
+        session, break_id, teacher_id=teacher_id
+    )
     assert_owns_event(user, brk)
     await assert_can_assign_user(session, user, data.user_id)
     updated_brk = await service.update_recurrent_event(
@@ -357,6 +360,7 @@ async def delete_recurrent_break(
     ] = None,
 ) -> None:
     assert_teacher_actor(user)
-    brk = await validator.validate_recurrent(session, break_id)
+    teacher_id = resolve_teacher_id(user)
+    brk = await validator.validate_recurrent(session, break_id, teacher_id=teacher_id)
     assert_owns_event(user, brk)
     await service.delete_event(session, brk, actor=user, expected_revision=if_match)

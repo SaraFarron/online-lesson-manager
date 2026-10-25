@@ -544,9 +544,11 @@ class SessionView(BaseModel):
 class ScheduleItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source_kind: Literal["event", "recurrent_event"]
+    source_kind: Literal["event", "recurrent_event", "automatic_break"]
     source_id: uuid.UUID
     event_type: Literal["LESSON", "BREAK", "VACATION"]
+    parent_kind: Literal["event", "recurrent_event"] | None = None
+    parent_start: AwareDatetime | None = None
     start: AwareDatetime
     end: AwareDatetime
     status: Literal["past", "ongoing", "upcoming"]
@@ -556,6 +558,16 @@ class ScheduleItem(BaseModel):
     def validate_interval_and_label(self) -> Self:
         if self.start >= self.end:
             raise ValueError("Schedule item start must be before end")
+        if self.source_kind == "automatic_break":
+            if (
+                self.event_type != "BREAK"
+                or self.parent_kind is None
+                or self.parent_start is None
+                or self.parent_start >= self.start
+            ):
+                raise ValueError("Automatic breaks require a valid parent occurrence")
+        elif self.parent_kind is not None or self.parent_start is not None:
+            raise ValueError("Only automatic breaks can include a parent occurrence")
         if self.subject_label is not None and (
             self.event_type != "LESSON" or not self.subject_label.strip()
         ):

@@ -6,7 +6,11 @@ from enum import StrEnum
 from uuid import UUID
 
 from backend.constants import EventType
-from backend.events.occurrences import Occurrence, sort_occurrences
+from backend.events.occurrences import (
+    Occurrence,
+    OccurrenceSourceKind,
+    sort_occurrences,
+)
 from backend.exceptions import ValidationError
 
 type _IntervalIndex = tuple[tuple[datetime, ...], tuple[datetime, ...]]
@@ -57,12 +61,28 @@ def filter_vacation_visibility(
     visible: list[Occurrence] = []
     hidden: list[HiddenOccurrence] = []
     for occurrence in ordered_occurrences:
+        visibility_start = occurrence.start
+        visibility_end = occurrence.end
+        if occurrence.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK:
+            if (
+                occurrence.source.parent_kind
+                not in {
+                    OccurrenceSourceKind.EVENT,
+                    OccurrenceSourceKind.RECURRENT_EVENT,
+                }
+                or occurrence.source.parent_start is None
+                or occurrence.source.parent_start >= occurrence.start
+            ):
+                raise ValidationError("Automatic break has an invalid parent interval")
+            visibility_start = occurrence.source.parent_start
+            visibility_end = occurrence.start
+
         reasons: list[VacationVisibilityReason] = []
-        if _has_overlap(teacher_vacation_index, occurrence.start, occurrence.end):
+        if _has_overlap(teacher_vacation_index, visibility_start, visibility_end):
             reasons.append(VacationVisibilityReason.TEACHER_VACATION)
         student_vacation_index = student_vacation_indexes.get(occurrence.source.user_id)
         if student_vacation_index is not None and _has_overlap(
-            student_vacation_index, occurrence.start, occurrence.end
+            student_vacation_index, visibility_start, visibility_end
         ):
             reasons.append(VacationVisibilityReason.STUDENT_VACATION)
 

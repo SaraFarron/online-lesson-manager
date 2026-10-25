@@ -262,6 +262,92 @@ async def test_vacation_only_overlapping_reserved_break_does_not_block_lesson(
     assert lesson.status_code == 201, lesson.text
 
 
+async def test_automatic_breaks_are_not_managed_through_break_endpoints(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    teacher_id, teacher_token, students = await _teacher_and_students(
+        client, "auto-break-read-only", break_minutes=5
+    )
+    student_id = students[0][0]
+    headers = _headers(teacher_token)
+    lesson = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T09:00:00Z",
+            "end": "2026-12-01T10:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    series = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T11:00:00Z",
+            "end": "2026-12-01T12:00:00Z",
+            "interval": 7,
+            "interval_end": "2026-12-16T11:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert lesson.status_code == 201, lesson.text
+    assert series.status_code == 201, series.text
+    lesson_id = UUID(lesson.json()["id"])
+    series_id = UUID(series.json()["id"])
+    read_only_detail = (
+        "Automatic breaks are derived and cannot be edited or deleted independently; "
+        "manage the parent lesson instead"
+    )
+
+    for response in (
+        await client.get(f"/api/v1/breaks/{lesson_id}", headers=headers),
+        await client.put(
+            f"/api/v1/breaks/{lesson_id}",
+            headers=headers,
+            json={
+                "start": "2026-12-01T09:00:00Z",
+                "end": "2026-12-01T10:00:00Z",
+                "user_id": teacher_id,
+            },
+        ),
+        await client.delete(f"/api/v1/breaks/{lesson_id}", headers=headers),
+        await client.put(
+            f"/api/v1/recurrent-breaks/{series_id}",
+            headers=headers,
+            json={
+                "start": "2026-12-01T11:00:00Z",
+                "end": "2026-12-01T12:00:00Z",
+                "interval": 7,
+                "interval_end": "2026-12-16T11:00:00Z",
+                "user_id": teacher_id,
+            },
+        ),
+        await client.delete(f"/api/v1/recurrent-breaks/{series_id}", headers=headers),
+    ):
+        assert response.status_code == 422
+        assert response.json()["detail"] == read_only_detail
+
+    _, other_teacher_token, _ = await _teacher_and_students(
+        client, "auto-break-other-teacher"
+    )
+    other_teacher_read = await client.get(
+        f"/api/v1/breaks/{lesson_id}",
+        headers=_headers(other_teacher_token),
+    )
+    other_teacher_delete = await client.delete(
+        f"/api/v1/breaks/{lesson_id}",
+        headers=_headers(other_teacher_token),
+    )
+    assert other_teacher_read.status_code == 422
+    assert other_teacher_read.json()["detail"] == "Break not found"
+    assert other_teacher_delete.status_code == 422
+    assert other_teacher_delete.json()["detail"] == "Break not found"
+
+    assert await db_session.get(Event, lesson_id) is not None
+    assert await db_session.get(RecurrentEvent, series_id) is not None
+
+
 async def test_zero_break_allows_exact_adjacency_and_manual_break_preview_is_safe(
     client: AsyncClient,
 ) -> None:
