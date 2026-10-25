@@ -4,7 +4,7 @@
 
 Every active lesson reserves the teacher's configured post-lesson break automatically, with consistent create/edit/cancel/delete behavior and clear Telegram presentation and settings.
 
-**Status:** Planned; product decisions below are not yet approved.
+**Status:** Product contract approved 2026-10-25; implementation pending.
 
 ## Scope (README.md sections covered)
 
@@ -53,9 +53,35 @@ Every active lesson reserves the teacher's configured post-lesson break automati
 
 **What to do:** Approve representation and the following cases: break after the last lesson; whether it may extend beyond work-end/local midnight; whether the setting affects existing lessons/series or only future writes; zero-to-nonzero changes; legacy rollout; standalone editing/deleting of auto breaks; visibility to students; teacher/student vacations; manual-break overlap/merging and displacement. Recommend snapshot-on-create, no silent legacy retrofit, no standalone automatic-break editing, and no destructive displacement by automatic creation; these are proposals, not requirements. For recurring series, one skipped/moved occurrence must remove/move only its break. Decide how a manual break overlapping only an automatic break is handled and what confirmation previews contain when it overlaps the parent lesson. Preserve consecutive counts based on lessons, not extra break rows.
 
+**Owner-approved contract (2026-10-25):**
+
+- Reserve a post-break after every lesson, including the last lesson of a day.
+  It may extend beyond work-end or local midnight and uses elapsed UTC minutes.
+  It is an availability reservation, not a lesson, and does not affect lesson
+  counts.
+- Snapshot the configured duration on new one-off lessons and recurring series.
+  Preference changes apply only to future writes. Existing lessons and series
+  receive a zero-minute legacy default; there is no retrofit.
+- Derive each break from its parent occurrence. Moving, deleting, canceling, or
+  skipping an occurrence moves/removes only that occurrence's break.
+  Automatic breaks cannot be edited or deleted independently.
+- Automatic creation never displaces lessons. A manual break that overlaps
+  only an automatic break is rejected rather than merged. A manual break that
+  overlaps a lesson retains the existing explicit confirmation flow; its
+  preview names the lesson and its attached automatic break.
+- Teachers see all automatic breaks. Students see only breaks attached to
+  their own visible lessons; vacation visibility follows the parent lesson.
+- Telegram lesson review copy:
+  - Teacher: “After this lesson, a {N}-minute break will be reserved. It may
+    extend beyond working hours or midnight.”
+  - Student: “The teacher’s {N}-minute break after this lesson is unavailable
+    for booking.”
+  - Teacher Settings save confirmation: “This change applies to new lessons
+    only; existing lessons and series are unchanged.”
+
 **Reuse:** Existing setting, vacation visibility, manual break confirmation and stable occurrence identity.
 
-**Acceptance:** [ ] Boundary examples and chosen migration/retrofit/preference semantics are recorded. [ ] Teacher/student bot review text is approved. [ ] Any conflict with the existing booking contract is explicitly reconciled before implementation.
+**Acceptance:** [x] Boundary examples and chosen migration/retrofit/preference semantics are recorded. [x] Teacher/student bot review text is approved. [x] The booking contract remains lesson-count-only; automatic breaks do not alter consecutive lesson counts.
 
 **Out of scope:** Unapproved automatic cancellation or retroactive data rewrites. **Suitable for:** Human/product owner with agent preparation.
 
@@ -187,7 +213,6 @@ Every active lesson reserves the teacher's configured post-lesson break automati
 
 ## Open questions and release boundaries
 
-- Task 00 is an owner decision gate, not implied approval of the proposed snapshot design.
 - Existing conflicting schedules must not be repaired by guessed cancellation/backfill. Report categories on approved data sources and request remediation decisions.
 - Notification consumers must eventually use the same lesson visibility and must not treat automatic breaks as lessons.
 - Next milestone: [homework backend and Telegram UI](./homework-backend-and-telegram-ui.md).
