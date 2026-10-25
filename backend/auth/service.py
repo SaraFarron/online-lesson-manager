@@ -282,28 +282,34 @@ async def add_teacher_profile(
 async def update_teacher_profile(
     session: AsyncSession, teacher_profile_data: TeacherProfileUpdate, user: User
 ) -> TeacherProfilePublic:
-    if not user.teacher_profile:
-        raise ValueError("User does not have a teacher profile")
-    profile = user.teacher_profile
-    saved = TeacherProfilePublic.model_validate(profile).model_dump(
-        mode="json", exclude={"id", "teacher_id"}
-    )
-    saved.update(teacher_profile_data.model_dump(exclude_unset=True))
-    try:
-        merged = TeacherProfileCreate.model_validate(saved)
-    except ValidationError as exc:
-        raise RequestValidationError(exc.errors(include_context=False)) from exc
-    for key, value in merged.model_dump().items():
-        if key in {"work_start", "work_end"}:
-            value = string_to_time(value)
-        setattr(profile, key, value)
-    session.add(user)
-    try:
-        await session.commit()
-    except IntegrityError as exc:
-        await session.rollback()
-        if is_teacher_code_conflict(exc):
-            raise TeacherCodeAlreadyExists() from exc
-        raise
-    await session.refresh(user)
-    return TeacherProfilePublic.model_validate(user.teacher_profile)
+    async def update() -> TeacherProfilePublic:
+        if not user.teacher_profile:
+            raise ValueError("User does not have a teacher profile")
+        profile = user.teacher_profile
+        await session.refresh(profile)
+        saved = TeacherProfilePublic.model_validate(profile).model_dump(
+            mode="json", exclude={"id", "teacher_id"}
+        )
+        saved.update(teacher_profile_data.model_dump(exclude_unset=True))
+        try:
+            merged = TeacherProfileCreate.model_validate(saved)
+        except ValidationError as exc:
+            raise RequestValidationError(exc.errors(include_context=False)) from exc
+        for key, value in merged.model_dump().items():
+            if key in {"work_start", "work_end"}:
+                value = string_to_time(value)
+            setattr(profile, key, value)
+        session.add(profile)
+        try:
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            if is_teacher_code_conflict(exc):
+                raise TeacherCodeAlreadyExists() from exc
+            raise
+        await session.refresh(profile)
+        return TeacherProfilePublic.model_validate(profile)
+
+    from backend.events.service import run_serialized_schedule_mutation
+
+    return await run_serialized_schedule_mutation(session, user.id, update)

@@ -2,7 +2,7 @@ import asyncio
 import os
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime
+from datetime import datetime, time
 
 import pytest
 from sqlalchemy import delete, func, select
@@ -15,7 +15,9 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
-from backend.auth.models import User
+from backend.auth.models import TeacherProfile, User
+from backend.auth.schemas import TeacherProfileUpdate
+from backend.auth.service import get_user_by_id, update_teacher_profile
 from backend.constants import EventType
 from backend.events.models import (
     Event,
@@ -30,11 +32,11 @@ from backend.events.schemas import (
     RecurrentEventUpdate,
 )
 from backend.events.service import (
-    _run_serialized_schedule_mutation,
     cancel_recurrent_lesson_occurrence,
     create_event,
     create_recurrent_event,
     delete_event,
+    run_serialized_schedule_mutation,
     update_event,
     update_recurrent_event,
 )
@@ -116,13 +118,13 @@ async def test_sqlite_guard_rejects_concurrent_mutation_without_running_it() -> 
 
     try:
         first_task = asyncio.create_task(
-            _run_serialized_schedule_mutation(first_session, teacher_id, hold_guard)
+            run_serialized_schedule_mutation(first_session, teacher_id, hold_guard)
         )
         await asyncio.wait_for(first_locked.wait(), timeout=2)
         await second_session.scalar(select(func.count()).select_from(User))
 
         with pytest.raises(Conflict, match="retry this request") as exc_info:
-            await _run_serialized_schedule_mutation(
+            await run_serialized_schedule_mutation(
                 second_session, teacher_id, should_not_run
             )
 
@@ -137,6 +139,93 @@ async def test_sqlite_guard_rejects_concurrent_mutation_without_running_it() -> 
         assert guard_count == 1
     finally:
         release_first.set()
+        await first_session.close()
+        await second_session.close()
+        await keeper.close()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_break_preference_update_serializes_with_booking_policy() -> None:
+    engine, keeper, session_factory = await _create_shared_memory_database()
+    teacher_id = uuid.uuid4()
+    first_session = session_factory()
+    second_session = session_factory()
+    guard_acquired = asyncio.Event()
+    release_guard = asyncio.Event()
+
+    try:
+        teacher = User(id=teacher_id, role="TEACHER", timezone="UTC")
+        student = User(role="STUDENT", timezone="UTC", teacher_id=teacher_id)
+        first_session.add_all(
+            [
+                teacher,
+                student,
+                TeacherProfile(
+                    teacher_id=teacher_id,
+                    code=f"t_{uuid.uuid4().hex[:8]}",
+                    work_start=time(9),
+                    work_end=time(18),
+                    working_days=[1, 2, 3, 4, 5, 6, 7],
+                    lesson_length=60,
+                    between_lessons_break=5,
+                    max_consecutive_lessons=4,
+                    max_lessons_per_day=6,
+                ),
+            ]
+        )
+        await first_session.commit()
+
+        async def hold_guard() -> None:
+            guard_acquired.set()
+            await release_guard.wait()
+            await first_session.commit()
+
+        guard_task = asyncio.create_task(
+            run_serialized_schedule_mutation(first_session, teacher_id, hold_guard)
+        )
+        await asyncio.wait_for(guard_acquired.wait(), timeout=2)
+
+        stale_user = await get_user_by_id(second_session, teacher_id)
+        assert stale_user is not None
+        with pytest.raises(Conflict, match="retry this request"):
+            await update_teacher_profile(
+                second_session,
+                TeacherProfileUpdate(between_lessons_break=0),
+                stale_user,
+            )
+
+        release_guard.set()
+        await guard_task
+        await second_session.rollback()
+        current_user = await get_user_by_id(second_session, teacher_id)
+        assert current_user is not None
+        assert current_user.teacher_profile is not None
+        assert current_user.teacher_profile.between_lessons_break == 5
+        assert current_user.teacher_profile.work_start == time(9)
+        updated = await update_teacher_profile(
+            second_session,
+            TeacherProfileUpdate(between_lessons_break=0),
+            current_user,
+        )
+        assert updated.between_lessons_break == 0
+        assert updated.work_start == time(9)
+        assert updated.max_consecutive_lessons == 4
+
+        event = await create_event(
+            second_session,
+            EventCreate(
+                start=datetime(2026, 10, 26, 9),
+                end=datetime(2026, 10, 26, 10),
+                user_id=student.id,
+                event_type=EventType.LESSON,
+            ),
+            EventValidator(),
+            teacher_id=teacher_id,
+        )
+        assert event.post_break_minutes == 0
+    finally:
+        release_guard.set()
         await first_session.close()
         await second_session.close()
         await keeper.close()
@@ -167,7 +256,7 @@ async def test_failed_schedule_mutation_rolls_back_guard_and_event() -> None:
             raise RuntimeError("simulated failed mutation")
 
         with pytest.raises(RuntimeError, match="simulated failed mutation"):
-            await _run_serialized_schedule_mutation(
+            await run_serialized_schedule_mutation(
                 session, teacher_id, fail_after_write
             )
 

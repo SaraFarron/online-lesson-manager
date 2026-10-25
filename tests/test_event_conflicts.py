@@ -348,6 +348,134 @@ async def test_automatic_breaks_are_not_managed_through_break_endpoints(
     assert await db_session.get(RecurrentEvent, series_id) is not None
 
 
+async def test_break_preference_updates_apply_only_to_future_lesson_snapshots(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    teacher_id, teacher_token, students = await _teacher_and_students(
+        client, "auto-break-preference-snapshots", break_minutes=5
+    )
+    student_id = students[0][0]
+    headers = _headers(teacher_token)
+    profile_url = f"/api/v1/auth/users/{teacher_id}/teacher-profile"
+
+    existing_lesson = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T09:00:00Z",
+            "end": "2026-12-01T10:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    existing_series = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-03T11:00:00Z",
+            "end": "2026-12-03T12:00:00Z",
+            "interval": 7,
+            "interval_end": "2026-12-17T11:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert existing_lesson.status_code == 201, existing_lesson.text
+    assert existing_series.status_code == 201, existing_series.text
+
+    profile = await client.get(profile_url, headers=headers)
+    assert profile.status_code == 200, profile.text
+    original_preferences = profile.json()
+    zero_break = await client.put(
+        profile_url,
+        headers=headers,
+        json={"between_lessons_break": 0},
+    )
+    assert zero_break.status_code == 200, zero_break.text
+    assert zero_break.json()["between_lessons_break"] == 0
+    assert {
+        key: value
+        for key, value in zero_break.json().items()
+        if key != "between_lessons_break"
+    } == {
+        key: value
+        for key, value in original_preferences.items()
+        if key != "between_lessons_break"
+    }
+
+    conflicting_lesson = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-01T10:04:00Z",
+            "end": "2026-12-01T11:04:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert conflicting_lesson.status_code == 422, conflicting_lesson.text
+    unchanged_profile = await client.get(profile_url, headers=headers)
+    assert unchanged_profile.status_code == 200, unchanged_profile.text
+    assert unchanged_profile.json()["between_lessons_break"] == 0
+    assert unchanged_profile.json()["work_start"] == original_preferences["work_start"]
+    assert (
+        unchanged_profile.json()["max_consecutive_lessons"]
+        == original_preferences["max_consecutive_lessons"]
+    )
+
+    new_zero_break_lesson = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-02T09:00:00Z",
+            "end": "2026-12-02T10:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert new_zero_break_lesson.status_code == 201, new_zero_break_lesson.text
+
+    nonzero_break = await client.put(
+        profile_url,
+        headers=headers,
+        json={"between_lessons_break": 15},
+    )
+    assert nonzero_break.status_code == 200, nonzero_break.text
+    new_nonzero_break_series = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2026-12-04T09:00:00Z",
+            "end": "2026-12-04T10:00:00Z",
+            "interval": 7,
+            "interval_end": "2026-12-18T09:00:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert new_nonzero_break_series.status_code == 201, new_nonzero_break_series.text
+
+    existing_lesson_row = await db_session.get(
+        Event, UUID(existing_lesson.json()["id"])
+    )
+    existing_series_row = await db_session.get(
+        RecurrentEvent, UUID(existing_series.json()["id"])
+    )
+    zero_break_row = await db_session.get(
+        Event, UUID(new_zero_break_lesson.json()["id"])
+    )
+    nonzero_break_series_row = await db_session.get(
+        RecurrentEvent, UUID(new_nonzero_break_series.json()["id"])
+    )
+    assert (
+        existing_lesson_row is not None and existing_lesson_row.post_break_minutes == 5
+    )
+    assert (
+        existing_series_row is not None and existing_series_row.post_break_minutes == 5
+    )
+    assert zero_break_row is not None and zero_break_row.post_break_minutes == 0
+    assert (
+        nonzero_break_series_row is not None
+        and nonzero_break_series_row.post_break_minutes == 15
+    )
+
+
 async def test_zero_break_allows_exact_adjacency_and_manual_break_preview_is_safe(
     client: AsyncClient,
 ) -> None:

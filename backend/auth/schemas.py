@@ -213,7 +213,13 @@ class TeacherProfilePublic(BaseModel):
     lesson_length: int  # in minutes
     working_days: list[int]
     max_consecutive_lessons: int
-    between_lessons_break: int = 5  # in minutes
+    between_lessons_break: int = Field(
+        default=5,
+        description=(
+            "Minutes reserved after newly created lessons; existing lessons and "
+            "series keep their saved value."
+        ),
+    )
     max_lessons_per_day: int = 6
 
     model_config = ConfigDict(from_attributes=True)
@@ -232,7 +238,13 @@ class TeacherProfileUpdate(BaseModel):
     work_end: WorkTime | None = None
     working_days: WorkingDays | None = None
     lesson_length: PositiveInt | None = None
-    between_lessons_break: BreakMinutes | None = None
+    between_lessons_break: BreakMinutes | None = Field(
+        default=None,
+        description=(
+            "Applies only to new lessons and series; existing items keep their "
+            "saved post-break duration."
+        ),
+    )
     max_consecutive_lessons: PositiveInt | None = None
     max_lessons_per_day: PositiveInt | None = None
 

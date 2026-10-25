@@ -47,7 +47,7 @@ from backend.lessons.schemas import (
 )
 
 
-async def _run_serialized_schedule_mutation[ResultT](
+async def run_serialized_schedule_mutation[ResultT](
     session: AsyncSession,
     teacher_id: uuid.UUID,
     operation: Callable[[], Awaitable[ResultT]],
@@ -129,7 +129,7 @@ async def create_event(
     displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> Event:
-    return await _run_serialized_schedule_mutation(
+    return await run_serialized_schedule_mutation(
         session,
         teacher_id,
         lambda: _create_event(
@@ -216,7 +216,7 @@ async def update_event(
     displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> Event:
-    return await _run_serialized_schedule_mutation(
+    return await run_serialized_schedule_mutation(
         session,
         teacher_id,
         lambda: _update_event(
@@ -300,7 +300,7 @@ async def delete_event(
     actor: User | None = None,
     expected_revision: str | None = None,
 ) -> None:
-    await _run_serialized_schedule_mutation(
+    await run_serialized_schedule_mutation(
         session,
         event.teacher_id,
         lambda: _delete_event(session, event, actor, expected_revision),
@@ -366,7 +366,7 @@ async def create_recurrent_event(
     displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
-    return await _run_serialized_schedule_mutation(
+    return await run_serialized_schedule_mutation(
         session,
         teacher_id,
         lambda: _create_recurrent_event(
@@ -459,7 +459,7 @@ async def update_recurrent_event(
     displacement_token: str | None = None,
     actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
-    return await _run_serialized_schedule_mutation(
+    return await run_serialized_schedule_mutation(
         session,
         teacher_id,
         lambda: _update_recurrent_event(
@@ -625,7 +625,7 @@ async def cancel_recurrent_lesson_occurrence(
         await session.commit()
         return cancellation, revision
 
-    return await _run_serialized_schedule_mutation(session, teacher_id, operation)
+    return await run_serialized_schedule_mutation(session, teacher_id, operation)
 
 
 async def move_recurrent_lesson_occurrence(
@@ -675,7 +675,7 @@ async def move_recurrent_lesson_occurrence(
         await session.refresh(replacement)
         return cancellation, replacement, revision
 
-    return await _run_serialized_schedule_mutation(
+    return await run_serialized_schedule_mutation(
         session, teacher_id, operation, rollback_domain_errors=True
     )
 

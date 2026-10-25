@@ -379,6 +379,11 @@ async def get_teacher_profile(
 @router.put(
     "/users/{user_id}/teacher-profile",
     response_model=TeacherProfilePublic,
+    description=(
+        "Updates teacher preferences. Changes to `between_lessons_break` apply "
+        "only to newly created lessons and series; existing lessons and series "
+        "keep their saved post-break duration."
+    ),
 )
 async def update_teacher_profile(
     session: SessionDep,
