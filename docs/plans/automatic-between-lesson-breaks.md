@@ -95,9 +95,18 @@ Every active lesson reserves the teacher's configured post-lesson break automati
 
 **Reuse:** `Event`, `RecurrentEvent`, migration batch patterns; teacher preference is not duplicated.
 
-**Acceptance:** [ ] Existing instants, manual breaks and cancellations survive upgrade. [ ] Constraints prevent invalid metadata; downgrade behavior and schema drift are verified on both DBs. [ ] Common checks pass.
+**Acceptance:** [x] Existing instants, manual breaks and cancellations survive upgrade. [x] Constraints prevent invalid metadata; downgrade behavior and schema drift are verified on both DBs. [x] Targeted tests, Ruff, and touched-file formatting pass.
 
 **Out of scope:** Materialized ten-year break schedules. **Suitable for:** AI agent.
+
+**Execution:** Added nonnegative `post_break_minutes` snapshots to one-off and
+recurring event rows, constrained to lessons and defaulted legacy rows to zero.
+Disposable SQLite and PostgreSQL databases verified upgrade preservation,
+constraint rejection, lossy-downgrade refusal, clean downgrade, and no Alembic
+schema drift. Targeted tests passed (28). Ruff and touched-file formatting,
+`mypy backend/events/models.py`, and `mypy telegram` passed. Full `mypy backend`
+still reports existing errors in `backend/auth/config.py`,
+`backend/database.py`, and `backend/events/dependencies.py`.
 
 ## Task 02: Derive automatic-break intervals through the shared occurrence engine
 
