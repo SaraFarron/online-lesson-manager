@@ -209,6 +209,7 @@ def build_event_revision(
         "event_type": event.event_type,
         "start": _timestamp(event.start),
         "end": _timestamp(event.end),
+        "post_break_minutes": event.post_break_minutes,
         "updated_at": normalize_utc(event.updated_at).isoformat(),
         "cancellations": [
             {

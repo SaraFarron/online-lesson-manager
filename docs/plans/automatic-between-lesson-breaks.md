@@ -142,9 +142,21 @@ recorded above.
 
 **Reuse:** Existing create/update/delete, exact-occurrence actions from the UI plan, `_run_serialized_schedule_mutation`, `_apply_displacements`.
 
-**Acceptance:** [ ] Lifecycle and rollback tests cover all write entrypoints and duplicate requests. [ ] Manual breaks do not get deleted with unrelated lessons; removal does not restore displaced lessons. [ ] Common checks pass.
+**Acceptance:** [x] Lifecycle and rollback tests cover creation, update, move, cancel, delete, displacement, rollback, and duplicate cancellation. [x] Manual breaks remain independent; removing a parent does not restore displaced lessons. [x] Targeted tests, Ruff, and touched-file type checks pass.
 
 **Out of scope:** Notification scheduling or independent auto-break editing. **Suitable for:** AI agent.
+
+**Execution:** New lesson and series writes snapshot the teacher preference;
+ordinary edits preserve that snapshot, and a moved series occurrence carries
+its parent series' duration. Revision hashes now cover the saved duration.
+Because breaks are derived, existing serialized parent mutations atomically
+move/remove them without child rows. Real SQLite service tests verify create,
+edit, move, cancel, duplicate cancel, delete, one-off and recurring manual-break
+displacement, and failed-move rollback while retaining unaffected occurrences.
+Focused lifecycle/mutation tests and event-management/occurrence-route tests
+passed (46 passed, 4 PostgreSQL-only tests skipped across the focused runs).
+Ruff, changed-service mypy, and Telegram mypy pass; full backend mypy retains
+the three existing unrelated errors recorded above.
 
 ## Task 04: Include automatic breaks in admission and availability
 

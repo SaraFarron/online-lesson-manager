@@ -154,9 +154,11 @@ async def _create_event(
     displacement_token: str | None = None,
     actor_is_teacher: bool = False,
     commit: bool = True,
+    post_break_minutes: int | None = None,
 ) -> Event:
     teacher_profile = None
     teacher_timezone = None
+    saved_post_break_minutes = 0
     if event_data.event_type == EventType.LESSON:
         event_data, teacher_profile, teacher_timezone = await prepare_lesson_write(
             session,
@@ -164,6 +166,10 @@ async def _create_event(
             teacher_id,
             actor_is_teacher=actor_is_teacher,
         )
+        if teacher_profile is not None:
+            saved_post_break_minutes = teacher_profile.between_lessons_break
+        if post_break_minutes is not None:
+            saved_post_break_minutes = post_break_minutes
     if event_data.end is None:
         raise ValidationError("Event end time is required")
 
@@ -185,6 +191,7 @@ async def _create_event(
         user_id=event_data.user_id,
         teacher_id=teacher_id,
         event_type=event_data.event_type,
+        post_break_minutes=saved_post_break_minutes,
     )
     session.add(event)
     if commit:
@@ -420,6 +427,11 @@ async def _create_recurrent_event(
         interval_end=to_storage_utc(event_data.interval_end),
         recurrence_mode=RecurrenceMode.TEACHER_LOCAL.value,
         recurrence_timezone=teacher.timezone,
+        post_break_minutes=(
+            teacher_profile.between_lessons_break
+            if event_data.event_type == EventType.LESSON and teacher_profile is not None
+            else 0
+        ),
     )
     session.add(recurrent_event)
     await session.commit()
@@ -647,6 +659,7 @@ async def move_recurrent_lesson_occurrence(
             teacher_id,
             actor_is_teacher=actor.role == Roles.TEACHER,
             commit=False,
+            post_break_minutes=recurrent_event.post_break_minutes,
         )
         cancellations.append(cancellation)
         revision = build_event_revision(recurrent_event, cancellations)
