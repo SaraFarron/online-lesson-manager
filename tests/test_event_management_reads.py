@@ -289,6 +289,7 @@ async def test_teacher_context_is_minimal_and_local_resolution_uses_saved_timezo
             "work_end": "17:00",
             "working_days": [1, 2, 3, 4, 5],
             "lesson_length": 45,
+            "between_lessons_break": 7,
         },
     )
     assert profile_update.status_code == 200, profile_update.text
@@ -304,12 +305,19 @@ async def test_teacher_context_is_minimal_and_local_resolution_uses_saved_timezo
         "work_end": "17:00",
         "working_days": [1, 2, 3, 4, 5],
         "lesson_length": 45,
+        "between_lessons_break": 7,
     }
     owner_only_profile = await client.get(
         f"/api/v1/auth/users/{teacher_id}/teacher-profile",
         headers=_headers(student[1]),
     )
     assert owner_only_profile.status_code == 403
+    forbidden_profile_update = await client.put(
+        f"/api/v1/auth/users/{teacher_id}/teacher-profile",
+        headers=_headers(student[1]),
+        json={"between_lessons_break": 0},
+    )
+    assert forbidden_profile_update.status_code == 403
 
     timezone_update = await client.patch(
         "/api/v1/auth/me",

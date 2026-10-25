@@ -74,6 +74,7 @@ def _one_time(
         event_type=EventType.LESSON.value,
         start=start,
         end=start.replace(hour=start.hour + 1),
+        post_break_minutes=5,
     )
 
 
@@ -86,6 +87,7 @@ def _series(teacher: User, student: User) -> RecurrentEvent:
         end=datetime(2026, 11, 2, 11),
         interval=7,
         interval_end=datetime(2026, 12, 1, 10),
+        post_break_minutes=5,
         recurrence_mode="TEACHER_LOCAL",
         recurrence_timezone="UTC",
     )
@@ -174,11 +176,20 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         await driver.text("11/03/2026")
         await driver.text("11:00")
         assert "Start: Tue, 2026-11-03 11:00" in driver.session.last_message.text
+        assert "Automatic break after this lesson (5 min)" in (
+            driver.session.last_message.text
+        )
+        assert "Tue, 2026-11-03 12:00" in driver.session.last_message.text
         await driver.click("Save change")
 
         await db_session.refresh(event)
         assert event.start == datetime(2026, 11, 3, 11)
         assert event.end == datetime(2026, 11, 3, 12)
+        assert event.post_break_minutes == 5
+        assert "Automatic break after this lesson (5 min)" in (
+            driver.session.last_message.text
+        )
+        assert "Tue, 2026-11-03 12:00" in driver.session.last_message.text
         update = next(
             request
             for request in requests
@@ -224,6 +235,69 @@ async def test_student_management_lists_only_own_hidden_lesson(
         await _close_bot(driver, http)
 
 
+async def test_student_can_move_and_cancel_own_occurrences_with_break_feedback(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    series = _series(teacher, student)
+    db_session.add(series)
+    await db_session.commit()
+    _freeze_schedule_clock(monkeypatch)
+    driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(student))
+    try:
+        await _open_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Inspect occurrence")
+        await driver.text("11/16/2026")
+        await driver.text("10:00")
+        assert "Automatic break after this occurrence (5 min)" in (
+            driver.session.last_message.text
+        )
+
+        await driver.click("Move this occurrence")
+        await driver.text("11/16/2026")
+        await driver.text("12:00")
+        assert "Automatic break after the replacement lesson (5 min)" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Move occurrence")
+        assert "Automatic break after the replacement lesson (5 min)" in (
+            driver.session.last_message.text
+        )
+        assert "(cancelled)" in driver.session.last_message.text
+
+        await driver.click("Inspect occurrence")
+        await driver.text("11/23/2026")
+        await driver.text("10:00")
+        await driver.click("Cancel this occurrence")
+        assert "automatic break reservation will also be removed" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Confirm")
+
+        assert "No automatic break is reserved after this cancelled occurrence." in (
+            driver.session.last_message.text
+        )
+        assert "automatic break reservation was also removed" in (
+            driver.session.last_message.text
+        )
+        cancellations = list(
+            (
+                await db_session.scalars(
+                    select(RecurrentCancels).where(
+                        RecurrentCancels.recurrent_event_id == series.id
+                    )
+                )
+            ).all()
+        )
+        assert {item.start for item in cancellations} == {
+            datetime(2026, 11, 16, 10),
+            datetime(2026, 11, 23, 10),
+        }
+    finally:
+        await _close_bot(driver, http)
+
+
 async def test_deleting_one_time_lesson_requires_confirmation(
     client, db_session, bot_service_key
 ) -> None:
@@ -239,6 +313,9 @@ async def test_deleting_one_time_lesson_requires_confirmation(
         await driver.click(_event_button(driver))
         await driver.click("Delete lesson or series")
         assert "Delete this one-time lesson?" in driver.session.last_message.text
+        assert "automatic break reservations will also be removed" in (
+            driver.session.last_message.text
+        )
         assert await db_session.get(Event, event.id) is not None
         await driver.click("Cancel")
         assert await db_session.get(Event, event.id) is not None
@@ -366,6 +443,9 @@ async def test_recurring_occurrence_cancel_preserves_series_and_other_occurrence
         assert "(visible)" in driver.session.last_message.text
         await driver.click("Cancel this occurrence")
         assert "Cancel only this weekly occurrence?" in driver.session.last_message.text
+        assert "automatic break reservation will also be removed" in (
+            driver.session.last_message.text
+        )
         assert (
             len(
                 list(
@@ -396,6 +476,9 @@ async def test_recurring_occurrence_cancel_preserves_series_and_other_occurrence
         assert len(cancellations) == 2
         assert any(item.start == datetime(2026, 11, 16, 10) for item in cancellations)
         assert "This occurrence was cancelled." in driver.session.last_message.text
+        assert "automatic break reservation was also removed" in (
+            driver.session.last_message.text
+        )
     finally:
         await _close_bot(driver, http)
 
@@ -461,6 +544,9 @@ async def test_recurring_occurrence_move_cancels_exact_source_and_creates_one_of
         assert "The original weekly occurrence will be cancelled" in (
             driver.session.last_message.text
         )
+        assert "Automatic break after the replacement lesson (5 min)" in (
+            driver.session.last_message.text
+        )
         assert not list((await db_session.scalars(select(RecurrentCancels))).all())
         await driver.click("Move occurrence")
 
@@ -481,6 +567,9 @@ async def test_recurring_occurrence_move_cancels_exact_source_and_creates_one_of
         assert replacement is not None
         assert replacement.end == datetime(2026, 11, 17, 13)
         assert "replacement is a one-time lesson" in driver.session.last_message.text
+        assert "Automatic break after the replacement lesson (5 min)" in (
+            driver.session.last_message.text
+        )
         assert (
             sum(
                 request.method == "POST"
@@ -651,5 +740,44 @@ async def test_failed_occurrence_move_keeps_series_and_cancellation_unchanged(
             )
             == 1
         )
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_automatic_break_conflict_is_actionable_when_moving_occurrence(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    series = _series(teacher, student)
+    earlier_lesson = Event(
+        teacher_id=teacher.id,
+        user_id=student.id,
+        event_type=EventType.LESSON.value,
+        start=datetime(2026, 11, 16, 9),
+        end=datetime(2026, 11, 16, 10),
+        post_break_minutes=5,
+    )
+    db_session.add_all([series, earlier_lesson])
+    await db_session.commit()
+    _freeze_schedule_clock(monkeypatch)
+    driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await _open_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Inspect occurrence")
+        await driver.text("11/16/2026")
+        await driver.text("10:00")
+        await driver.click("Move this occurrence")
+        await driver.text("11/16/2026")
+        await driver.text("10:02")
+        await driver.click("Move occurrence")
+
+        assert (
+            "That time overlaps an automatic break reserved after a lesson."
+            in driver.session.last_message.text
+        )
+        assert "Choose another time." in driver.session.last_message.text
+        assert not list((await db_session.scalars(select(RecurrentCancels))).all())
+        assert await db_session.get(Event, earlier_lesson.id) is not None
     finally:
         await _close_bot(driver, http)

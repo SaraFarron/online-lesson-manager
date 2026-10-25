@@ -147,6 +147,7 @@ class TeacherBookingContext(BaseModel):
     work_end: str | None
     working_days: list[int]
     lesson_length: int = Field(gt=0)
+    between_lessons_break: int = Field(ge=0)
 
     @field_validator("timezone")
     @classmethod
@@ -220,6 +221,7 @@ class ManagedOccurrence(BaseModel):
 
 
 class EventManagementDetail(EventManagementItem):
+    post_break_minutes: int = Field(ge=0, strict=True)
     interval: int | None = Field(default=None, gt=0, strict=True)
     interval_end: AwareDatetime | None = None
     recurrence_mode: Literal["UTC_STEP", "TEACHER_LOCAL"] | None = None
@@ -663,6 +665,8 @@ POLICY_ERROR_MESSAGES = {
     "Students must use the teacher's configured lesson duration": "Use the lesson duration configured by the teacher.",
     "Default lesson duration is outside the supported range": "The teacher's configured lesson duration is outside the supported range.",
     "Event overlaps an applicable vacation": "That time falls within an applicable vacation.",
+    "Event overlaps an automatic post-lesson break": "That time overlaps an automatic break reserved after a lesson. Choose another time.",
+    "Automatic post-lesson break overlaps another scheduled event": "The automatic break after this lesson would conflict with another scheduled event. Choose a different time or duration.",
     "Event overlaps an existing non-lesson event": "That time overlaps another scheduled event.",
     "Event overlaps an existing event": "That time overlaps another scheduled event.",
 }

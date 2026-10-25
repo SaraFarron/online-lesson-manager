@@ -431,7 +431,7 @@ async def test_confirmed_weekly_break_deletes_exact_lessons_and_cancels_occurren
         await driver.click("Save break")
         preview_text = driver.session.last_message.text
         assert "One-time lesson" in preview_text
-        assert "Reserved 5-minute break" in preview_text
+        assert "Automatic break reservation (read-only): 5 minutes" in preview_text
         assert "Weekly lesson" in preview_text
         assert await db_session.get(Event, one_time.id) is not None
         assert (

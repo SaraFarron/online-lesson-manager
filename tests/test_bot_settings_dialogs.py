@@ -118,6 +118,7 @@ async def test_teacher_edits_account_and_merged_profile_fields_without_touching_
     try:
         await _open_settings(driver)
         assert "settings" in driver.session.last_message.text.lower()
+        assert "Automatic breaks are pending" not in driver.session.last_message.text
         await driver.click("Account settings")
         await driver.click("Change timezone")
         await driver.text("Asia/Bangkok")
@@ -140,6 +141,10 @@ async def test_teacher_edits_account_and_merged_profile_fields_without_touching_
         invitation_before = updated.teacher.code
 
         await driver.click("Teacher settings")
+        assert "Automatic breaks are pending" not in driver.session.last_message.text
+        assert "Break changes apply to new lessons only" in (
+            driver.session.last_message.text
+        )
         await driver.click("Work starts")
         await driver.text("09:30")
         await driver.click("Work ends")
@@ -150,6 +155,9 @@ async def test_teacher_edits_account_and_merged_profile_fields_without_touching_
         await driver.click("Lesson length")
         await driver.text("45")
         await driver.click("Between-lesson break")
+        assert "existing lessons and series keep their saved break duration" in (
+            driver.session.last_message.text
+        )
         await driver.text("0")
         await driver.click("Consecutive lesson limit")
         await driver.text("7")
@@ -166,6 +174,10 @@ async def test_teacher_edits_account_and_merged_profile_fields_without_touching_
         await driver.text("8")
         await driver.click("Save teacher settings")
         assert "Teacher settings saved." in driver.session.last_message.text
+        assert (
+            "This change applies to new lessons only; existing lessons and series "
+            "are unchanged."
+        ) in driver.session.last_message.text
         updated = await api.view(telegram_user_id, telegram_user_id)
         assert updated.teacher.code == invitation_before
         assert updated.account.timezone == "Asia/Bangkok"
@@ -192,7 +204,7 @@ async def test_teacher_edits_account_and_merged_profile_fields_without_touching_
             "max_consecutive_lessons": 7,
             "max_lessons_per_day": 8,
         }
-        assert "Automatic breaks are pending" in driver.session.last_message.text
+        assert "Automatic breaks are pending" not in driver.session.last_message.text
 
         await driver.click("Back to home")
         assert "Student invitation:" in driver.session.last_message.text

@@ -92,6 +92,7 @@ async def open_lesson_creation(
                 teacher_id=str(view.account.id),
                 teacher_timezone=view.account.timezone,
                 default_duration=view.teacher.lesson_length,
+                between_lessons_break=view.teacher.between_lessons_break,
             )
             page = await client.read_student_picker(
                 callback.from_user.id,
@@ -113,6 +114,7 @@ async def open_lesson_creation(
                 teacher_timezone=context.timezone,
                 default_duration=context.lesson_length,
                 duration_minutes=context.lesson_length,
+                between_lessons_break=context.between_lessons_break,
             )
             state = LessonScreens.kind
     except (BackendError, BackendUnavailable) as exc:
@@ -162,7 +164,46 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             f"{data['teacher_timezone']})."
         )
     if data.get("custom_duration"):
-        review += "\nCustom duration selected by the teacher."
+        review += (
+            "\nCustom duration applies only to this lesson or series; it does not "
+            "change the teacher's default duration or between-lesson break."
+        )
+    if resolution_data is not None:
+        try:
+            break_minutes = int(data["between_lessons_break"])
+            lesson_end = _resolution(resolution_data).start.utc + timedelta(
+                minutes=int(data["duration_minutes"])
+            )
+            if break_minutes == 0:
+                frequency = (
+                    "each lesson" if data.get("kind") == "weekly" else "this lesson"
+                )
+                review += f"\nNo automatic break is reserved after {frequency}."
+            else:
+                break_end = lesson_end + timedelta(minutes=break_minutes)
+                zone = ZoneInfo(data["viewer_timezone"])
+                break_start_local = lesson_end.astimezone(zone)
+                break_end_local = break_end.astimezone(zone)
+                break_start_offset = break_start_local.strftime("%z")
+                break_end_offset = break_end_local.strftime("%z")
+                interval = (
+                    f"{break_start_local:%Y-%m-%d %H:%M} "
+                    f"(UTC{break_start_offset[:3]}:{break_start_offset[3:]}) – "
+                    f"{break_end_local:%Y-%m-%d %H:%M} "
+                    f"(UTC{break_end_offset[:3]}:{break_end_offset[3:]})"
+                )
+                if data.get("kind") == "weekly":
+                    review += (
+                        f"\nAutomatic break after each lesson: {break_minutes} "
+                        f"minutes; first occurrence {interval}."
+                    )
+                else:
+                    review += (
+                        f"\nAutomatic break after this lesson: {break_minutes} "
+                        f"minutes; {interval}."
+                    )
+        except KeyError, TypeError, ValueError, OverflowError:
+            review += "\nThe automatic break interval could not be displayed."
 
     items = data.get("picker_items", [])
     total = int(data.get("picker_total", 0))

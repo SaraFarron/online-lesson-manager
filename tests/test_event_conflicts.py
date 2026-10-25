@@ -328,6 +328,14 @@ async def test_automatic_breaks_are_not_managed_through_break_endpoints(
         assert response.status_code == 422
         assert response.json()["detail"] == read_only_detail
 
+    student_headers = _headers(students[0][1])
+    assert (
+        await client.get(f"/api/v1/breaks/{lesson_id}", headers=student_headers)
+    ).status_code == 403
+    assert (
+        await client.delete(f"/api/v1/breaks/{lesson_id}", headers=student_headers)
+    ).status_code == 403
+
     _, other_teacher_token, _ = await _teacher_and_students(
         client, "auto-break-other-teacher"
     )

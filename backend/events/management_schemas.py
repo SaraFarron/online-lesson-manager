@@ -68,6 +68,7 @@ class EventManagementPage(BaseModel):
 
 
 class EventManagementDetail(EventManagementItem):
+    post_break_minutes: int = Field(ge=0)
     interval: int | None = Field(default=None, gt=0)
     interval_end: UtcTimestamp | None = None
     recurrence_mode: RecurrenceMode | None = None

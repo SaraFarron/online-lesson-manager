@@ -149,6 +149,12 @@ async def test_teacher_books_student_and_omits_default_duration(
         assert "Hour must be 0–23" in driver.session.last_message.text
         await driver.text("10:00")
         assert "Timezone: UTC" in driver.session.last_message.text
+        assert "Automatic break after this lesson: 5 minutes" in (
+            driver.session.last_message.text
+        )
+        assert "2026-10-20 11:00 (UTC+00:00) – 2026-10-20 11:05 (UTC+00:00)" in (
+            driver.session.last_message.text
+        )
         submit = driver.callback_data("Create lesson")
         await driver.click(data=submit)
 
@@ -167,6 +173,7 @@ async def test_teacher_books_student_and_omits_default_duration(
         assert body["user_id"] == str(student.id)
         assert "Alice Learner" in driver.session.last_message.text
         assert "Tuesday, October 20, 2026" in driver.session.last_message.text
+        assert "Automatic break (read-only)" in driver.session.last_message.text
     finally:
         await _close_bot(driver, http)
 
@@ -192,6 +199,15 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         await driver.text("10:00")
         await driver.text("10/27/2026")
         assert "Weekly through 2026-10-27 inclusive" in (
+            driver.session.last_message.text
+        )
+        assert "Custom duration applies only to this lesson or series" in (
+            driver.session.last_message.text
+        )
+        assert "Automatic break after each lesson: 5 minutes" in (
+            driver.session.last_message.text
+        )
+        assert "2026-10-20 10:45 (UTC+00:00) – 2026-10-20 10:50 (UTC+00:00)" in (
             driver.session.last_message.text
         )
         await driver.click("Create lesson")
@@ -227,6 +243,12 @@ async def test_student_books_self_weekly_without_duration_or_subject_forgery(
         await driver.text("10/20/2026")
         await driver.text("10:00")
         await driver.text("10/20/2026")
+        assert "Automatic break after each lesson: 5 minutes" in (
+            driver.session.last_message.text
+        )
+        assert "2026-10-20 11:00 (UTC-07:00) – 2026-10-20 11:05 (UTC-07:00)" in (
+            driver.session.last_message.text
+        )
         await driver.click("Create lesson")
 
         series = list((await db_session.scalars(select(RecurrentEvent))).all())
@@ -378,6 +400,89 @@ async def test_concurrent_schedule_change_shows_error_and_requires_reload(
         )
         await driver.click("Reload schedule")
         assert "This week's schedule" in driver.session.last_message.text
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_automatic_break_conflict_is_actionable_in_booking_review(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    db_session.add(
+        Event(
+            teacher_id=teacher.id,
+            user_id=student.id,
+            event_type="LESSON",
+            start=datetime(2026, 10, 20, 10),
+            end=datetime(2026, 10, 20, 11),
+            post_break_minutes=5,
+        )
+    )
+    await db_session.commit()
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
+    )
+    _, driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        await driver.click("Alice Learner")
+        await driver.click("One time")
+        await driver.click("Use default (60 min)")
+        await driver.text("10/20/2026")
+        await driver.text("11:02")
+        await driver.click("Create lesson")
+
+        assert (
+            "That time overlaps an automatic break reserved after a lesson."
+            in driver.session.last_message.text
+        )
+        assert "Choose another time." in driver.session.last_message.text
+        assert len(list((await db_session.scalars(select(Event))).all())) == 1
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_new_automatic_break_conflict_is_not_misreported_as_existing_break(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    db_session.add(
+        Event(
+            teacher_id=teacher.id,
+            user_id=teacher.id,
+            event_type="BREAK",
+            start=datetime(2026, 10, 20, 11, 2),
+            end=datetime(2026, 10, 20, 11, 4),
+        )
+    )
+    await db_session.commit()
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
+    )
+    _, driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        await driver.click("Alice Learner")
+        await driver.click("One time")
+        await driver.click("Use default (60 min)")
+        await driver.text("10/20/2026")
+        await driver.text("10:00")
+        await driver.click("Create lesson")
+
+        assert (
+            "The automatic break after this lesson would conflict with another "
+            "scheduled event."
+        ) in driver.session.last_message.text
+        assert "Choose a different time or duration." in (
+            driver.session.last_message.text
+        )
+        assert len(list((await db_session.scalars(select(Event))).all())) == 1
     finally:
         await _close_bot(driver, http)
 

@@ -138,6 +138,7 @@ async def read_teacher_context(
         ),
         working_days=list(preferences.working_days),
         lesson_length=preferences.lesson_length,
+        between_lessons_break=preferences.between_lessons_break,
     )
 
 

@@ -160,6 +160,7 @@ async def get_managed_event(
             is_recurrent=False,
             cancelled_occurrences=0,
             visibility_status=visibility,
+            post_break_minutes=event.post_break_minutes,
             revision=build_event_revision(event, ()),
         )
 
@@ -199,6 +200,7 @@ async def get_managed_event(
         subject_label=subject_label,
         is_recurrent=True,
         cancelled_occurrences=len(cancellations),
+        post_break_minutes=event.post_break_minutes,
         interval=event.interval,
         interval_end=from_storage_utc(event.interval_end),
         recurrence_mode=recurrence_mode,

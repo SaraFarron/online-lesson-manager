@@ -745,8 +745,9 @@ def _occurrence_label(occurrence: DisplacedOccurrence, timezone: str) -> str:
     )
     if occurrence.automatic_break is not None:
         label += (
-            f"\n  Reserved {occurrence.automatic_break.duration_minutes}-minute "
-            f"break · {_format_datetime(occurrence.automatic_break.start, timezone)} – "
+            f"\n  Automatic break reservation (read-only): "
+            f"{occurrence.automatic_break.duration_minutes} minutes · "
+            f"{_format_datetime(occurrence.automatic_break.start, timezone)} – "
             f"{_format_datetime(occurrence.automatic_break.end, timezone)}"
         )
     return label

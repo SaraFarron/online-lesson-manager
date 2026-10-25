@@ -236,6 +236,11 @@ async def validate_schedule_change(
             )
         ]
         if blocking_overlaps:
+            if any(
+                occurrence.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+                for occurrence in blocking_overlaps
+            ):
+                raise ValidationError("Event overlaps an automatic post-lesson break")
             raise ValidationError("Event overlaps an existing non-lesson event")
         if lesson_overlaps:
             token = _break_confirmation_token(
@@ -252,6 +257,15 @@ async def validate_schedule_change(
         return lesson_overlaps
 
     if overlaps:
+        if any(
+            occurrence.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+            for occurrence in overlaps
+        ):
+            raise ValidationError("Event overlaps an automatic post-lesson break")
+        if _find_overlaps(candidate_breaks, existing):
+            raise ValidationError(
+                "Automatic post-lesson break overlaps another scheduled event"
+            )
         raise ValidationError("Event overlaps an existing event")
     return []
 
@@ -402,9 +416,22 @@ def _reject_self_overlap(occurrences: Sequence[Occurrence]) -> None:
     ordered = sort_occurrences(occurrences)
     index = _OccurrenceIndex(ordered)
     for occurrence in ordered:
-        if any(
-            other.start > occurrence.start for other in index.overlapping(occurrence)
-        ):
+        overlapping = next(
+            (
+                other
+                for other in index.overlapping(occurrence)
+                if other.start > occurrence.start
+            ),
+            None,
+        )
+        if overlapping is not None:
+            if (
+                occurrence.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+                or overlapping.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+            ):
+                raise ValidationError(
+                    "Automatic post-lesson break overlaps another scheduled event"
+                )
             raise ValidationError("Recurring event overlaps itself")
 
 

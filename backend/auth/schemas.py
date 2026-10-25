@@ -131,6 +131,7 @@ class TeacherBookingContext(BaseModel):
     work_end: str | None
     working_days: list[int]
     lesson_length: int
+    between_lessons_break: int = Field(ge=0)
 
 
 class StudentPickerItem(BaseModel):

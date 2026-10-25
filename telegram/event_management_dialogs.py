@@ -220,6 +220,29 @@ def _format_datetime(value: datetime, timezone: str) -> str:
     return f"{local:%a, %Y-%m-%d %H:%M} (UTC{local.strftime('%z')[:3]}:{local.strftime('%z')[3:]})"
 
 
+def _automatic_break_text(
+    lesson_end: datetime,
+    minutes: int,
+    timezone: str,
+    *,
+    relation: str,
+    repeated: bool = False,
+) -> str:
+    if minutes == 0:
+        return f"No automatic break is reserved after {relation}."
+    break_end = lesson_end + timedelta(minutes=minutes)
+    label = (
+        f"after {relation} ({minutes} min; first occurrence shown)"
+        if repeated
+        else f"after {relation} ({minutes} min)"
+    )
+    return (
+        f"Automatic break {label}: "
+        f"{_format_datetime(lesson_end, timezone)} – "
+        f"{_format_datetime(break_end, timezone)}."
+    )
+
+
 def _list_label(item: EventManagementItem, timezone: str) -> str:
     recurrence = "Weekly" if item.is_recurrent else "One time"
     label = (
@@ -285,12 +308,28 @@ def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
             f"\nRecurrence timezone: {recurrence_timezone}"
             f"\nCancelled occurrences: {detail.cancelled_occurrences}"
         )
+        if detail.event_type == "LESSON":
+            text += "\n" + _automatic_break_text(
+                detail.end,
+                detail.post_break_minutes,
+                timezone,
+                relation="each lesson",
+                repeated=True,
+            )
         if detail.cancels:
             text += (
                 "\nSelect a cancelled occurrence below to inspect its exact interval."
             )
-    elif detail.visibility_status == "hidden_by_vacation":
-        text += "\nThis lesson is hidden by a vacation but remains manageable."
+    else:
+        if detail.event_type == "LESSON":
+            text += "\n" + _automatic_break_text(
+                detail.end,
+                detail.post_break_minutes,
+                timezone,
+                relation="this lesson",
+            )
+        if detail.visibility_status == "hidden_by_vacation":
+            text += "\nThis lesson is hidden by a vacation but remains manageable."
     if detail.inspected_occurrence is not None:
         occurrence = detail.inspected_occurrence
         status = {
@@ -302,6 +341,18 @@ def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
             f"\nSelected occurrence: {_format_datetime(occurrence.start, timezone)}"
             f" – {_format_datetime(occurrence.end, timezone)} ({status})"
         )
+        if detail.event_type == "LESSON":
+            if occurrence.status == "cancelled":
+                text += (
+                    "\nNo automatic break is reserved after this cancelled occurrence."
+                )
+            else:
+                text += "\n" + _automatic_break_text(
+                    occurrence.end,
+                    detail.post_break_minutes,
+                    timezone,
+                    relation="this occurrence",
+                )
     return text
 
 
@@ -632,7 +683,13 @@ def _review_text(manager: DialogManager) -> str:
             f"To: {_format_datetime(start, data['viewer_timezone'])} – "
             f"{_format_datetime(end, data['viewer_timezone'])}\n"
             "The original weekly occurrence will be cancelled and replaced by "
-            "a one-time lesson."
+            "a one-time lesson.\n"
+            + _automatic_break_text(
+                end,
+                detail.post_break_minutes,
+                data["viewer_timezone"],
+                relation="the replacement lesson",
+            )
         )
 
     resolution = data["resolution"]
@@ -642,6 +699,13 @@ def _review_text(manager: DialogManager) -> str:
         f"Timezone: {data['viewer_timezone']}\n"
         f"Start: {_format_datetime(start, data['viewer_timezone'])}\n"
         f"End: {_format_datetime(end, data['viewer_timezone'])}"
+    )
+    text += "\n" + _automatic_break_text(
+        end,
+        detail.post_break_minutes,
+        data["viewer_timezone"],
+        relation="each lesson" if detail.is_recurrent else "this lesson",
+        repeated=detail.is_recurrent,
     )
     if detail.is_recurrent:
         cutoff = datetime.fromisoformat(data["interval_end"])
@@ -682,9 +746,16 @@ async def begin_delete(
     manager.dialog_data.update(
         confirm_action="delete",
         confirm_text=(
-            "Delete the entire weekly series and all remaining occurrences?"
-            if detail.is_recurrent
-            else "Delete this one-time lesson?"
+            (
+                "Delete the entire weekly series and all remaining occurrences?"
+                if detail.is_recurrent
+                else "Delete this one-time lesson?"
+            )
+            + (
+                " Its automatic break reservations will also be removed."
+                if detail.post_break_minutes > 0
+                else ""
+            )
         ),
         error="",
         notice="",
@@ -709,6 +780,11 @@ async def begin_cancel_occurrence(
             "Cancel only this weekly occurrence?\n"
             f"{_format_datetime(occurrence.start, manager.dialog_data['viewer_timezone'])}\n"
             "The rest of the series will remain unchanged."
+            + (
+                "\nIts automatic break reservation will also be removed."
+                if detail.post_break_minutes > 0
+                else "\nNo automatic break is reserved after this occurrence."
+            )
         ),
         error="",
         notice="",
@@ -736,9 +812,12 @@ async def confirm_action(
                 callback.message.chat.id,
                 revision=detail.revision,
             )
-            data.update(submitting=False, operation="delete", notice="Lesson deleted.")
+            notice = "Lesson deleted."
+            if detail.post_break_minutes > 0:
+                notice += " Its automatic break reservations were also removed."
+            data.update(submitting=False, operation="delete", notice=notice)
             await _load_page(callback, manager, _kind(manager), int(data["skip"]))
-            manager.dialog_data["notice"] = "Lesson deleted."
+            manager.dialog_data["notice"] = notice
             return
         if action == "cancel_occurrence":
             occurrence = detail.inspected_occurrence
@@ -757,7 +836,14 @@ async def confirm_action(
                 callback,
                 manager,
                 occurrence.start,
-                "This occurrence was cancelled.",
+                (
+                    "This occurrence was cancelled. "
+                    + (
+                        "Its automatic break reservation was also removed."
+                        if detail.post_break_minutes > 0
+                        else "No automatic break was reserved after it."
+                    )
+                ),
             )
             return
         raise ValueError("Unknown confirmation action")
@@ -824,7 +910,15 @@ async def submit_review(
                 callback,
                 manager,
                 occurrence.start,
-                "The occurrence was moved; its replacement is a one-time lesson.",
+                (
+                    "The occurrence was moved; its replacement is a one-time lesson. "
+                    + _automatic_break_text(
+                        end,
+                        detail.post_break_minutes,
+                        data["viewer_timezone"],
+                        relation="the replacement lesson",
+                    )
+                ),
             )
             return
 

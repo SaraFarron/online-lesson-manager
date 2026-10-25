@@ -292,7 +292,8 @@ def _field_prompt(manager: DialogManager) -> tuple[str, str]:
         "lesson_length": ("Lesson length", "Enter positive minutes."),
         "between_lessons_break": (
             "Between-lesson break",
-            "Enter minutes; 0 is allowed. Automatic breaks are pending.",
+            "Enter minutes; 0 is allowed. This applies to new lessons only; "
+            "existing lessons and series keep their saved break duration.",
         ),
         "max_consecutive_lessons": (
             "Consecutive lesson limit",
@@ -581,7 +582,13 @@ async def save_teacher(
     except (BackendError, BackendUnavailable) as exc:
         await _write_failed(manager, exc)
         return
-    await _complete_save(callback, manager, "Teacher settings saved.")
+    success_message = "Teacher settings saved."
+    if "between_lessons_break" in changes:
+        success_message += (
+            " This change applies to new lessons only; existing lessons and "
+            "series are unchanged."
+        )
+    await _complete_save(callback, manager, success_message)
 
 
 async def save_student(
@@ -781,7 +788,7 @@ def build_settings_dialog() -> Dialog:
             Format(
                 "{role} settings\n"
                 "Account and role preferences save separately. Notifications are "
-                "preferences only; delivery is not active. Automatic breaks are pending.\n"
+                "preferences only; delivery is not active.\n"
                 "{notice}\n{error}"
             ),
             Button(
@@ -861,7 +868,8 @@ def build_settings_dialog() -> Dialog:
         Window(
             Format(
                 "Teacher preferences\n{profile}\n"
-                "Automatic breaks are pending and are not created automatically.\n"
+                "Break changes apply to new lessons only; existing lessons and "
+                "series keep their saved break duration.\n"
                 "{notice}\n{error}"
             ),
             Button(
