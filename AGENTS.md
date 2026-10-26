@@ -77,8 +77,8 @@ remain in `docs/plans/` as project documentation.
   Never import backend models/settings/services into the bot or start polling
   inside FastAPI.
 - **Stub/unimplemented packages** — don't assume behavior exists just
-  because the package exists: `backend/homework/` (empty),
-  `backend/schedule/router.py` (empty).
+  because the package exists: `backend/homework/` has schema metadata only,
+  with no service/router yet; `backend/schedule/router.py` is empty.
   `backend/notifications/` has only an ORM model, no router/service yet.
 - Config is split per-domain (`BaseSettings` subclasses), e.g.
   `backend/config.py` (`Settings`, no prefix) and `backend/auth/config.py`
@@ -100,7 +100,7 @@ a README-described feature.
 | Lessons / breaks / vacations CRUD (one-off + recurring) | **Done** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, confirmed manual-break displacement, teacher-local workday/hour checks, lesson duration defaults/authorization, daily/consecutive limits, database-backed per-teacher mutation serialization, and derived automatic post-lesson reservations are implemented. Lesson snapshots default to zero for existing rows; preference changes apply only to future writes. |
 | Schedule viewing (day/week, timeline, teacher sees student names) | **Partial** | Authenticated viewer-local day/week endpoints and live Telegram Today/This week screens are implemented, including role-scoped results, previous/next-week navigation, refresh, DST-aware rendering, and safe pagination. HTMX/arbitrary-date UI and offline cache are not implemented. |
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
-| Homework (assign/submit/mark done) | **Not started** | `backend/homework/` is an empty package. |
+| Homework (assign/submit/mark done) | **Not started** | Assignment, submission-version, and attachment metadata exist; no service, router, storage, or Telegram homework UI yet. |
 | Student profile view for teacher (history, delete w/ confirm) | **Not started** | No action-log table or endpoint. |
 | Telegram bot | **Partial** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, editable post-onboarding settings, lesson/event management with automatic-break previews, manual breaks, vacations, retry/recovery and edit-in-place screens. Live schedule viewing includes previous/next-week navigation; homework actions, notification delivery and offline schedule cache are not implemented. |
 | HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |

@@ -8,17 +8,18 @@ Base.metadata.
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from backend.config import settings
-from backend.models import Base  # noqa: F401 — registers the metadata
+from alembic import context
 
 # ── Import every model module so Alembic sees all tables ─────────────────────
 from backend.auth import models as _auth_models  # noqa: F401
+from backend.config import settings
 from backend.events import models as _events_models  # noqa: F401
+from backend.homework import models as _homework_models  # noqa: F401
+from backend.models import Base  # noqa: F401 — registers the metadata
 from backend.notifications import models as _notifications_models  # noqa: F401
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ _is_sqlite = "sqlite" in str(settings.DATABASE_URL)
 
 # ── Offline (no DB connection, emit SQL to stdout) ────────────────────────────
 
+
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
@@ -51,6 +53,7 @@ def run_migrations_offline() -> None:
 
 
 # ── Online (connect to a real DB) ─────────────────────────────────────────────
+
 
 def do_run_migrations(connection: Connection) -> None:
     context.configure(

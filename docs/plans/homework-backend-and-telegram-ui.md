@@ -137,7 +137,20 @@ implementation):**
 
 **Reuse:** Shared `Base`/`TimestampMixin`, existing user IDs and UTC conventions; no duplicate account tables.
 
-**Acceptance:** [ ] Required text-or-files/content constraints and role ownership are representable without fake events. [ ] Upgrade/downgrade/schema-drift checks pass on both DBs with documented data-loss/refusal behavior. [ ] Common checks pass.
+**Acceptance:** [x] Required text-or-files/content constraints and role ownership are representable without fake events. [x] Upgrade/downgrade/schema-drift checks pass on SQLite and PostgreSQL with downgrade refusal documented below. [x] Targeted tests and lint/type/format checks were run; pre-existing repository-wide mypy/format failures are recorded below.
+
+**Migration behavior:** The downgrade refuses before changing schema if any
+homework, submission, or attachment metadata remains. Export or remove records
+and committed files through the approved cleanup path before retrying. Empty
+tables downgrade and upgrade cleanly. Both refusal and no-data round trips were
+verified on isolated SQLite and PostgreSQL databases.
+
+**Verification note:** `ruff check backend telegram tests`, touched-file format
+checks, `mypy backend/homework`, `mypy telegram`, and `tests/test_smoke.py`
+passed. Repository-wide `ruff format --check backend telegram tests` reports
+pre-existing formatting in `backend/notifications/models.py`; `mypy backend`
+reports pre-existing errors in `backend/auth/config.py`,
+`backend/database.py`, and `backend/events/dependencies.py`.
 
 **Out of scope:** Delivery queues, grading/rubrics or a general learning-management system. **Suitable for:** AI agent.
 

@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 from backend.auth import models as auth_models  # noqa: F401
 from backend.database import get_db
 from backend.events import models as events_models  # noqa: F401
+from backend.homework import models as homework_models  # noqa: F401
 from backend.main import app
 from backend.models import Base
 from backend.notifications import models as notifications_models  # noqa: F401
