@@ -125,6 +125,35 @@ class HomeworkMaterialPublic(BaseModel):
     byte_size: int = Field(ge=0)
 
 
+class HomeworkSubmissionReviewItem(BaseModel):
+    id: UUID
+    version: int = Field(ge=1)
+    text: str | None
+    created_at: datetime
+    is_current: bool
+    materials: list[HomeworkMaterialPublic]
+
+    @field_serializer("created_at", when_used="json")
+    def serialize_created_at(self, value: datetime) -> str:
+        return normalize_utc(value).isoformat()
+
+
+class HomeworkSubmissionPage(BaseModel):
+    homework_id: UUID
+    items: list[HomeworkSubmissionReviewItem]
+    total: int = Field(ge=0)
+
+
+class HomeworkCompletionPublic(BaseModel):
+    status: HomeworkStatus
+    completion_source: HomeworkCompletionSource
+    completed_at: datetime
+
+    @field_serializer("completed_at", when_used="json")
+    def serialize_completed_at(self, value: datetime) -> str:
+        return normalize_utc(value).isoformat()
+
+
 class HomeworkReadItem(BaseModel):
     id: UUID
     student: HomeworkStudentSummary | None = None

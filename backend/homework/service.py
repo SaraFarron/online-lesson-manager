@@ -5,7 +5,7 @@ import re
 import stat
 import unicodedata
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -152,6 +152,23 @@ async def _remove_paths(paths: tuple[Path, ...]) -> bool:
             logger.exception("Failed to remove temporary homework storage file")
             succeeded = False
     return succeeded
+
+
+async def remove_committed_attachment_files(
+    attachments: Sequence[HomeworkAttachment],
+    config: HomeworkConfig,
+) -> None:
+    if not attachments:
+        return
+    root = await _available_storage_root(config)
+    paths = tuple(
+        _storage_path(root, attachment.storage_key) for attachment in attachments
+    )
+    if not await _remove_paths(paths):
+        raise HTTPException(
+            status_code=503,
+            detail="Homework is hidden; file cleanup can be retried",
+        )
 
 
 def _as_utc(value: datetime) -> datetime:

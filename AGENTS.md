@@ -84,8 +84,9 @@ remain in `docs/plans/` as project documentation.
 - **Partially implemented packages** — don't assume behavior exists just
   because the package exists: `backend/homework/` has metadata and private
   attachment staging/transfer, teacher assignment creation, and authorized
-  assignment/material reads and student submission/completion, but no teacher
-  review/deletion workflow;
+  assignment/material reads and student submission/completion, plus teacher
+  submission review, manual completion, and deletion with recoverable file
+  cleanup; Telegram homework UI is not implemented yet;
   `backend/schedule/router.py` is empty. `backend/notifications/` has only an
   ORM model, no router/service yet.
 - Config is split per-domain (`BaseSettings` subclasses), e.g.
@@ -108,7 +109,7 @@ a README-described feature.
 | Lessons / breaks / vacations CRUD (one-off + recurring) | **Done** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, confirmed manual-break displacement, teacher-local workday/hour checks, lesson duration defaults/authorization, daily/consecutive limits, database-backed per-teacher mutation serialization, and derived automatic post-lesson reservations are implemented. Lesson snapshots default to zero for existing rows; preference changes apply only to future writes. |
 | Schedule viewing (day/week, timeline, teacher sees student names) | **Partial** | Authenticated viewer-local day/week endpoints and live Telegram Today/This week screens are implemented, including role-scoped results, previous/next-week navigation, refresh, DST-aware rendering, and safe pagination. HTMX/arbitrary-date UI and offline cache are not implemented. |
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
-| Homework (assign/submit/mark done) | **Partial** | Approved contract, metadata, authenticated private attachment staging/download, teacher assignment creation, active-link-scoped paginated assignment/material reads, and student text/file submissions with versioned completion exist; teacher review and Telegram UI are not implemented yet. |
+| Homework (assign/submit/mark done) | **Partial** | Approved contract, metadata, authenticated private attachment staging/download, teacher assignment creation, active-link-scoped paginated assignment/material reads, versioned student text/file submissions, teacher submission review, idempotent manual completion, and recoverable deletion exist in the backend; Telegram UI is not implemented yet. |
 | Student profile view for teacher (history, delete w/ confirm) | **Not started** | No action-log table or endpoint. |
 | Telegram bot | **Partial** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, editable post-onboarding settings, lesson/event management with automatic-break previews, manual breaks, vacations, retry/recovery and edit-in-place screens. Live schedule viewing includes previous/next-week navigation; homework actions, notification delivery and offline schedule cache are not implemented. |
 | HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |
@@ -119,8 +120,9 @@ The implemented Telegram scheduling/settings scope and cross-flow evidence are
 tracked in [telegram-scheduling-and-settings-ui](docs/plans/telegram-scheduling-and-settings-ui.md).
 [Automatic between-lesson breaks](docs/plans/automatic-between-lesson-breaks.md)
 are implemented and verified; [homework](docs/plans/homework-backend-and-telegram-ui.md)
-is in progress. Notification delivery, teacher homework review, and Telegram
-homework actions remain unimplemented.
+is in progress. Notification delivery and Telegram homework actions remain
+unimplemented; backend teacher review, manual completion, and deletion are
+available.
 
 ## Scheduling Foundation Boundaries
 

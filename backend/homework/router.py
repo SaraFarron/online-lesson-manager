@@ -20,11 +20,17 @@ from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.auth.models import User
 from backend.exceptions import Forbidden
-from backend.homework import assignment_service, read_service, submission_service
+from backend.homework import (
+    assignment_service,
+    management_service,
+    read_service,
+    submission_service,
+)
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.constants import ATTACHMENT_TRANSFER_TIMEOUT_SECONDS
 from backend.homework.models import HomeworkAttachment
 from backend.homework.schemas import (
+    HomeworkCompletionPublic,
     HomeworkCreate,
     HomeworkCreated,
     HomeworkPage,
@@ -32,6 +38,7 @@ from backend.homework.schemas import (
     HomeworkStatus,
     HomeworkSubmissionCreate,
     HomeworkSubmissionCreated,
+    HomeworkSubmissionPage,
     StagedAttachmentPublic,
 )
 from backend.homework.service import (
@@ -124,6 +131,55 @@ async def submit_homework(
         homework_id,
         payload,
     )
+
+
+@router.get(
+    "/assignments/{homework_id}/submissions",
+    response_model=HomeworkSubmissionPage,
+    summary="Review a homework assignment's student submissions",
+)
+async def review_homework_submissions(
+    session: SessionDep,
+    user: CurrentUser,
+    homework_id: UUID,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+) -> HomeworkSubmissionPage:
+    return await management_service.list_submission_reviews(
+        session,
+        user,
+        homework_id,
+        skip=skip,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/assignments/{homework_id}/complete",
+    response_model=HomeworkCompletionPublic,
+    summary="Manually mark homework complete",
+)
+async def complete_homework(
+    session: SessionDep,
+    user: CurrentUser,
+    homework_id: UUID,
+) -> HomeworkCompletionPublic:
+    return await management_service.complete_homework(session, user, homework_id)
+
+
+@router.delete(
+    "/assignments/{homework_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete homework and its private files",
+)
+async def delete_homework(
+    session: SessionDep,
+    user: CurrentUser,
+    config: HomeworkSettings,
+    homework_id: UUID,
+) -> Response:
+    await management_service.delete_homework(session, user, homework_id, config)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _staged_attachment_response(

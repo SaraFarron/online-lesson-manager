@@ -4,7 +4,7 @@
 
 Teachers can assign text/files to their own students, students can open materials and submit solutions, and teachers can review, mark complete, or delete assignments through Telegram.
 
-**Status:** Tasks 00–05 complete; implementation in progress.
+**Status:** Tasks 00–06 complete; implementation in progress.
 
 ## Scope (README.md sections covered)
 
@@ -234,7 +234,9 @@ reports pre-existing errors in `backend/auth/config.py`,
 
 **Reuse:** Existing homework ownership/attachment services, transaction and error conventions.
 
-**Acceptance:** [ ] Teacher can inspect own solutions, manually complete and delete. [ ] Students/unrelated teachers cannot forge actions; repeated/racing deletes are safe and revoked files are inaccessible. [ ] Common checks pass.
+**Acceptance:** [x] Teacher can inspect own solutions, manually complete and delete. [x] Students/unrelated teachers cannot forge actions; repeated/racing deletes are safe and revoked files are inaccessible. [x] Common checks pass.
+
+**Verification (2026-10-26):** `uv run pytest -q tests/test_homework_*.py tests/test_smoke.py` (37 passed); `uv run ruff check backend telegram tests`; touched-file `ruff format --check`; `uv run mypy backend/homework`; and `uv run mypy telegram`. Tests cover versioned submission review and attachment metadata, teacher-only idempotent manual completion, conflicts with student completion, the manual-completion/submission race, deletion cleanup and retry after storage failure, immediate access revocation, unlink authorization, and concurrent delete/submission requests without orphaned assignments or submissions.
 
 **Out of scope:** General audit history or student deletion UI. **Suitable for:** AI agent.
 
