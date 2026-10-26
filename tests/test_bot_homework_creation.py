@@ -215,8 +215,8 @@ async def test_homework_picker_is_teacher_only_and_paginated(
         await student_driver.text("/start")
         markup = student_driver.session.last_message.reply_markup
         assert markup is not None
-        assert all(
-            button.text != "Homework"
+        assert any(
+            button.text == "Homework"
             for row in markup.inline_keyboard
             for button in row
         )

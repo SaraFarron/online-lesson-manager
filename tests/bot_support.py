@@ -7,7 +7,7 @@ from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import TelegramMethod
 from aiogram.methods.base import TelegramType
-from aiogram.types import Chat, File, Message, Update, User
+from aiogram.types import Chat, File, InputFile, Message, Update, User
 
 
 class RecordingSession(BaseSession):
@@ -18,6 +18,7 @@ class RecordingSession(BaseSession):
         self.next_id = 100
         self.edit_failure: str | None = None
         self.files: dict[str, tuple[str, bytes, int]] = {}
+        self.sent_documents: list[tuple[int, str, bytes]] = []
 
     def register_file(
         self,
@@ -69,6 +70,28 @@ class RecordingSession(BaseSession):
                 reply_markup=data.get("reply_markup"),
             ).as_(bot)
             self.last_message = result
+        elif name == "sendDocument":
+            document = method.document
+            if not isinstance(document, InputFile):
+                raise TypeError("Simulated document sends require an InputFile")
+            contents = bytearray()
+            async for chunk in document.read(bot):
+                contents.extend(chunk)
+            self.sent_documents.append(
+                (
+                    int(method.chat_id),
+                    document.filename or "document",
+                    bytes(contents),
+                )
+            )
+            self.next_id += 1
+            result = Message(
+                message_id=self.next_id,
+                date=datetime.now(UTC),
+                chat=Chat(id=int(method.chat_id), type="private"),
+                from_user=User(id=bot.id, is_bot=True, first_name="Test"),
+                caption=method.caption,
+            ).as_(bot)
         else:
             result = True
         return result

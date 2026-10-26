@@ -11,6 +11,7 @@ from aiogram_dialog.widgets.text import Const, Format
 from telegram.api import SessionView
 from telegram.break_dialogs import open_break_management
 from telegram.event_management_dialogs import open_event_management
+from telegram.homework_student_dialogs import open_student_homework
 from telegram.homework_teacher_dialogs import open_homework_creation
 from telegram.inputs import digest_clock, parse_timezone
 from telegram.lesson_dialogs import open_lesson_creation
@@ -94,6 +95,7 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "can_edit_settings": view is not None
         and view.account.role in {"TEACHER", "STUDENT"},
         "can_manage_homework": view is not None and view.account.role == "TEACHER",
+        "can_view_homework": view is not None and view.account.role == "STUDENT",
     }
 
 
@@ -180,6 +182,12 @@ def build_dialog() -> Dialog:
                 id="homework",
                 on_click=open_homework_creation,
                 when="can_manage_homework",
+            ),
+            Button(
+                Const("Homework"),
+                id="student_homework",
+                on_click=open_student_homework,
+                when="can_view_homework",
             ),
             Button(
                 Const("Breaks"),

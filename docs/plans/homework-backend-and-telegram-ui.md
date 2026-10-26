@@ -4,7 +4,7 @@
 
 Teachers can assign text/files to their own students, students can open materials and submit solutions, and teachers can review, mark complete, or delete assignments through Telegram.
 
-**Status:** Tasks 00–07 complete; implementation in progress.
+**Status:** Tasks 00–09 complete; implementation in progress.
 
 ## Scope (README.md sections covered)
 
@@ -282,7 +282,9 @@ reports pre-existing errors in `backend/auth/config.py`,
 
 **Reuse:** Typed homework client, existing pagination, runtime edit/isolation and draft patterns.
 
-**Acceptance:** [ ] Student downloads actual materials and submits an actual solution through simulated Bot API + real backend; persisted completion is asserted. [ ] Deleted/stale assignments, oversized files, repeated callbacks and backend failure do not report false completion. [ ] Common checks pass.
+**Acceptance:** [x] Student downloads actual materials and submits an actual solution through simulated Bot API + real backend; persisted completion is asserted. [x] Deleted/stale assignments, oversized files, repeated callbacks and backend failure do not report false completion. [x] Common checks pass.
+
+**Verification (2026-10-26):** `uv run pytest -q tests` (361 passed, 5 skipped); `uv run ruff check backend telegram tests`; touched-file `ruff format --check`; and `uv run mypy telegram`. Real-backend/simulated-Bot-API tests assert paginated/status-filtered lists, actual streamed material bytes sent as a separate document, text-and-file submission persistence and completion, versioned resubmission without reopening completion, retry of an ambiguous Finish with the same payload/key, stale deletion refresh, teacher-completion race rejection, oversized upload rejection before Telegram retrieval, cancellation cleanup, and retry after backend outage. Ordinary text/navigation stays in the editable screen. The separate-document download UX was explicitly approved.
 
 **Out of scope:** Offline file cache or grading. **Suitable for:** AI agent.
 
