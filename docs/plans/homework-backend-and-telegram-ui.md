@@ -4,7 +4,7 @@
 
 Teachers can assign text/files to their own students, students can open materials and submit solutions, and teachers can review, mark complete, or delete assignments through Telegram.
 
-**Status:** Tasks 00–02 complete; implementation in progress.
+**Status:** Tasks 00–03 complete; implementation in progress.
 
 ## Scope (README.md sections covered)
 
@@ -104,10 +104,14 @@ Distinguish existing `notification_homework` lead-days from future assignment/su
 implementation):**
 
 - Teacher publishes text plus one previously staged file:
-  `{"student_id":"<student UUID>","text":"Read chapter 3","attachment_ids":["<staged UUID>"],"lesson_occurrence":{"kind":"LESSON","source_id":"<event UUID>","starts_at":"2026-11-02T09:00:00Z"}}`
+  `{"student_id":"<student UUID>","text":"Read chapter 3","attachment_ids":["<staged UUID>"],"lesson_occurrence":{"kind":"EVENT","source_id":"<event UUID>","starts_at":"2026-11-02T09:00:00Z"}}`
   → `201 {"id":"<homework UUID>","status":"INCOMPLETE","material_count":1}`.
+  Assignment creation requires `Idempotency-Key: <client UUID>`; reuse it for
+  retries and the same request returns the original assignment.
   Text-only omits `attachment_ids` and the optional lesson; file-only omits
-  `text`. A student not actively linked to the teacher returns `403`; a file
+  `text`. The lesson `kind` identifies the source record (`EVENT` or
+  `RECURRENT_EVENT`), and the record must be a `LESSON` for the selected
+  student. A student not actively linked to the teacher returns `403`; a file
   exceeding the approved limit returns `413`; neither creates visible work.
 - Student finishes text plus staged solution file with
   `{"text":"My answer","attachment_ids":["<staged UUID>"],"operation_key":"<client UUID>"}`
@@ -180,7 +184,9 @@ reports pre-existing errors in `backend/auth/config.py`,
 
 **Reuse:** Existing auth/assignment-scope patterns and attachment service.
 
-**Acceptance:** [ ] Text/files/mixed creation work per contract. [ ] Foreign students/uploads, invalid lesson identity and failed finalization leave no visible partial assignment. [ ] Common checks pass.
+**Acceptance:** [x] Text/files/mixed creation work per contract. [x] Foreign students/uploads, invalid lesson identity and failed finalization leave no visible partial assignment. [x] Common checks pass for touched code; repository-wide mypy/format failures are recorded above.
+
+**Verification (2026-10-26):** `uv run pytest -q tests/test_homework_assignments.py tests/test_homework_attachments.py tests/test_smoke.py` (18 passed); `uv run ruff check backend telegram tests`; touched-file `ruff format --check`; `uv run mypy backend/homework`; `uv run mypy telegram`. Tests exercise text-only/file-only/mixed assignment, active student linkage, teacher-only authorization, staged attachment ownership and transitions, exact 50 MiB/5-file limits, duplicate and unknown commit-outcome reconciliation, failed-finalization rollback, and exact upcoming one-off/recurring lesson identity including cancelled, wrong-student, wrong-kind, non-lesson, and past references. Repository-wide `ruff format --check backend telegram tests` still reports pre-existing formatting in `backend/notifications/models.py`; `mypy backend` reports the three pre-existing issues in `backend/auth/config.py`, `backend/database.py`, and `backend/events/dependencies.py`.
 
 **Out of scope:** Batch assignments, templates, notification sending. **Suitable for:** AI agent.
 

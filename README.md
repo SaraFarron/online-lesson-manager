@@ -152,8 +152,9 @@ the backend session before resubmitting. Teacher workdays/hours, lesson
 duration defaults, and daily/consecutive lesson limits are enforced by the
 backend. Automatic post-lesson breaks are derived from each lesson's saved
 duration snapshot and shown in Telegram booking and management flows.
-Notification delivery, free-slot selection, offline schedule cache, homework
-actions, and account linking/transfers remain unimplemented.
+Notification delivery, free-slot selection, offline schedule cache, student
+homework submission/review, Telegram homework UI, and account linking/transfers
+remain unimplemented. Teachers can create assignments through the backend API.
 Teachers and students can edit their saved account and role preferences from
 Settings in the Telegram role home. Account and role preferences are saved
 separately; timezone changes do not move stored event instants, and notification
@@ -262,7 +263,7 @@ intermediate mismatch returns authentication errors, not offline success.
 1. [Telegram: управление расписанием и настройками](./docs/plans/telegram-scheduling-and-settings-ui.md) — реализовано; проверка и критерии завершения записаны в плане.
 2. [Автоматические перерывы после уроков, включая Telegram UI](./docs/plans/automatic-between-lesson-breaks.md) —
    реализовано и проверено на SQLite/PostgreSQL; наследуемые уроки не изменяются автоматически.
-3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md) — реализованы контракт, метаданные и приватная передача вложений; создание/сдача заданий и Telegram UI остаются следующим этапом.
+3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md) — реализованы контракт, метаданные, приватная передача вложений и создание заданий учителем; сдача/проверка работ и Telegram UI остаются следующим этапом.
 
 Следующий рекомендуемый нереализованный этап — домашние задания.
 

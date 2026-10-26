@@ -11,10 +11,15 @@ from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.auth.models import User
 from backend.exceptions import Forbidden
+from backend.homework import assignment_service
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.constants import ATTACHMENT_TRANSFER_TIMEOUT_SECONDS
 from backend.homework.models import HomeworkAttachment
-from backend.homework.schemas import StagedAttachmentPublic
+from backend.homework.schemas import (
+    HomeworkCreate,
+    HomeworkCreated,
+    StagedAttachmentPublic,
+)
 from backend.homework.service import (
     cancel_staged_attachment,
     open_attachment_download,
@@ -29,6 +34,28 @@ HomeworkSettings = Annotated[HomeworkConfig, Depends(get_homework_settings)]
 def _require_teacher_or_student(user: User) -> None:
     if user.role not in {Roles.TEACHER.value, Roles.STUDENT.value}:
         raise Forbidden("Only teachers and students can use homework attachments")
+
+
+@router.post(
+    "/assignments",
+    response_model=HomeworkCreated,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a homework assignment for an actively linked student",
+)
+async def create_homework_assignment(
+    session: SessionDep,
+    user: CurrentUser,
+    payload: HomeworkCreate,
+    operation_key: Annotated[
+        UUID, Header(alias="Idempotency-Key", description="Client-generated UUID")
+    ],
+) -> HomeworkCreated:
+    return await assignment_service.create_assignment(
+        session,
+        user,
+        payload,
+        operation_key,
+    )
 
 
 def _staged_attachment_response(
