@@ -4,7 +4,7 @@
 
 Teachers can assign text/files to their own students, students can open materials and submit solutions, and teachers can review, mark complete, or delete assignments through Telegram.
 
-**Status:** Planned; no homework behavior is implemented by this document.
+**Status:** Task 00 approved; implementation in progress.
 
 ## Scope (README.md sections covered)
 
@@ -61,7 +61,69 @@ Distinguish existing `notification_homework` lead-days from future assignment/su
 
 **Reuse:** Current roles, linkage, exact occurrence identity, backend-only domain ownership.
 
-**Acceptance:** [ ] Choices and concrete input/output/error examples are recorded before schema implementation. [ ] Attachment limits, retention and solution completion point are measurable. [ ] Notification delivery remains explicitly deferred.
+**Acceptance:** [x] Choices and concrete input/output/error examples are recorded before schema implementation. [x] Attachment limits, retention and solution completion point are measurable. [x] Notification delivery remains explicitly deferred.
+
+**Approved contract (2026-10-26):**
+
+- Homework belongs to one teacher and one student. Creation requires an active
+  teacher/student link. Existing assignments remain bound to those original
+  user IDs if the link changes: the student and original teacher retain access,
+  and a newly linked teacher gets no access.
+- An assignment may optionally reference one exact upcoming lesson occurrence.
+  Moving, cancelling, or deleting that occurrence or its series never deletes
+  or reassigns homework. The reference is historical and is ignored by future
+  reminders when the occurrence is no longer active.
+- Assignments and solutions require text, one or more files, or both. Teachers
+  explicitly publish assignments; students explicitly finish submissions.
+  Completion occurs only after every selected upload succeeds. Resubmissions
+  are retained as versions, with the latest current; student submission
+  completion is not reopened. Teachers may manually complete only incomplete
+  work; this records teacher provenance and prevents later student submission.
+- Files use private persistent backend-owned storage and authenticated
+  streaming; Telegram file IDs are not the durable copy. Each assignment and
+  each submission permits at most 5 files, 20 MiB per file, and 50 MiB total.
+  Arbitrary file contents are opaque attachments, never rendered or executed
+  inline. Downloads are attachments. Filenames are reduced to a basename,
+  control/path characters are removed, and names are capped at 128 characters.
+  Transfers time out after 120 seconds; mutation retries reuse a client UUID
+  operation key. Staged uploads expire after 24 hours and are cleaned daily;
+  cancellation removes drafts promptly.
+- Ordinary Telegram navigation/text screens edit the active message.
+  Downloaded materials and other file transfers are sent as separate media
+  messages.
+- Teacher deletion immediately revokes access and removes the assignment,
+  submissions, and files. Failed physical cleanup is an explicit retryable
+  failure; a hidden cleanup tombstone remains until a repeated delete succeeds.
+  There is no age-based deletion. Account deletion removes associated homework
+  and files through the same cleanup path.
+- No scheduled/push notification delivery is part of this milestone. The
+  existing homework lead-days preference is unchanged; notification delivery
+  remains deferred.
+
+**Contract examples (payload shapes are illustrative; route names remain for
+implementation):**
+
+- Teacher publishes text plus one previously staged file:
+  `{"student_id":"<student UUID>","text":"Read chapter 3","attachment_ids":["<staged UUID>"],"lesson_occurrence":{"kind":"LESSON","source_id":"<event UUID>","starts_at":"2026-11-02T09:00:00Z"}}`
+  → `201 {"id":"<homework UUID>","status":"INCOMPLETE","material_count":1}`.
+  Text-only omits `attachment_ids` and the optional lesson; file-only omits
+  `text`. A student not actively linked to the teacher returns `403`; a file
+  exceeding the approved limit returns `413`; neither creates visible work.
+- Student finishes text plus staged solution file with
+  `{"text":"My answer","attachment_ids":["<staged UUID>"],"operation_key":"<client UUID>"}`
+  → `201 {"version":1,"assignment_status":"COMPLETE","completion_source":"STUDENT_SUBMISSION"}`.
+  Retrying the same operation key returns the original result without a second
+  version. An upload/storage failure returns a non-success response and leaves
+  the assignment incomplete; an empty final solution returns `422`.
+- Teacher manual completion returns
+  `200 {"status":"COMPLETE","completion_source":"TEACHER"}`; repeating it is
+  idempotent. Confirmed deletion returns `204`; storage cleanup failure returns
+  `503`, leaves the assignment hidden and its files inaccessible, and a retry
+  continues cleanup.
+- Authorized file download streams the opaque attachment with a sanitized
+  attachment filename. A non-owner or a user guessing another attachment UUID
+  receives `404`; a staged file owned by another user cannot be attached to an
+  assignment or submission.
 
 **Out of scope:** Choosing unspecified behavior during implementation. **Suitable for:** Human/product owner with agent preparation.
 
