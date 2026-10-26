@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile
 from starlette.requests import ClientDisconnect
 
+from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.homework.config import HomeworkConfig
 from backend.homework.constants import (
@@ -354,6 +355,18 @@ async def open_attachment_download(
             or homework.deleted_at is not None
             or homework.cleanup_pending
             or viewer.id not in {homework.teacher_id, homework.student_id}
+        ):
+            raise HTTPException(status_code=404, detail="Attachment not found")
+        student = await session.get(User, homework.student_id)
+        teacher = await session.get(User, homework.teacher_id)
+        if (
+            student is None
+            or student.role != Roles.STUDENT
+            or not student.is_active
+            or student.teacher_id != homework.teacher_id
+            or teacher is None
+            or teacher.role != Roles.TEACHER
+            or not teacher.is_active
         ):
             raise HTTPException(status_code=404, detail="Attachment not found")
         expected_owner = (

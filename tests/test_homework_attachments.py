@@ -130,6 +130,7 @@ async def test_committed_attachment_survives_storage_configuration_recreation(
 ) -> None:
     teacher = await _user(db_session)
     student = await _user(db_session, "STUDENT")
+    student.teacher_id = teacher.id
     homework = Homework(
         teacher_id=teacher.id,
         student_id=student.id,

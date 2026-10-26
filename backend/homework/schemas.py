@@ -2,8 +2,16 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
+from backend.events.time_utils import normalize_utc
 from backend.homework.constants import MAX_ASSIGNMENT_ATTACHMENTS
 
 
@@ -26,12 +34,21 @@ class HomeworkStatus(StrEnum):
     COMPLETE = "COMPLETE"
 
 
+class HomeworkCompletionSource(StrEnum):
+    STUDENT_SUBMISSION = "STUDENT_SUBMISSION"
+    TEACHER = "TEACHER"
+
+
 class LessonOccurrenceReference(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: LessonSourceKind
     source_id: UUID
     starts_at: datetime
+
+    @field_serializer("starts_at", when_used="json")
+    def serialize_starts_at(self, value: datetime) -> str:
+        return normalize_utc(value).isoformat()
 
 
 class HomeworkCreate(BaseModel):
@@ -64,3 +81,42 @@ class HomeworkCreated(BaseModel):
     id: UUID
     status: HomeworkStatus
     material_count: int = Field(ge=0, le=MAX_ASSIGNMENT_ATTACHMENTS)
+
+
+class HomeworkStudentSummary(BaseModel):
+    id: UUID
+    full_name: str | None
+
+
+class HomeworkMaterialPublic(BaseModel):
+    id: UUID
+    file_name: str
+    byte_size: int = Field(ge=0)
+
+
+class HomeworkReadItem(BaseModel):
+    id: UUID
+    student: HomeworkStudentSummary | None = None
+    text: str | None
+    status: HomeworkStatus
+    completion_source: HomeworkCompletionSource | None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None
+    lesson_occurrence: LessonOccurrenceReference | None
+    material_count: int = Field(ge=0, le=MAX_ASSIGNMENT_ATTACHMENTS)
+
+    @field_serializer("created_at", "updated_at", "completed_at", when_used="json")
+    def serialize_timestamps(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        return normalize_utc(value).isoformat()
+
+
+class HomeworkReadDetail(HomeworkReadItem):
+    materials: list[HomeworkMaterialPublic]
+
+
+class HomeworkPage(BaseModel):
+    items: list[HomeworkReadItem]
+    total: int = Field(ge=0)

@@ -4,7 +4,7 @@
 
 Teachers can assign text/files to their own students, students can open materials and submit solutions, and teachers can review, mark complete, or delete assignments through Telegram.
 
-**Status:** Tasks 00–03 complete; implementation in progress.
+**Status:** Tasks 00–04 complete; implementation in progress.
 
 ## Scope (README.md sections covered)
 
@@ -65,10 +65,12 @@ Distinguish existing `notification_homework` lead-days from future assignment/su
 
 **Approved contract (2026-10-26):**
 
-- Homework belongs to one teacher and one student. Creation requires an active
-  teacher/student link. Existing assignments remain bound to those original
-  user IDs if the link changes: the student and original teacher retain access,
-  and a newly linked teacher gets no access.
+- Homework belongs to one teacher and one student. Creation and access require
+  an active teacher/student link. Assignments remain bound to their original
+  user IDs and are never reassigned or deleted when the link changes, but both
+  original parties lose access while that link is inactive; a newly linked
+  teacher also gets no access. Access returns only if the original pair is
+  actively linked again.
 - An assignment may optionally reference one exact upcoming lesson occurrence.
   Moving, cancelling, or deleting that occurrence or its series never deletes
   or reassigns homework. The reference is historical and is ignored by future
@@ -200,7 +202,9 @@ reports pre-existing errors in `backend/auth/config.py`,
 
 **Reuse:** Homework ownership service, attachment download authorization, existing pagination patterns.
 
-**Acceptance:** [ ] Empty/multiple-page lists and complete material retrieval work. [ ] Forged IDs, de-linked users and cross-teacher/student reads fail as approved. [ ] Query count is bounded; common checks pass.
+**Acceptance:** [x] Empty/multiple-page lists and complete material retrieval work. [x] Forged IDs, de-linked users and cross-teacher/student reads fail as approved. [x] Query count is bounded; common checks pass.
+
+**Verification (2026-10-26):** `uv run pytest -q tests/test_homework_reads.py tests/test_homework_assignments.py tests/test_homework_attachments.py tests/test_smoke.py` (22 passed); `uv run ruff check backend telegram tests`; touched-file `ruff format --check`; `uv run mypy backend/homework`; and `uv run mypy telegram`. Tests cover role-scoped paginated reads, status filtering, completion and exact lesson fields, material metadata without storage keys, forged/cross-owner IDs, active-link changes and download revocation, deleted-assignment hiding, and a fixed two-query teacher list regardless of page size.
 
 **Out of scope:** Full teacher student profile/history. **Suitable for:** AI agent.
 

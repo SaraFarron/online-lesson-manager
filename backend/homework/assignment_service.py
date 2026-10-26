@@ -201,10 +201,6 @@ async def create_assignment(
         raise Forbidden("Only teachers can create homework assignments")
     teacher_id = teacher.id
 
-    replay = await _existing_result(session, teacher_id, payload, operation_key)
-    if replay is not None:
-        return replay
-
     student = await session.scalar(
         select(User)
         .where(
@@ -217,6 +213,10 @@ async def create_assignment(
     )
     if student is None:
         raise Forbidden("Student is not actively linked to this teacher")
+
+    replay = await _existing_result(session, teacher_id, payload, operation_key)
+    if replay is not None:
+        return replay
 
     lesson_kind, lesson_source_id, lesson_start = await _validate_lesson_occurrence(
         session,

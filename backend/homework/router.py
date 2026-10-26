@@ -3,7 +3,16 @@ from datetime import UTC
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from starlette.datastructures import UploadFile
 
@@ -11,13 +20,16 @@ from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.auth.models import User
 from backend.exceptions import Forbidden
-from backend.homework import assignment_service
+from backend.homework import assignment_service, read_service
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.constants import ATTACHMENT_TRANSFER_TIMEOUT_SECONDS
 from backend.homework.models import HomeworkAttachment
 from backend.homework.schemas import (
     HomeworkCreate,
     HomeworkCreated,
+    HomeworkPage,
+    HomeworkReadDetail,
+    HomeworkStatus,
     StagedAttachmentPublic,
 )
 from backend.homework.service import (
@@ -56,6 +68,40 @@ async def create_homework_assignment(
         payload,
         operation_key,
     )
+
+
+@router.get(
+    "/assignments",
+    response_model=HomeworkPage,
+    summary="List homework visible to the authenticated teacher or student",
+)
+async def read_homework_assignments(
+    session: SessionDep,
+    user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    assignment_status: Annotated[HomeworkStatus | None, Query(alias="status")] = None,
+) -> HomeworkPage:
+    return await read_service.list_homework(
+        session,
+        user,
+        skip=skip,
+        limit=limit,
+        status_filter=assignment_status,
+    )
+
+
+@router.get(
+    "/assignments/{homework_id}",
+    response_model=HomeworkReadDetail,
+    summary="Read a homework assignment and its materials",
+)
+async def read_homework_assignment(
+    session: SessionDep,
+    user: CurrentUser,
+    homework_id: UUID,
+) -> HomeworkReadDetail:
+    return await read_service.get_homework_detail(session, user, homework_id)
 
 
 def _staged_attachment_response(
