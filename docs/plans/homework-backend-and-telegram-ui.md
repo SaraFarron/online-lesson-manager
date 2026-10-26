@@ -4,7 +4,7 @@
 
 Teachers can assign text/files to their own students, students can open materials and submit solutions, and teachers can review, mark complete, or delete assignments through Telegram.
 
-**Status:** Tasks 00–06 complete; implementation in progress.
+**Status:** Tasks 00–07 complete; implementation in progress.
 
 ## Scope (README.md sections covered)
 
@@ -250,7 +250,9 @@ reports pre-existing errors in `backend/auth/config.py`,
 
 **Reuse:** Scheduling UI client write/204/error handling, shared HTTP client/circuit breaker and user JWT cache.
 
-**Acceptance:** [ ] Transfer limits/timeouts, JWT renewal, malformed responses and unknown outcomes are tested with no duplicate final submissions. [ ] No backend imports, secrets or file bytes in logs/dialog drafts; common checks pass.
+**Acceptance:** [x] Transfer limits/timeouts, JWT renewal, malformed responses and unknown outcomes are tested with no duplicate final submissions. [x] No backend imports, secrets or file bytes in logs/dialog drafts; common checks pass.
+
+**Verification (2026-10-26):** `uv run pytest -q tests` (346 passed, 5 skipped); `uv run ruff check backend telegram tests`; touched-file `ruff format --check`; and `uv run mypy telegram`. Real-backend client tests cover streamed material upload/download, typed assignment/submission/review/completion/deletion calls, JWT renewal, and same-operation-key submission reconciliation after a lost response without duplicate versions. Mock-transport tests cover actual transfer limits, upload/download timeouts, malformed mutation responses, safe stale-resource errors, and credential separation. The client imports no backend code and does not log or retain file bytes.
 
 **Out of scope:** Local bot disk as the durable homework store. **Suitable for:** AI agent.
 

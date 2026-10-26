@@ -1,11 +1,18 @@
 import asyncio
 from datetime import date, timedelta
+from pathlib import Path
+from uuid import uuid4
 
 import httpx
 import pytest
 from pydantic import BaseModel
+from sqlalchemy import func, select
 
+from backend.auth.models import User
 from backend.auth.utils import create_access_token
+from backend.homework.config import HomeworkConfig, get_homework_settings
+from backend.homework.models import Homework, HomeworkSubmission
+from backend.main import app
 from telegram.api import (
     BackendClient,
     BackendError,
@@ -14,6 +21,10 @@ from telegram.api import (
     CircuitBreaker,
     EventCreatePayload,
     EventWriteResult,
+    HomeworkAssignmentPayload,
+    HomeworkAttachmentTooLarge,
+    HomeworkOutcomeUnknown,
+    HomeworkSubmissionPayload,
     RecurrentEventCreatePayload,
     RecurrentEventWriteResult,
     RecurrentOccurrenceCancelPayload,
@@ -29,6 +40,17 @@ from telegram.runtime import build_dispatcher
 from tests.bot_support import BotDriver
 
 KEY = "test-service-key-for-bot-client-32-characters"
+
+
+def _source_factory(*chunks: bytes):
+    def factory():
+        async def read_chunks():
+            for chunk in chunks:
+                yield chunk
+
+        return read_chunks()
+
+    return factory
 
 
 def _schedule_payload(period: str, day: str) -> dict[str, object]:
@@ -769,3 +791,417 @@ async def test_outage_screen_does_not_claim_login() -> None:
             assert "No offline account" in driver.session.last_message.text
         finally:
             await driver.close()
+
+
+async def test_homework_client_streams_backend_workflow(
+    client: httpx.AsyncClient,
+    db_session,
+    tmp_path: Path,
+) -> None:
+    app.dependency_overrides[get_homework_settings] = lambda: HomeworkConfig(
+        STORAGE_PATH=tmp_path
+    )
+    teacher = User(
+        id=uuid4(),
+        email="homework-client-teacher@example.com",
+        role="TEACHER",
+        timezone="UTC",
+    )
+    student = User(
+        id=uuid4(),
+        email="homework-client-student@example.com",
+        role="STUDENT",
+        timezone="UTC",
+        teacher_id=teacher.id,
+    )
+    db_session.add_all([teacher, student])
+    await db_session.commit()
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        return await client.send(request)
+
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(transport), base_url="http://test"
+        ) as http:
+            api = BackendClient(http, KEY)
+            api.tokens[100] = create_access_token(str(teacher.id))
+            api.tokens[200] = create_access_token(str(student.id))
+            operation_key = uuid4()
+            staged = await api.upload_homework_attachment(
+                100,
+                100,
+                "../worksheet.pdf",
+                _source_factory(b"worksheet ", b"contents"),
+                operation_key,
+                advertised_size=len(b"worksheet contents"),
+            )
+            assert staged.id == operation_key
+            assert staged.file_name == "worksheet.pdf"
+            assert staged.byte_size == len(b"worksheet contents")
+
+            assignment = await api.create_homework_assignment(
+                100,
+                100,
+                HomeworkAssignmentPayload(
+                    student_id=student.id,
+                    text="Read the material",
+                    attachment_ids=[staged.id],
+                ),
+                uuid4(),
+            )
+            teacher_page = await api.read_homework_assignments(100, 100)
+            student_page = await api.read_homework_assignments(200, 200)
+            assert teacher_page.total == student_page.total == 1
+            assert teacher_page.items[0].id == assignment.id
+            assert student_page.items[0].id == assignment.id
+            detail = await api.read_homework_assignment(200, 200, assignment.id)
+            assert detail.materials[0].id == staged.id
+
+            downloaded = b"".join(
+                [
+                    chunk
+                    async for chunk in api.download_homework_attachment(
+                        200, 200, staged.id
+                    )
+                ]
+            )
+            assert downloaded == b"worksheet contents"
+
+            submitted = await api.submit_homework(
+                200,
+                200,
+                assignment.id,
+                HomeworkSubmissionPayload(
+                    text="I finished",
+                    operation_key=uuid4(),
+                ),
+            )
+            assert submitted.version == 1
+            assert submitted.assignment_status == "COMPLETE"
+            assert submitted.completion_source == "STUDENT_SUBMISSION"
+            reviews = await api.read_homework_submissions(100, 100, assignment.id)
+            assert reviews.total == 1
+            assert reviews.items[0].text == "I finished"
+            assert reviews.items[0].is_current is True
+
+            manual_assignment = await api.create_homework_assignment(
+                100,
+                100,
+                HomeworkAssignmentPayload(
+                    student_id=student.id,
+                    text="Mark this one complete",
+                ),
+                uuid4(),
+            )
+            completed = await api.complete_homework(100, 100, manual_assignment.id)
+            assert completed.status == "COMPLETE"
+            assert completed.completion_source == "TEACHER"
+
+            await api.delete_homework_assignment(100, 100, manual_assignment.id)
+            await api.delete_homework_assignment(100, 100, assignment.id)
+            assert not (tmp_path / operation_key.hex).exists()
+    finally:
+        app.dependency_overrides.pop(get_homework_settings, None)
+
+
+async def test_homework_submission_unknown_outcome_retries_same_operation_key(
+    client: httpx.AsyncClient,
+    db_session,
+) -> None:
+    teacher = User(
+        id=uuid4(),
+        email="homework-retry-teacher@example.com",
+        role="TEACHER",
+        timezone="UTC",
+    )
+    student = User(
+        id=uuid4(),
+        email="homework-retry-student@example.com",
+        role="STUDENT",
+        timezone="UTC",
+        teacher_id=teacher.id,
+    )
+    homework = Homework(
+        teacher_id=teacher.id,
+        student_id=student.id,
+        text="Complete the exercise",
+        operation_key=uuid4(),
+    )
+    db_session.add_all([teacher, student, homework])
+    await db_session.commit()
+    submissions = 0
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        nonlocal submissions
+        response = await client.send(request)
+        if request.url.path.endswith("/submissions"):
+            submissions += 1
+            if submissions == 1:
+                raise httpx.ReadTimeout("lost after commit", request=request)
+        return response
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[200] = create_access_token(str(student.id))
+        payload = HomeworkSubmissionPayload(
+            text="My solution",
+            operation_key=uuid4(),
+        )
+        with pytest.raises(HomeworkOutcomeUnknown):
+            await api.submit_homework(200, 200, homework.id, payload)
+
+        result = await api.submit_homework(200, 200, homework.id, payload)
+
+    assert result.version == 1
+    assert submissions == 2
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(HomeworkSubmission)
+            .where(HomeworkSubmission.homework_id == homework.id)
+        )
+        == 1
+    )
+
+
+async def test_homework_upload_renews_jwt_and_recreates_stream() -> None:
+    requests: list[httpx.Request] = []
+    uploaded: list[bytes] = []
+    sources_created = 0
+    attachment_id = uuid4()
+    operation_key = uuid4()
+
+    def source_factory():
+        nonlocal sources_created
+        sources_created += 1
+
+        async def chunks():
+            yield b"file contents"
+
+        return chunks()
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v1/telegram/session":
+            return httpx.Response(
+                200, json={"access_token": "renewed-token", "token_type": "bearer"}
+            )
+        if request.headers["Authorization"] == "Bearer expired-token":
+            return httpx.Response(401, json={"detail": "private"})
+        uploaded.append(await request.aread())
+        return httpx.Response(
+            201,
+            json={
+                "id": str(attachment_id),
+                "file_name": "document.txt",
+                "byte_size": len(b"file contents"),
+                "expires_at": "2026-10-26T12:00:00+00:00",
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "expired-token"
+        staged = await api.upload_homework_attachment(
+            123,
+            456,
+            "document.txt",
+            source_factory,
+            operation_key,
+        )
+
+    assert staged.id == attachment_id
+    assert sources_created == 2
+    assert len(uploaded) == 1
+    assert b"file contents" in uploaded[0]
+    assert b'filename="document.txt"' in uploaded[0]
+    upload_requests = [
+        request
+        for request in requests
+        if request.url.path == "/api/v1/homework/attachments"
+    ]
+    assert len(upload_requests) == 2
+    assert upload_requests[0].headers["Authorization"] == "Bearer expired-token"
+    assert upload_requests[1].headers["Authorization"] == "Bearer renewed-token"
+    assert all(
+        request.headers["Idempotency-Key"] == str(operation_key)
+        for request in upload_requests
+    )
+    assert all(
+        "X-Bot-Service-Key" not in request.headers for request in upload_requests
+    )
+    session_request = next(
+        request
+        for request in requests
+        if request.url.path == "/api/v1/telegram/session"
+    )
+    assert session_request.headers["X-Bot-Service-Key"] == KEY
+    assert "Authorization" not in session_request.headers
+
+
+async def test_homework_attachment_upload_enforces_actual_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("telegram.api.MAX_HOMEWORK_ATTACHMENT_BYTES", 5)
+    attempts = 0
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        await request.aread()
+        return httpx.Response(201, json={})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "user-jwt"
+        with pytest.raises(HomeworkAttachmentTooLarge):
+            await api.upload_homework_attachment(
+                123,
+                456,
+                "large.bin",
+                _source_factory(b"123", b"456"),
+                uuid4(),
+                advertised_size=5,
+            )
+
+    assert attempts == 0
+
+
+async def test_homework_download_rejects_oversized_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("telegram.api.MAX_HOMEWORK_ATTACHMENT_BYTES", 5)
+
+    async def transport(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"Content-Length": "5"}, content=b"123456")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "user-jwt"
+        with pytest.raises(HomeworkAttachmentTooLarge):
+            _ = [
+                chunk
+                async for chunk in api.download_homework_attachment(123, 456, uuid4())
+            ]
+
+
+async def test_homework_transfer_timeout_is_unknown_for_upload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("telegram.api.HOMEWORK_TRANSFER_TIMEOUT_SECONDS", 0.01)
+
+    async def slow_source():
+        await asyncio.sleep(0.1)
+        yield b"late"
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        await request.aread()
+        return httpx.Response(201, json={})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "user-jwt"
+        with pytest.raises(HomeworkOutcomeUnknown):
+            await api.upload_homework_attachment(
+                123, 456, "slow.bin", slow_source, uuid4()
+            )
+
+
+async def test_homework_download_timeout_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("telegram.api.HOMEWORK_TRANSFER_TIMEOUT_SECONDS", 0.01)
+
+    class SlowResponse(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            await asyncio.sleep(0.1)
+            yield b"late"
+
+    async def transport(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Length": "4"},
+            stream=SlowResponse(),
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "user-jwt"
+        with pytest.raises(BackendUnavailable):
+            _ = [
+                chunk
+                async for chunk in api.download_homework_attachment(123, 456, uuid4())
+            ]
+
+
+async def test_malformed_homework_mutation_response_is_unknown() -> None:
+    attempts = 0
+
+    async def transport(_request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(201, json={"version": 1})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "user-jwt"
+        with pytest.raises(HomeworkOutcomeUnknown):
+            await api.submit_homework(
+                123,
+                456,
+                uuid4(),
+                HomeworkSubmissionPayload(
+                    text="My solution",
+                    operation_key=uuid4(),
+                ),
+            )
+
+    assert attempts == 1
+
+
+async def test_homework_delete_unknown_and_stale_retry_stays_unknown() -> None:
+    attempts = 0
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ReadTimeout("lost delete response", request=request)
+        return httpx.Response(404, json={"detail": "private"})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "user-jwt"
+        with pytest.raises(HomeworkOutcomeUnknown) as error:
+            await api.delete_homework_assignment(123, 456, uuid4())
+
+    assert attempts == 2
+    assert "Reload the latest homework state" in str(error.value)
+
+
+async def test_homework_errors_hide_backend_details() -> None:
+    error = BackendClient._backend_error(
+        httpx.Response(404, json={"detail": "private assignment information"}),
+        "homework",
+    )
+    assert error.status == 404
+    assert str(error) == (
+        "This homework or attachment is no longer available. Reload the homework list."
+    )

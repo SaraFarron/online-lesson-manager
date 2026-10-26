@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncIterable, AsyncIterator, Callable
 from datetime import date, datetime, timedelta
 from typing import Annotated, Any, Literal, Self, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -20,6 +20,12 @@ from pydantic import (
     model_validator,
 )
 
+MAX_HOMEWORK_ATTACHMENT_BYTES = 20 * 1024 * 1024
+MAX_HOMEWORK_ATTACHMENTS = 5
+MAX_HOMEWORK_ATTACHMENT_TOTAL_BYTES = 50 * 1024 * 1024
+HOMEWORK_TRANSFER_TIMEOUT_SECONDS = 120
+MAX_HOMEWORK_ERROR_BODY_BYTES = 64 * 1024
+
 
 class BackendUnavailable(RuntimeError):
     def __init__(self) -> None:
@@ -35,6 +41,29 @@ class BackendOutcomeUnknown(BackendUnavailable):
             "The save outcome is unknown. Reload the latest data before trying again; "
             "do not repeat the action.",
         )
+
+
+class HomeworkOutcomeUnknown(BackendOutcomeUnknown):
+    def __init__(self, *, requires_operation_key: bool = True) -> None:
+        if requires_operation_key:
+            message = (
+                "The homework save outcome is unknown. Retry only with the same "
+                "operation key to avoid creating a duplicate."
+            )
+        else:
+            message = (
+                "The homework action outcome is unknown. Reload the latest homework "
+                "state before deciding whether to retry."
+            )
+        RuntimeError.__init__(
+            self,
+            message,
+        )
+
+
+class HomeworkAttachmentTooLarge(ValueError):
+    def __init__(self) -> None:
+        super().__init__("Homework attachments must be 20 MiB or smaller.")
 
 
 class BackendError(RuntimeError):
@@ -136,6 +165,192 @@ class StudentPickerPage(BaseModel):
 
     items: list[StudentPickerItem]
     total: int = Field(ge=0)
+
+
+class HomeworkStudent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    full_name: str | None
+
+
+class HomeworkLessonOccurrence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["EVENT", "RECURRENT_EVENT"]
+    source_id: uuid.UUID
+    starts_at: AwareDatetime
+
+
+class HomeworkMaterial(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    file_name: str
+    byte_size: int = Field(ge=0)
+
+
+class HomeworkAssignment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    student: HomeworkStudent | None = None
+    text: str | None
+    status: Literal["INCOMPLETE", "COMPLETE"]
+    completion_source: Literal["STUDENT_SUBMISSION", "TEACHER"] | None
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+    completed_at: AwareDatetime | None
+    lesson_occurrence: HomeworkLessonOccurrence | None
+    material_count: int = Field(ge=0, le=MAX_HOMEWORK_ATTACHMENTS)
+
+
+class HomeworkAssignmentDetail(HomeworkAssignment):
+    materials: list[HomeworkMaterial]
+
+
+class HomeworkAssignmentPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[HomeworkAssignment]
+    total: int = Field(ge=0)
+
+
+class HomeworkAssignmentCreated(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    status: Literal["INCOMPLETE", "COMPLETE"]
+    material_count: int = Field(ge=0, le=MAX_HOMEWORK_ATTACHMENTS)
+
+
+class HomeworkSubmissionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str | None = None
+    attachment_ids: list[uuid.UUID] = Field(
+        default_factory=list, max_length=MAX_HOMEWORK_ATTACHMENTS
+    )
+    operation_key: uuid.UUID
+
+    @field_validator("text")
+    @classmethod
+    def reject_blank_text(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Submission text must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def require_content(self) -> Self:
+        if self.text is None and not self.attachment_ids:
+            raise ValueError("A submission requires text or at least one attachment")
+        if len(set(self.attachment_ids)) != len(self.attachment_ids):
+            raise ValueError("Submission attachment IDs must be unique")
+        return self
+
+
+class HomeworkAssignmentPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    student_id: uuid.UUID
+    text: str | None = None
+    attachment_ids: list[uuid.UUID] = Field(
+        default_factory=list, max_length=MAX_HOMEWORK_ATTACHMENTS
+    )
+    lesson_occurrence: HomeworkLessonOccurrence | None = None
+
+    @field_validator("text")
+    @classmethod
+    def reject_blank_text(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Homework text must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def require_content(self) -> Self:
+        if self.text is None and not self.attachment_ids:
+            raise ValueError("An assignment requires text or at least one attachment")
+        if len(set(self.attachment_ids)) != len(self.attachment_ids):
+            raise ValueError("Assignment attachment IDs must be unique")
+        return self
+
+
+class HomeworkSubmissionReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    version: int = Field(ge=1)
+    text: str | None
+    created_at: AwareDatetime
+    is_current: bool
+    materials: list[HomeworkMaterial]
+
+
+class HomeworkSubmissionPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    homework_id: uuid.UUID
+    items: list[HomeworkSubmissionReview]
+    total: int = Field(ge=0)
+
+
+class HomeworkSubmissionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(ge=1)
+    assignment_status: Literal["INCOMPLETE", "COMPLETE"]
+    completion_source: Literal["STUDENT_SUBMISSION", "TEACHER"]
+
+
+class HomeworkCompletionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["INCOMPLETE", "COMPLETE"]
+    completion_source: Literal["STUDENT_SUBMISSION", "TEACHER"]
+    completed_at: AwareDatetime
+
+
+class StagedHomeworkAttachment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    file_name: str
+    byte_size: int = Field(ge=0, le=MAX_HOMEWORK_ATTACHMENT_BYTES)
+    expires_at: AwareDatetime
+
+
+def _safe_multipart_filename(value: str) -> str:
+    basename = value.replace("\\", "/").rsplit("/", 1)[-1]
+    safe = "".join(
+        character
+        for character in basename
+        if character.isprintable() and character not in {'"', "\\"}
+    )
+    return safe[:128] or "attachment"
+
+
+async def _multipart_file_stream(
+    source_factory: Callable[[], AsyncIterable[bytes]],
+    file_name: str,
+    boundary: str,
+) -> AsyncIterator[bytes]:
+    safe_name = _safe_multipart_filename(file_name)
+    yield (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{safe_name}"\r\n'
+        "Content-Type: application/octet-stream\r\n\r\n"
+    ).encode()
+    byte_count = 0
+    async for chunk in source_factory():
+        if not isinstance(chunk, bytes):
+            raise TypeError("Homework attachment streams must yield bytes")
+        if not chunk:
+            continue
+        byte_count += len(chunk)
+        if byte_count > MAX_HOMEWORK_ATTACHMENT_BYTES:
+            raise HomeworkAttachmentTooLarge()
+        yield chunk
+    yield f"\r\n--{boundary}--\r\n".encode("ascii")
 
 
 class TeacherBookingContext(BaseModel):
@@ -622,7 +837,7 @@ class ScheduleResponse(BaseModel):
         return self
 
 
-ErrorContext = Literal["default", "schedule", "scheduling", "settings"]
+ErrorContext = Literal["default", "schedule", "scheduling", "settings", "homework"]
 DEFAULT_ERROR_MESSAGES = {
     400: "Account inactive or request not allowed.",
     401: "Authentication failed. Check bot configuration or restart with /start.",
@@ -654,6 +869,15 @@ SETTINGS_ERROR_MESSAGES = {
     404: "The account or profile is no longer available.",
     409: "Settings changed or conflict with saved values. Reload and review them.",
     422: "Invalid settings. Review the values and merged limits before saving.",
+}
+HOMEWORK_ERROR_MESSAGES = {
+    400: "This homework action is not allowed for this account.",
+    401: "Homework authentication failed. Restart with /start and reload your homework.",
+    403: "This account does not have permission to access this homework.",
+    404: "This homework or attachment is no longer available. Reload the homework list.",
+    409: "Homework changed or was already completed. Reload it before trying again.",
+    413: "This attachment exceeds the allowed 20 MiB file limit.",
+    422: "Check the homework content, attachments, and file limits.",
 }
 POLICY_ERROR_MESSAGES = {
     "Teacher work hours are not configured": "The teacher has not configured working hours.",
@@ -697,11 +921,15 @@ class BackendClient:
         service: bool = False,
         token: str | None = None,
         body: dict[str, Any] | None = None,
+        content: AsyncIterable[bytes] | None = None,
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
+        timeout: float | httpx.Timeout | None = None,
         error_context: ErrorContext = "default",
         _ambiguous_write: bool = False,
     ) -> Model:
+        if body is not None and content is not None:
+            raise ValueError("A request cannot include both JSON and stream content")
         probe = await self.breaker.enter()
         failed = False
         request_headers = (
@@ -715,9 +943,17 @@ class BackendClient:
             request_headers.update(headers)
         try:
             try:
-                response = await self.http.request(
-                    method, path, headers=request_headers, params=params, json=body
-                )
+                request_options: dict[str, Any] = {
+                    "headers": request_headers,
+                    "params": params,
+                }
+                if timeout is not None:
+                    request_options["timeout"] = timeout
+                if content is not None:
+                    request_options["content"] = content
+                else:
+                    request_options["json"] = body
+                response = await self.http.request(method, path, **request_options)
             except httpx.TransportError as exc:
                 failed = True
                 if _ambiguous_write:
@@ -816,6 +1052,7 @@ class BackendClient:
                 "schedule": SCHEDULE_ERROR_MESSAGES,
                 "scheduling": SCHEDULING_ERROR_MESSAGES,
                 "settings": SETTINGS_ERROR_MESSAGES,
+                "homework": HOMEWORK_ERROR_MESSAGES,
             }[error_context]
             message = messages.get(
                 response.status_code, "Backend rejected the request."
@@ -1004,6 +1241,318 @@ class BackendClient:
                 raise
             await self.session(sender_id, chat_id, error_context=error_context)
             await send()
+
+    async def read_homework_assignments(
+        self,
+        sender_id: int,
+        chat_id: int,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        status: Literal["INCOMPLETE", "COMPLETE"] | None = None,
+    ) -> HomeworkAssignmentPage:
+        params = {"skip": str(skip), "limit": str(limit)}
+        if status is not None:
+            params["status"] = status
+        return await self.read(
+            "/api/v1/homework/assignments",
+            HomeworkAssignmentPage,
+            sender_id,
+            chat_id,
+            params=params,
+            error_context="homework",
+        )
+
+    async def read_homework_assignment(
+        self,
+        sender_id: int,
+        chat_id: int,
+        homework_id: uuid.UUID,
+    ) -> HomeworkAssignmentDetail:
+        return await self.read(
+            f"/api/v1/homework/assignments/{homework_id}",
+            HomeworkAssignmentDetail,
+            sender_id,
+            chat_id,
+            error_context="homework",
+        )
+
+    async def create_homework_assignment(
+        self,
+        sender_id: int,
+        chat_id: int,
+        payload: HomeworkAssignmentPayload,
+        operation_key: uuid.UUID,
+    ) -> HomeworkAssignmentCreated:
+        try:
+            return await self.write(
+                "POST",
+                "/api/v1/homework/assignments",
+                HomeworkAssignmentCreated,
+                sender_id,
+                chat_id,
+                payload,
+                headers={"Idempotency-Key": str(operation_key)},
+                error_context="homework",
+            )
+        except BackendOutcomeUnknown as exc:
+            raise HomeworkOutcomeUnknown() from exc
+
+    async def submit_homework(
+        self,
+        sender_id: int,
+        chat_id: int,
+        homework_id: uuid.UUID,
+        payload: HomeworkSubmissionPayload,
+    ) -> HomeworkSubmissionResult:
+        try:
+            return await self.write(
+                "POST",
+                f"/api/v1/homework/assignments/{homework_id}/submissions",
+                HomeworkSubmissionResult,
+                sender_id,
+                chat_id,
+                payload,
+                error_context="homework",
+            )
+        except BackendOutcomeUnknown as exc:
+            raise HomeworkOutcomeUnknown() from exc
+
+    async def read_homework_submissions(
+        self,
+        sender_id: int,
+        chat_id: int,
+        homework_id: uuid.UUID,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> HomeworkSubmissionPage:
+        return await self.read(
+            f"/api/v1/homework/assignments/{homework_id}/submissions",
+            HomeworkSubmissionPage,
+            sender_id,
+            chat_id,
+            params={"skip": str(skip), "limit": str(limit)},
+            error_context="homework",
+        )
+
+    async def complete_homework(
+        self,
+        sender_id: int,
+        chat_id: int,
+        homework_id: uuid.UUID,
+    ) -> HomeworkCompletionResult:
+        try:
+            return await self.write(
+                "POST",
+                f"/api/v1/homework/assignments/{homework_id}/complete",
+                HomeworkCompletionResult,
+                sender_id,
+                chat_id,
+                NoContent(),
+                error_context="homework",
+            )
+        except BackendOutcomeUnknown as exc:
+            raise HomeworkOutcomeUnknown(requires_operation_key=False) from exc
+
+    async def _delete_homework_resource(
+        self,
+        path: str,
+        sender_id: int,
+        chat_id: int,
+    ) -> None:
+        try:
+            await self.delete(path, sender_id, chat_id, error_context="homework")
+        except BackendOutcomeUnknown:
+            try:
+                await self.delete(path, sender_id, chat_id, error_context="homework")
+            except BackendError as retry_error:
+                if retry_error.status == 404:
+                    raise HomeworkOutcomeUnknown(
+                        requires_operation_key=False
+                    ) from retry_error
+                raise
+            except BackendOutcomeUnknown as retry_error:
+                raise HomeworkOutcomeUnknown(
+                    requires_operation_key=False
+                ) from retry_error
+            else:
+                return
+
+    async def delete_homework_assignment(
+        self,
+        sender_id: int,
+        chat_id: int,
+        homework_id: uuid.UUID,
+    ) -> None:
+        await self._delete_homework_resource(
+            f"/api/v1/homework/assignments/{homework_id}",
+            sender_id,
+            chat_id,
+        )
+
+    async def upload_homework_attachment(
+        self,
+        sender_id: int,
+        chat_id: int,
+        file_name: str,
+        source_factory: Callable[[], AsyncIterable[bytes]],
+        operation_key: uuid.UUID,
+        *,
+        advertised_size: int | None = None,
+    ) -> StagedHomeworkAttachment:
+        """Upload a repeatable byte source using the supplied idempotency key."""
+        if advertised_size is not None:
+            if advertised_size < 0:
+                raise ValueError("Advertised attachment size cannot be negative")
+            if advertised_size > MAX_HOMEWORK_ATTACHMENT_BYTES:
+                raise HomeworkAttachmentTooLarge()
+        if sender_id not in self.tokens:
+            await self.session(sender_id, chat_id, error_context="homework")
+        boundary = uuid.uuid4().hex
+
+        async def send() -> StagedHomeworkAttachment:
+            try:
+                async with asyncio.timeout(HOMEWORK_TRANSFER_TIMEOUT_SECONDS):
+                    return await self.request(
+                        "POST",
+                        "/api/v1/homework/attachments",
+                        StagedHomeworkAttachment,
+                        token=self.tokens[sender_id],
+                        content=_multipart_file_stream(
+                            source_factory, file_name, boundary
+                        ),
+                        headers={
+                            "Content-Type": f"multipart/form-data; boundary={boundary}",
+                            "Idempotency-Key": str(operation_key),
+                        },
+                        timeout=httpx.Timeout(HOMEWORK_TRANSFER_TIMEOUT_SECONDS),
+                        error_context="homework",
+                        _ambiguous_write=True,
+                    )
+            except TimeoutError as exc:
+                raise HomeworkOutcomeUnknown() from exc
+            except BackendOutcomeUnknown as exc:
+                raise HomeworkOutcomeUnknown() from exc
+
+        try:
+            return await send()
+        except BackendError as exc:
+            if exc.status != 401:
+                raise
+            await self.session(sender_id, chat_id, error_context="homework")
+            return await send()
+
+    @staticmethod
+    async def _bounded_error_response(response: httpx.Response) -> httpx.Response:
+        body = bytearray()
+        async for chunk in response.aiter_bytes():
+            remaining = MAX_HOMEWORK_ERROR_BODY_BYTES - len(body)
+            if remaining <= 0:
+                break
+            body.extend(chunk[:remaining])
+            if len(chunk) > remaining:
+                break
+        return httpx.Response(response.status_code, content=bytes(body))
+
+    async def _stream_homework_attachment_once(
+        self,
+        path: str,
+        token: str,
+    ) -> AsyncIterator[bytes]:
+        probe = await self.breaker.enter()
+        failed = False
+        try:
+            async with asyncio.timeout(HOMEWORK_TRANSFER_TIMEOUT_SECONDS):
+                async with self.http.stream(
+                    "GET",
+                    path,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=httpx.Timeout(HOMEWORK_TRANSFER_TIMEOUT_SECONDS),
+                ) as response:
+                    if response.status_code >= 500:
+                        failed = True
+                        raise BackendUnavailable()
+                    if response.is_error:
+                        bounded_response = await self._bounded_error_response(response)
+                        raise self._backend_error(bounded_response, "homework")
+                    if response.status_code != 200:
+                        failed = True
+                        raise BackendUnavailable()
+                    length_header = response.headers.get("Content-Length")
+                    try:
+                        expected_size = (
+                            int(length_header) if length_header is not None else None
+                        )
+                    except ValueError as exc:
+                        failed = True
+                        raise BackendUnavailable() from exc
+                    if expected_size is not None and expected_size < 0:
+                        failed = True
+                        raise BackendUnavailable()
+                    if (
+                        expected_size is not None
+                        and expected_size > MAX_HOMEWORK_ATTACHMENT_BYTES
+                    ):
+                        failed = True
+                        raise HomeworkAttachmentTooLarge()
+                    byte_count = 0
+                    async for chunk in response.aiter_bytes():
+                        byte_count += len(chunk)
+                        if byte_count > MAX_HOMEWORK_ATTACHMENT_BYTES:
+                            failed = True
+                            raise HomeworkAttachmentTooLarge()
+                        if chunk:
+                            yield chunk
+                    if expected_size is not None and byte_count != expected_size:
+                        failed = True
+                        raise BackendUnavailable()
+        except httpx.TransportError as exc:
+            failed = True
+            raise BackendUnavailable() from exc
+        except TimeoutError as exc:
+            failed = True
+            raise BackendUnavailable() from exc
+        except asyncio.CancelledError:
+            failed = True
+            raise
+        finally:
+            await self.breaker.finish(failed, probe)
+
+    async def download_homework_attachment(
+        self,
+        sender_id: int,
+        chat_id: int,
+        attachment_id: uuid.UUID,
+    ) -> AsyncIterator[bytes]:
+        if sender_id not in self.tokens:
+            await self.session(sender_id, chat_id, error_context="homework")
+        path = f"/api/v1/homework/attachments/{attachment_id}"
+        try:
+            async for chunk in self._stream_homework_attachment_once(
+                path, self.tokens[sender_id]
+            ):
+                yield chunk
+        except BackendError as exc:
+            if exc.status != 401:
+                raise
+            await self.session(sender_id, chat_id, error_context="homework")
+            async for chunk in self._stream_homework_attachment_once(
+                path, self.tokens[sender_id]
+            ):
+                yield chunk
+
+    async def delete_staged_homework_attachment(
+        self,
+        sender_id: int,
+        chat_id: int,
+        attachment_id: uuid.UUID,
+    ) -> None:
+        await self._delete_homework_resource(
+            f"/api/v1/homework/attachments/{attachment_id}",
+            sender_id,
+            chat_id,
+        )
 
     async def read_student_picker(
         self,
