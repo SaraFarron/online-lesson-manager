@@ -20,7 +20,7 @@ from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.auth.models import User
 from backend.exceptions import Forbidden
-from backend.homework import assignment_service, read_service
+from backend.homework import assignment_service, read_service, submission_service
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.constants import ATTACHMENT_TRANSFER_TIMEOUT_SECONDS
 from backend.homework.models import HomeworkAttachment
@@ -30,6 +30,8 @@ from backend.homework.schemas import (
     HomeworkPage,
     HomeworkReadDetail,
     HomeworkStatus,
+    HomeworkSubmissionCreate,
+    HomeworkSubmissionCreated,
     StagedAttachmentPublic,
 )
 from backend.homework.service import (
@@ -102,6 +104,26 @@ async def read_homework_assignment(
     homework_id: UUID,
 ) -> HomeworkReadDetail:
     return await read_service.get_homework_detail(session, user, homework_id)
+
+
+@router.post(
+    "/assignments/{homework_id}/submissions",
+    response_model=HomeworkSubmissionCreated,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit a homework solution",
+)
+async def submit_homework(
+    session: SessionDep,
+    user: CurrentUser,
+    homework_id: UUID,
+    payload: HomeworkSubmissionCreate,
+) -> HomeworkSubmissionCreated:
+    return await submission_service.create_submission(
+        session,
+        user,
+        homework_id,
+        payload,
+    )
 
 
 def _staged_attachment_response(

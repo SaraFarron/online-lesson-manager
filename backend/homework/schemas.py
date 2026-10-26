@@ -83,6 +83,37 @@ class HomeworkCreated(BaseModel):
     material_count: int = Field(ge=0, le=MAX_ASSIGNMENT_ATTACHMENTS)
 
 
+class HomeworkSubmissionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str | None = None
+    attachment_ids: list[UUID] = Field(
+        default_factory=list, max_length=MAX_ASSIGNMENT_ATTACHMENTS
+    )
+    operation_key: UUID
+
+    @field_validator("text")
+    @classmethod
+    def reject_blank_text(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Submission text must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def require_text_or_attachments(self) -> HomeworkSubmissionCreate:
+        if self.text is None and not self.attachment_ids:
+            raise ValueError("Submission requires text, attachments, or both")
+        if len(set(self.attachment_ids)) != len(self.attachment_ids):
+            raise ValueError("Attachment IDs must be unique")
+        return self
+
+
+class HomeworkSubmissionCreated(BaseModel):
+    version: int = Field(ge=1)
+    assignment_status: HomeworkStatus
+    completion_source: HomeworkCompletionSource
+
+
 class HomeworkStudentSummary(BaseModel):
     id: UUID
     full_name: str | None

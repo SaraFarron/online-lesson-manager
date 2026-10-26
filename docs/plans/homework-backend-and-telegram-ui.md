@@ -4,7 +4,7 @@
 
 Teachers can assign text/files to their own students, students can open materials and submit solutions, and teachers can review, mark complete, or delete assignments through Telegram.
 
-**Status:** Tasks 00–04 complete; implementation in progress.
+**Status:** Tasks 00–05 complete; implementation in progress.
 
 ## Scope (README.md sections covered)
 
@@ -218,7 +218,9 @@ reports pre-existing errors in `backend/auth/config.py`,
 
 **Reuse:** Assignment scope checks, attachment service and transaction patterns; no need to take the teacher schedule guard for independent homework unless approved lesson mutation requires it.
 
-**Acceptance:** [ ] Text/files/mixed solutions finalize exactly as approved; failed/empty submissions do not change completion. [ ] Duplicate/concurrent requests and unauthorized student/teacher submissions have deterministic results. [ ] Common checks pass.
+**Acceptance:** [x] Text/files/mixed solutions finalize exactly as approved; failed/empty submissions do not change completion. [x] Duplicate/concurrent requests and unauthorized student/teacher submissions have deterministic results. [x] Common checks pass.
+
+**Verification (2026-10-26):** `uv run pytest -q tests/test_homework_submissions.py tests/test_homework_reads.py tests/test_homework_assignments.py tests/test_homework_attachments.py tests/test_smoke.py` (29 passed); `uv run ruff check backend telegram tests`; touched-file `ruff format --check`; `uv run mypy backend/homework`; and `uv run mypy telegram`. Tests cover text/file/mixed submissions, versioned resubmissions, completion provenance, 5-file/50 MiB limits, staged ownership/expiry, empty/unauthorized/manual-completed cases, commit failure and unknown-outcome reconciliation, and concurrent same-key submission without duplicate versions.
 
 **Out of scope:** Grading, teacher approval as a prerequisite for student completion. **Suitable for:** AI agent.
 
