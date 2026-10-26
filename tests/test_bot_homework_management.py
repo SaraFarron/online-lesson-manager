@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.models import StudentProfile, TeacherProfile, User
@@ -170,6 +170,7 @@ async def _make_driver(
     client: httpx.AsyncClient,
     bot_service_key: str,
     *,
+    telegram_id: int = TEACHER_TELEGRAM_ID,
     forward: Forward | None = None,
 ) -> tuple[BotDriver, httpx.AsyncClient]:
     async def relay(request: httpx.Request) -> httpx.Response:
@@ -182,7 +183,7 @@ async def _make_driver(
     )
     driver = BotDriver(
         build_dispatcher(BackendClient(http, bot_service_key)),
-        user_id=TEACHER_TELEGRAM_ID,
+        user_id=telegram_id,
     )
     return driver, http
 
@@ -393,3 +394,319 @@ async def test_teacher_reconciles_ambiguous_completion_and_delete(
         assert lost_delete_response is False
     finally:
         await _close(driver, http)
+
+
+async def test_homework_survives_bot_restarts_and_scopes_every_role(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+    homework_storage: Path,
+) -> None:
+    teacher, student, second_student, outsider_teacher, outsider_student = await _seed(
+        db_session
+    )
+    assignment_text = "Read the attached chapter"
+    manual_text = "Bob separate practice"
+    teacher_driver, teacher_http = await _make_driver(client, bot_service_key)
+    try:
+        await teacher_driver.text("/start")
+        await teacher_driver.click("Homework")
+        await teacher_driver.click("Alice Learner")
+        await teacher_driver.text(assignment_text)
+        await teacher_driver.document("chapter.pdf", b"chapter bytes")
+        await teacher_driver.click("Review")
+        await teacher_driver.click("Publish assignment")
+
+        await teacher_driver.click("Homework")
+        await teacher_driver.click("Bob Learner")
+        await teacher_driver.text(manual_text)
+        await teacher_driver.click("Review")
+        await teacher_driver.click("Publish assignment")
+    finally:
+        await _close(teacher_driver, teacher_http)
+
+    alice_driver, alice_http = await _make_driver(
+        client, bot_service_key, telegram_id=STUDENT_TELEGRAM_ID
+    )
+    try:
+        await alice_driver.text("/start")
+        await alice_driver.click("Homework")
+        await alice_driver.click(_button_with_prefix(alice_driver, assignment_text))
+        screen_id = alice_driver.session.last_message.message_id
+        await alice_driver.click(_button_with_prefix(alice_driver, "chapter.pdf"))
+        assert alice_driver.session.sent_documents == [
+            (STUDENT_TELEGRAM_ID, "chapter.pdf", b"chapter bytes")
+        ]
+        assert alice_driver.session.last_message.message_id == screen_id
+        await alice_driver.click("Submit solution")
+        await alice_driver.text("My answer")
+        await alice_driver.document("answer.txt", b"answer bytes")
+        await alice_driver.click("Review")
+        await alice_driver.click("Finish submission")
+        assert "completed the assignment" in alice_driver.session.last_message.text
+    finally:
+        await _close(alice_driver, alice_http)
+
+    restarted_alice, restarted_alice_http = await _make_driver(
+        client, bot_service_key, telegram_id=STUDENT_TELEGRAM_ID
+    )
+    try:
+        await restarted_alice.text("/start")
+        await restarted_alice.click("Homework")
+        await restarted_alice.click(
+            _button_with_prefix(restarted_alice, assignment_text)
+        )
+        assert "Completed by your submission" in (
+            restarted_alice.session.last_message.text
+        )
+    finally:
+        await _close(restarted_alice, restarted_alice_http)
+
+    bob_driver, bob_http = await _make_driver(
+        client, bot_service_key, telegram_id=STUDENT_TELEGRAM_ID + 1
+    )
+    try:
+        await bob_driver.text("/start")
+        await bob_driver.click("Homework")
+        labels = [
+            button.text
+            for row in bob_driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+        ]
+        assert any(manual_text in label for label in labels)
+        assert all(assignment_text not in label for label in labels)
+    finally:
+        await _close(bob_driver, bob_http)
+
+    outsider_driver, outsider_http = await _make_driver(
+        client, bot_service_key, telegram_id=OUTSIDER_TELEGRAM_ID
+    )
+    try:
+        await outsider_driver.text("/start")
+        await outsider_driver.click("Manage homework")
+        labels = [
+            button.text
+            for row in outsider_driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+        ]
+        assert any("Other Student" in label for label in labels)
+        assert all("Alice Learner" not in label for label in labels)
+        assert all("Bob Learner" not in label for label in labels)
+    finally:
+        await _close(outsider_driver, outsider_http)
+
+    requests: list[httpx.Request] = []
+
+    async def relay(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return await client.send(request)
+
+    teacher_api_http = httpx.AsyncClient(
+        transport=httpx.MockTransport(relay), base_url="http://test"
+    )
+    teacher_api = BackendClient(teacher_api_http, bot_service_key)
+    restarted_teacher = BotDriver(
+        build_dispatcher(teacher_api), user_id=TEACHER_TELEGRAM_ID
+    )
+    try:
+        await restarted_teacher.text("/start")
+        sessions_before_retry = sum(
+            request.url.path == "/api/v1/telegram/session" for request in requests
+        )
+        teacher_api.tokens[TEACHER_TELEGRAM_ID] = "expired-token"
+        await restarted_teacher.click("Manage homework")
+        sessions_after_retry = sum(
+            request.url.path == "/api/v1/telegram/session" for request in requests
+        )
+        assert sessions_after_retry > sessions_before_retry
+        await restarted_teacher.click("Alice Learner")
+        await restarted_teacher.click(
+            _button_with_prefix(restarted_teacher, assignment_text)
+        )
+        assert "My answer" in restarted_teacher.session.last_message.text
+        await restarted_teacher.click(
+            _button_with_prefix(restarted_teacher, "Solution v1: answer.txt")
+        )
+        assert restarted_teacher.session.sent_documents[-1] == (
+            TEACHER_TELEGRAM_ID,
+            "answer.txt",
+            b"answer bytes",
+        )
+
+        await restarted_teacher.click("Back to list")
+        await restarted_teacher.click("Change student")
+        await restarted_teacher.click("Bob Learner")
+        await restarted_teacher.click(
+            _button_with_prefix(restarted_teacher, manual_text)
+        )
+        await restarted_teacher.click("Mark complete")
+        manual_assignment = await db_session.scalar(
+            select(Homework).where(Homework.text == manual_text)
+        )
+        assert manual_assignment is not None
+        assert manual_assignment.status == "COMPLETE"
+        assert manual_assignment.completion_source == "TEACHER"
+        await restarted_teacher.click("Back to list")
+        await restarted_teacher.click(
+            _button_with_prefix(restarted_teacher, manual_text)
+        )
+        await restarted_teacher.click("Delete assignment")
+        await restarted_teacher.click("Confirm delete")
+        assert (
+            await db_session.scalar(
+                select(Homework.id).where(Homework.text == manual_text)
+            )
+            is None
+        )
+    finally:
+        await _close(restarted_teacher, teacher_api_http)
+
+    assignment = await db_session.scalar(
+        select(Homework).where(Homework.text == assignment_text)
+    )
+    assert assignment is not None
+    assert assignment.student_id == student.id
+    assert assignment.teacher_id == teacher.id
+    assert assignment.status == "COMPLETE"
+    assert assignment.completion_source == "STUDENT_SUBMISSION"
+    submission = await db_session.scalar(
+        select(HomeworkSubmission).where(
+            HomeworkSubmission.homework_id == assignment.id
+        )
+    )
+    assert submission is not None and submission.text == "My answer"
+    attachments = list(
+        await db_session.scalars(
+            select(HomeworkAttachment).where(
+                HomeworkAttachment.homework_id == assignment.id
+            )
+        )
+    )
+    assert {item.file_name for item in attachments} == {"chapter.pdf", "answer.txt"}
+    assert all((homework_storage / item.storage_key).exists() for item in attachments)
+    contents = {
+        item.file_name: (homework_storage / item.storage_key).read_bytes()
+        for item in attachments
+    }
+    assert contents == {
+        "chapter.pdf": b"chapter bytes",
+        "answer.txt": b"answer bytes",
+    }
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(Homework)
+            .where(
+                Homework.teacher_id == outsider_teacher.id,
+                Homework.student_id == outsider_student.id,
+            )
+        )
+        == 0
+    )
+
+
+async def test_teacher_upload_recovers_from_interrupted_and_unavailable_storage(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+    tmp_path: Path,
+) -> None:
+    teacher, student, _second, _outsider_teacher, _outsider_student = await _seed(
+        db_session
+    )
+    requests: list[httpx.Request] = []
+    interrupt_first_upload = True
+
+    async def relay(request: httpx.Request) -> httpx.Response:
+        nonlocal interrupt_first_upload
+        requests.append(request)
+        if (
+            interrupt_first_upload
+            and request.method == "POST"
+            and request.url.path == "/api/v1/homework/attachments"
+        ):
+            interrupt_first_upload = False
+            raise httpx.ReadTimeout("simulated interrupted upload")
+        return await client.send(request)
+
+    storage_path = tmp_path / "homework"
+    app.dependency_overrides[get_homework_settings] = lambda: HomeworkConfig(
+        STORAGE_PATH=storage_path
+    )
+    http = httpx.AsyncClient(
+        transport=httpx.MockTransport(relay), base_url="http://test"
+    )
+    driver = BotDriver(
+        build_dispatcher(BackendClient(http, bot_service_key)),
+        user_id=TEACHER_TELEGRAM_ID,
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Homework")
+        await driver.click("Alice Learner")
+        await driver.document("interrupted.pdf", b"recoverable bytes")
+        assert "outcome is unknown" in driver.session.last_message.text.lower()
+        await driver.click("Retry upload: interrupted.pdf")
+        await driver.text("Interrupted upload recovery")
+        await driver.click("Review")
+        await driver.click("Publish assignment")
+        assignment = await db_session.scalar(
+            select(Homework).where(Homework.text == "Interrupted upload recovery")
+        )
+        assert assignment is not None
+        assert (
+            await db_session.scalar(
+                select(func.count())
+                .select_from(HomeworkAttachment)
+                .where(HomeworkAttachment.homework_id == assignment.id)
+            )
+            == 1
+        )
+
+        blocked_root = tmp_path / f"not-a-directory-{uuid4().hex}"
+        blocked_root.write_text("block")
+        app.dependency_overrides[get_homework_settings] = lambda: HomeworkConfig(
+            STORAGE_PATH=blocked_root
+        )
+        await driver.click("Homework")
+        await driver.click("Alice Learner")
+        await driver.document("unavailable.pdf", b"must not persist")
+        assert "Retry upload" in driver.session.last_message.text
+        assert await db_session.scalar(select(func.count()).select_from(Homework)) == 1
+        assert (
+            await db_session.scalar(
+                select(func.count()).select_from(HomeworkAttachment)
+            )
+            == 1
+        )
+        app.dependency_overrides[get_homework_settings] = lambda: HomeworkConfig(
+            STORAGE_PATH=storage_path
+        )
+        await driver.click("Retry upload: unavailable.pdf")
+        await driver.click("Cancel")
+        assert await db_session.scalar(select(func.count()).select_from(Homework)) == 1
+        assert (
+            await db_session.scalar(
+                select(func.count()).select_from(HomeworkAttachment)
+            )
+            == 1
+        )
+        assert list(storage_path.iterdir())
+        attachment_requests = [
+            request
+            for request in requests
+            if request.method == "POST"
+            and request.url.path == "/api/v1/homework/attachments"
+        ]
+        assert len(attachment_requests) == 4
+        assert (
+            attachment_requests[0].headers["Idempotency-Key"]
+            == (attachment_requests[1].headers["Idempotency-Key"])
+        )
+        assert (
+            attachment_requests[2].headers["Idempotency-Key"]
+            == (attachment_requests[3].headers["Idempotency-Key"])
+        )
+    finally:
+        await _close(driver, http)
+        app.dependency_overrides.pop(get_homework_settings, None)

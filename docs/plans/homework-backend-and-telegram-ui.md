@@ -4,7 +4,7 @@
 
 Teachers can assign text/files to their own students, students can open materials and submit solutions, and teachers can review, mark complete, or delete assignments through Telegram.
 
-**Status:** Tasks 00–09 complete; implementation in progress.
+**Status:** Tasks 00–11 complete.
 
 ## Scope (README.md sections covered)
 
@@ -316,7 +316,9 @@ Document later notification consumers: assignment-created and finalized-solution
 
 **Reuse:** Existing bot integration fixtures, new isolated storage fixture, shared occurrence/visibility services for lesson association tests.
 
-**Acceptance:** [ ] Every README homework action is reachable and verified from Telegram, with exact data/file assertions. [ ] Storage persists across restart; failure cleanup and ownership boundaries are tested. [ ] Common checks and migration evidence are recorded; notification limitations are explicit.
+**Acceptance:** [x] Every README homework action is reachable and verified from Telegram, with exact data/file assertions. [x] Storage persists across restart; failure cleanup and ownership boundaries are tested. [x] Common checks and migration evidence are recorded; notification limitations are explicit.
+
+**Verification (2026-10-26):** `uv run pytest -q tests` (366 passed, 5 skipped); focused `uv run pytest -q tests/test_bot_homework_management.py` (4 passed); `uv run ruff check telegram tests`; `uv run ruff format --check telegram tests`; `uv run mypy backend/homework`; and `uv run mypy telegram`. Isolated SQLite checks upgraded through head, downgraded to base, re-upgraded, and passed `alembic check`; local and production Compose configurations passed validation with `.env.example`. Dispatcher tests exercise teacher assignment, student material download and file submission, persisted completion provenance/bytes across newly built bot drivers, student/teacher isolation, teacher manual completion and deletion, auth renewal, interrupted upload retry with the same idempotency key, and storage outage/recovery without publishing partial work. The README records the future notification consumer handoff; delivery, an outbox, and assignment/submission push toggles remain out of scope.
 
 **Out of scope:** Morning digests, reminder scheduling, broadcast delivery, HTMX, full student history. **Suitable for:** AI agent; human for optional real-Telegram file/readability acceptance.
 
