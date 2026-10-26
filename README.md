@@ -153,11 +153,14 @@ duration defaults, and daily/consecutive lesson limits are enforced by the
 backend. Automatic post-lesson breaks are derived from each lesson's saved
 duration snapshot and shown in Telegram booking and management flows.
 Notification delivery, free-slot selection, offline schedule cache, Telegram
-homework UI, and account linking/transfers remain unimplemented. Teachers can
-create assignments, review student submissions, manually complete work, and
-delete assignments through the backend API. Both roles can read authorized
-homework lists, details, and materials; students can submit versioned
-text/files, and each finalized submission completes the assignment.
+student homework browsing/submission UI, teacher homework review UI, and
+account linking/transfers remain unimplemented. Teachers can create text,
+file, or mixed assignments for their own students through Telegram and
+optionally link an exact upcoming lesson occurrence. Assignment reads,
+submissions, review, completion, and deletion remain available through the
+backend API until their Telegram flows are implemented. Both roles can read
+authorized homework lists, details, and materials; students can submit
+versioned text/files, and each finalized submission completes the assignment.
 Teachers and students can edit their saved account and role preferences from
 Settings in the Telegram role home. Account and role preferences are saved
 separately; timezone changes do not move stored event instants, and notification

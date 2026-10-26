@@ -11,6 +11,7 @@ from aiogram_dialog.widgets.text import Const, Format
 from telegram.api import SessionView
 from telegram.break_dialogs import open_break_management
 from telegram.event_management_dialogs import open_event_management
+from telegram.homework_teacher_dialogs import open_homework_creation
 from telegram.inputs import digest_clock, parse_timezone
 from telegram.lesson_dialogs import open_lesson_creation
 from telegram.onboarding import begin_student, begin_teacher
@@ -38,6 +39,8 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             f"Timezone: {account.timezone}\n"
             f"Daily digest (local): {digest_clock(account.notification_lessons_today)}\n"
         )
+        if dialog_manager.dialog_data.get("homework_notice"):
+            home += f"\n{dialog_manager.dialog_data['homework_notice']}"
         if dialog_manager.dialog_data.get("existing_invitation"):
             home += "\nAlready registered. This invitation did not change your role or teacher."
         if view.teacher is not None:
@@ -90,6 +93,7 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         and view.account.role in {"TEACHER", "STUDENT"},
         "can_edit_settings": view is not None
         and view.account.role in {"TEACHER", "STUDENT"},
+        "can_manage_homework": view is not None and view.account.role == "TEACHER",
     }
 
 
@@ -170,6 +174,12 @@ def build_dialog() -> Dialog:
                 id="manage_events",
                 on_click=open_event_management,
                 when="can_manage_events",
+            ),
+            Button(
+                Const("Homework"),
+                id="homework",
+                on_click=open_homework_creation,
+                when="can_manage_homework",
             ),
             Button(
                 Const("Breaks"),

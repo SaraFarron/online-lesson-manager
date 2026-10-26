@@ -266,7 +266,9 @@ reports pre-existing errors in `backend/auth/config.py`,
 
 **Reuse:** Student picker from scheduling UI, input/edit patterns, typed attachment client.
 
-**Acceptance:** [ ] Teacher creates text/file/mixed work end to end and it appears in the student's list. [ ] Back/Cancel and upload failures do not publish partial assignments; ordinary screens edit the active message. [ ] Common checks pass.
+**Acceptance:** [x] Teacher creates text/file/mixed work end to end and it appears in the student's list. [x] Back/Cancel and upload failures do not publish partial assignments; ordinary screens edit the active message. [x] Common checks pass.
+
+**Verification (2026-10-26):** `uv run pytest -q tests` (352 passed, 5 skipped); `uv run ruff check backend telegram tests`; touched-file `ruff format --check`; and `uv run mypy telegram`. Real-backend/simulated-Bot-API tests cover text-only, file-only and mixed assignments, own-student pagination and role visibility, document albums, exact upcoming one-off and recurring lesson occurrences, the five-file and per-file limits, staged-file cleanup on cancel, upload failure without publication, and retry of ambiguous upload/publish responses with the same idempotency keys. Ordinary inputs and navigation edit the active message. Abandoned uploads remain subject to the backend's approved 24-hour staging cleanup.
 
 **Out of scope:** Automatically messaging the student at creation. **Suitable for:** AI agent.
 

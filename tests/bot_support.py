@@ -7,7 +7,7 @@ from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import TelegramMethod
 from aiogram.methods.base import TelegramType
-from aiogram.types import Chat, Message, Update, User
+from aiogram.types import Chat, File, Message, Update, User
 
 
 class RecordingSession(BaseSession):
@@ -17,6 +17,20 @@ class RecordingSession(BaseSession):
         self.last_message: Message | None = None
         self.next_id = 100
         self.edit_failure: str | None = None
+        self.files: dict[str, tuple[str, bytes, int]] = {}
+
+    def register_file(
+        self,
+        file_id: str,
+        file_name: str,
+        content: bytes,
+        advertised_size: int | None = None,
+    ) -> None:
+        self.files[file_id] = (
+            file_name,
+            content,
+            len(content) if advertised_size is None else advertised_size,
+        )
 
     async def close(self) -> None:
         pass
@@ -30,6 +44,15 @@ class RecordingSession(BaseSession):
             result: Any = User(
                 id=bot.id, is_bot=True, first_name="Test", username="lesson_test_bot"
             )
+        elif name == "getFile":
+            file_id = method.model_dump()["file_id"]
+            file_name, _content, advertised_size = self.files[file_id]
+            result = File(
+                file_id=file_id,
+                file_unique_id=f"unique-{file_id}",
+                file_size=advertised_size,
+                file_path=f"documents/{file_id}/{file_name}",
+            ).as_(bot)
         elif name in {"sendMessage", "editMessageText"}:
             if name == "editMessageText" and self.edit_failure:
                 failure, self.edit_failure = self.edit_failure, None
@@ -58,7 +81,13 @@ class RecordingSession(BaseSession):
         chunk_size: int = 65536,
         raise_for_status: bool = True,
     ) -> AsyncGenerator[bytes]:
-        yield b""
+        file_id = url.split("/documents/", maxsplit=1)[-1].split("/", maxsplit=1)[0]
+        _file_name, content, _advertised_size = self.files[file_id]
+        if not content:
+            yield b""
+            return
+        for start in range(0, len(content), chunk_size):
+            yield content[start : start + chunk_size]
 
 
 class BotDriver:
@@ -86,6 +115,42 @@ class BotDriver:
                     "text": value,
                 },
             }
+        )
+        await self.dispatcher.feed_update(self.bot, update)
+
+    async def document(
+        self,
+        file_name: str,
+        content: bytes,
+        *,
+        advertised_size: int | None = None,
+        media_group_id: str | None = None,
+    ) -> None:
+        self.update_id += 1
+        file_id = f"document-{self.update_id}"
+        size = len(content) if advertised_size is None else advertised_size
+        self.session.register_file(file_id, file_name, content, size)
+        document: dict[str, Any] = {
+            "file_id": file_id,
+            "file_unique_id": f"unique-{file_id}",
+            "file_name": file_name,
+            "file_size": size,
+        }
+        message: dict[str, Any] = {
+            "message_id": self.update_id,
+            "date": 1700000000,
+            "chat": {"id": self.user_id, "type": "private"},
+            "from": {
+                "id": self.user_id,
+                "is_bot": False,
+                "first_name": "<User>",
+            },
+            "document": document,
+        }
+        if media_group_id is not None:
+            message["media_group_id"] = media_group_id
+        update = Update.model_validate(
+            {"update_id": self.update_id, "message": message}
         )
         await self.dispatcher.feed_update(self.bot, update)
 
