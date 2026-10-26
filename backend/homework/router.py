@@ -90,6 +90,7 @@ async def read_homework_assignments(
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
     assignment_status: Annotated[HomeworkStatus | None, Query(alias="status")] = None,
+    student_id: UUID | None = None,
 ) -> HomeworkPage:
     return await read_service.list_homework(
         session,
@@ -97,6 +98,7 @@ async def read_homework_assignments(
         skip=skip,
         limit=limit,
         status_filter=assignment_status,
+        student_id_filter=student_id,
     )
 
 

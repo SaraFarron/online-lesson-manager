@@ -151,10 +151,13 @@ async def list_homework(
     skip: int,
     limit: int,
     status_filter: HomeworkStatus | None,
+    student_id_filter: uuid.UUID | None = None,
 ) -> HomeworkPage:
     filters = await _visibility_filters(session, viewer)
     if status_filter is not None:
         filters.append(Homework.status == status_filter.value)
+    if student_id_filter is not None:
+        filters.append(Homework.student_id == student_id_filter)
 
     total = await session.scalar(select(func.count(Homework.id)).where(*filters))
     rows = (

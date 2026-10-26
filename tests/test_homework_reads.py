@@ -124,6 +124,45 @@ async def test_lists_are_bounded_paginated_and_role_scoped(
     assert invisible.status_code == 403
 
 
+async def test_teacher_student_filter_is_scoped_to_visible_assignments(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    teacher = await _user(db_session, "TEACHER", "Teacher")
+    student = await _user(db_session, "STUDENT", "Student")
+    student.teacher_id = teacher.id
+    await db_session.commit()
+    visible = await _assignment(db_session, teacher, student, text="Visible")
+
+    other_teacher = await _user(db_session, "TEACHER", "Other teacher")
+    other_student = await _user(db_session, "STUDENT", "Other student")
+    other_student.teacher_id = other_teacher.id
+    await db_session.commit()
+    await _assignment(db_session, other_teacher, other_student, text="Private")
+
+    selected = await client.get(
+        f"/api/v1/homework/assignments?student_id={student.id}",
+        headers=_auth(teacher),
+    )
+    assert selected.status_code == 200
+    assert selected.json()["total"] == 1
+    assert selected.json()["items"][0]["id"] == str(visible.id)
+
+    unrelated_student = await client.get(
+        f"/api/v1/homework/assignments?student_id={other_student.id}",
+        headers=_auth(teacher),
+    )
+    assert unrelated_student.status_code == 200
+    assert unrelated_student.json()["total"] == 0
+
+    forged_for_student = await client.get(
+        f"/api/v1/homework/assignments?student_id={other_student.id}",
+        headers=_auth(student),
+    )
+    assert forged_for_student.status_code == 200
+    assert forged_for_student.json()["total"] == 0
+
+
 async def test_detail_returns_only_assignment_material_metadata(
     client: AsyncClient,
     db_session: AsyncSession,

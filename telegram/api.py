@@ -1250,10 +1250,13 @@ class BackendClient:
         skip: int = 0,
         limit: int = 100,
         status: Literal["INCOMPLETE", "COMPLETE"] | None = None,
+        student_id: uuid.UUID | None = None,
     ) -> HomeworkAssignmentPage:
         params = {"skip": str(skip), "limit": str(limit)}
         if status is not None:
             params["status"] = status
+        if student_id is not None:
+            params["student_id"] = str(student_id)
         return await self.read(
             "/api/v1/homework/assignments",
             HomeworkAssignmentPage,

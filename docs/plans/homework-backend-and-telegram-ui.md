@@ -298,7 +298,9 @@ reports pre-existing errors in `backend/auth/config.py`,
 
 **Reuse:** Existing teacher homework list, typed completion/deletion client and confirmation patterns.
 
-**Acceptance:** [ ] Teacher can assign → inspect student solution → mark another assignment complete → cancel/confirm deletion. [ ] No cross-student/teacher leakage; media-send exceptions and edit counts are tested. [ ] Common checks pass.
+**Acceptance:** [x] Teacher can assign → inspect student solution → mark another assignment complete → cancel/confirm deletion. [x] No cross-student/teacher leakage; media-send exceptions and edit counts are tested. [x] Common checks pass.
+
+**Verification (2026-10-26):** `uv run pytest -q tests` (364 passed, 5 skipped); focused `uv run pytest -q tests/test_homework_reads.py tests/test_bot_homework_management.py` (7 passed); `uv run ruff check backend telegram tests`; `uv run ruff format --check telegram tests`; `uv run mypy backend/homework`; and `uv run mypy telegram`. Real-backend/simulated-Bot-API tests verify student/status filtering, current and earlier submission review, actual streamed assignment/solution bytes, failed Telegram document sends without replacing the active message, teacher completion provenance, deletion cancellation/confirmation, and authoritative reconciliation after ambiguous completion/deletion responses. Tests assert unrelated students and teachers' assignments are not exposed.
 
 **Out of scope:** Feedback messaging, marks or action-log screens. **Suitable for:** AI agent.
 

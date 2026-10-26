@@ -17,6 +17,7 @@ class RecordingSession(BaseSession):
         self.last_message: Message | None = None
         self.next_id = 100
         self.edit_failure: str | None = None
+        self.document_failure: str | None = None
         self.files: dict[str, tuple[str, bytes, int]] = {}
         self.sent_documents: list[tuple[int, str, bytes]] = []
 
@@ -71,6 +72,9 @@ class RecordingSession(BaseSession):
             ).as_(bot)
             self.last_message = result
         elif name == "sendDocument":
+            if self.document_failure:
+                failure, self.document_failure = self.document_failure, None
+                raise TelegramBadRequest(method=method, message=failure)
             document = method.document
             if not isinstance(document, InputFile):
                 raise TypeError("Simulated document sends require an InputFile")

@@ -14,6 +14,9 @@ from telegram.dialogs import Screens, build_dialog
 from telegram.event_management_dialogs import build_event_management_dialog
 from telegram.homework_student_dialogs import build_homework_student_dialog
 from telegram.homework_teacher_dialogs import build_homework_teacher_dialog
+from telegram.homework_teacher_management_dialogs import (
+    build_homework_teacher_management_dialog,
+)
 from telegram.invitations import create_teacher_invitation, parse_teacher_start_payload
 from telegram.lesson_dialogs import build_lesson_dialog
 from telegram.onboarding import Wizard, build_wizard
@@ -104,6 +107,7 @@ def build_dispatcher(client: BackendClient | None = None) -> Dispatcher:
     dispatcher.include_router(build_settings_dialog())
     dispatcher.include_router(build_homework_teacher_dialog())
     dispatcher.include_router(build_homework_student_dialog())
+    dispatcher.include_router(build_homework_teacher_management_dialog())
     dispatcher.include_router(build_wizard())
     fallback = Router(name="stale-callbacks")
     fallback.callback_query.register(orphan_callback)

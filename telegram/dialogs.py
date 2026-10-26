@@ -13,6 +13,9 @@ from telegram.break_dialogs import open_break_management
 from telegram.event_management_dialogs import open_event_management
 from telegram.homework_student_dialogs import open_student_homework
 from telegram.homework_teacher_dialogs import open_homework_creation
+from telegram.homework_teacher_management_dialogs import (
+    open_teacher_homework_management,
+)
 from telegram.inputs import digest_clock, parse_timezone
 from telegram.lesson_dialogs import open_lesson_creation
 from telegram.onboarding import begin_student, begin_teacher
@@ -181,6 +184,12 @@ def build_dialog() -> Dialog:
                 Const("Homework"),
                 id="homework",
                 on_click=open_homework_creation,
+                when="can_manage_homework",
+            ),
+            Button(
+                Const("Manage homework"),
+                id="manage_homework",
+                on_click=open_teacher_homework_management,
                 when="can_manage_homework",
             ),
             Button(

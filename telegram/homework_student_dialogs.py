@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator, AsyncIterable
+from collections.abc import AsyncIterable
 from html import escape
 from typing import Any
 from uuid import UUID, uuid4
@@ -7,7 +7,7 @@ from aiogram import Bot
 from aiogram.enums import ContentType
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InputFile, Message
+from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, MessageInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Column, Row, Select
@@ -17,7 +17,6 @@ from telegram.api import (
     MAX_HOMEWORK_ATTACHMENT_BYTES,
     MAX_HOMEWORK_ATTACHMENT_TOTAL_BYTES,
     MAX_HOMEWORK_ATTACHMENTS,
-    BackendClient,
     BackendError,
     BackendUnavailable,
     HomeworkAssignmentPage,
@@ -28,6 +27,7 @@ from telegram.api import (
     SessionView,
     StagedHomeworkAttachment,
 )
+from telegram.homework_transfer import HomeworkDownloadFile
 from telegram.onboarding import backend
 
 ASSIGNMENT_PAGE_SIZE = 20
@@ -39,28 +39,6 @@ class StudentHomeworkScreens(StatesGroup):
     compose = State()
     review = State()
     unavailable = State()
-
-
-class HomeworkDownloadFile(InputFile):
-    def __init__(
-        self,
-        client: BackendClient,
-        sender_id: int,
-        chat_id: int,
-        attachment_id: UUID,
-        file_name: str,
-    ) -> None:
-        super().__init__(filename=file_name, chunk_size=65536)
-        self.client = client
-        self.sender_id = sender_id
-        self.chat_id = chat_id
-        self.attachment_id = attachment_id
-
-    async def read(self, _bot: Bot) -> AsyncGenerator[bytes]:
-        async for chunk in self.client.download_homework_attachment(
-            self.sender_id, self.chat_id, self.attachment_id
-        ):
-            yield chunk
 
 
 async def open_student_homework(
