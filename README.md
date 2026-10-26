@@ -214,6 +214,17 @@ Production Compose:
 ```shell
 docker compose -f docker-compose.prod.yml --profile bot up -d --build
 ```
+Homework attachments are stored privately by the backend. Set
+`HOMEWORK_STORAGE_PATH` for local deployments (default `./homework-storage`);
+both Compose manifests mount the persistent `homework_data` volume at the
+configured path. Schedule this command daily to remove expired staged uploads
+and aged orphan files:
+```shell
+docker compose run --rm app python -m backend.homework.cleanup
+```
+Back up the homework volume together with the database. The bot transfers files
+through authenticated backend endpoints and does not mount this storage.
+
 To use another interpolation file, add `--env-file .env.docker`. Compose passes
 only explicitly listed settings to each service: only backend gets the database
 URL/JWT signing secret, only bot gets `BOT_TOKEN`, and both get the service
@@ -251,7 +262,7 @@ intermediate mismatch returns authentication errors, not offline success.
 1. [Telegram: управление расписанием и настройками](./docs/plans/telegram-scheduling-and-settings-ui.md) — реализовано; проверка и критерии завершения записаны в плане.
 2. [Автоматические перерывы после уроков, включая Telegram UI](./docs/plans/automatic-between-lesson-breaks.md) —
    реализовано и проверено на SQLite/PostgreSQL; наследуемые уроки не изменяются автоматически.
-3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md) — следующий этап; backend и интерфейс пока не реализованы.
+3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md) — реализованы контракт, метаданные и приватная передача вложений; создание/сдача заданий и Telegram UI остаются следующим этапом.
 
 Следующий рекомендуемый нереализованный этап — домашние задания.
 

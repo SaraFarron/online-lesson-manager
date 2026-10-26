@@ -4,7 +4,7 @@
 
 Teachers can assign text/files to their own students, students can open materials and submit solutions, and teachers can review, mark complete, or delete assignments through Telegram.
 
-**Status:** Task 00 approved; implementation in progress.
+**Status:** Tasks 00–02 complete; implementation in progress.
 
 ## Scope (README.md sections covered)
 
@@ -164,7 +164,9 @@ reports pre-existing errors in `backend/auth/config.py`,
 
 **Reuse:** Existing auth dependencies, domain config pattern and async HTTP conventions.
 
-**Acceptance:** [ ] Unauthorized reads, traversal names, oversize/chunked uploads, disconnects and storage failure are tested. [ ] Restart preserves approved committed materials; staged leftovers have a documented bounded cleanup path. [ ] Common checks pass.
+**Acceptance:** [x] Unauthorized reads, traversal names, oversize/chunked uploads, disconnects, timeout and storage failure are tested. [x] Committed materials remain readable across storage configuration recreation; Compose uses a persistent volume, and staged/orphan leftovers have a documented daily cleanup path. [x] Focused lint, format and type checks pass; existing repository-wide mypy/format failures are recorded above.
+
+**Verification (2026-10-26):** `uv run pytest -q tests/test_homework_attachments.py tests/test_smoke.py` (11 passed); `uv run ruff check backend telegram tests`; touched-file `ruff format --check`; `uv run mypy backend/homework`; `uv run mypy telegram`; and both Compose manifests validated with `.env.example`. Tests cover private file/directory permissions, owner-only staged downloads, unauthorized/cross-user reads, filename traversal sanitization, idempotent retry and stale-lock recovery, ordinary and chunked oversize rejection, multipart file count, 120-second transfer timeout behavior, storage failure, disconnect cleanup, and daily staged-file cleanup. Repository-wide format checking still reports pre-existing formatting in `backend/notifications/models.py`; `mypy backend` still reports pre-existing issues in `backend/auth/config.py`, `backend/database.py`, and `backend/events/dependencies.py`.
 
 **Out of scope:** Public URLs, third-party file ingestion or a generic storage platform. **Suitable for:** AI agent after storage choice.
 

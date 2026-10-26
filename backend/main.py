@@ -11,6 +11,8 @@ from backend.breaks.router import recurrent_router as recurrent_breaks_router
 from backend.breaks.router import router as breaks_router
 from backend.config import settings
 from backend.events.router import router as events_router
+from backend.homework.middleware import HomeworkUploadLimitMiddleware
+from backend.homework.router import router as homework_router
 from backend.lessons.router import recurrent_router as recurrent_lessons_router
 from backend.lessons.router import router as lessons_router
 from backend.pages.router import htmx_router
@@ -38,6 +40,10 @@ app_kwargs: dict[str, Any] = {
 }
 
 app = FastAPI(**app_kwargs)
+app.add_middleware(
+    HomeworkUploadLimitMiddleware,
+    upload_path=f"{settings.API_V1_STR}/homework/attachments",
+)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -52,3 +58,4 @@ app.include_router(recurrent_breaks_router, prefix=settings.API_V1_STR)
 app.include_router(vacations_router, prefix=settings.API_V1_STR)
 app.include_router(schedule_router, prefix=settings.API_V1_STR)
 app.include_router(events_router, prefix=settings.API_V1_STR)
+app.include_router(homework_router, prefix=settings.API_V1_STR)

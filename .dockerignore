@@ -2,6 +2,7 @@
 .venv
 .env
 .env.*
+homework-storage/
 *.db
 *.sqlite
 *.sqlite3

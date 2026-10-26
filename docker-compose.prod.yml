@@ -33,6 +33,9 @@ services:
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       AUTH_JWT_EXP_MINUTES: ${AUTH_JWT_EXP_MINUTES:-30}
       TELEGRAM_SERVICE_CREDENTIAL: ${TELEGRAM_SERVICE_CREDENTIAL:?Set TELEGRAM_SERVICE_CREDENTIAL}
+      HOMEWORK_STORAGE_PATH: /var/lib/olm/homework
+    volumes:
+      - homework_data:/var/lib/olm/homework
     depends_on:
       db:
         condition: service_healthy
@@ -51,4 +54,5 @@ services:
       BOT_FAILURE_THRESHOLD: ${BOT_FAILURE_THRESHOLD:-3}
 
 volumes:
+  homework_data:
   postgres_data:

@@ -25,6 +25,7 @@ dist/
 *.db
 *.sqlite
 *.sqlite3
+homework-storage/
 
 # ── Type checkers & linters ───────────────────────────────────────────────────
 .mypy_cache/

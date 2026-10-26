@@ -16,6 +16,11 @@ features.
   `BOT_BACKEND_URL`, and `BOT_SERVICE_CREDENTIAL` in ignored `.env`; the service
   credential must match backend `TELEGRAM_SERVICE_CREDENTIAL`. Run one poller
   per token. See [README.md](./README.md) for local/remote deployment.
+- Homework files use private backend storage at `HOMEWORK_STORAGE_PATH`
+  (default `./homework-storage`). Compose mounts the persistent `homework_data`
+  volume; schedule `docker compose run --rm app python -m
+  backend.homework.cleanup` daily to remove expired staged uploads and aged
+  orphan files. Back up the volume with the database.
 - Apply migrations: `alembic upgrade head` (runs automatically in Docker
   entrypoint). New migration file names follow `YYYY-MM-DD_slug.py`
   (configured in `alembic.ini` via `file_template`).
@@ -76,10 +81,11 @@ remain in `docs/plans/` as project documentation.
   users recover through `/start` after restart; incomplete drafts restart.
   Never import backend models/settings/services into the bot or start polling
   inside FastAPI.
-- **Stub/unimplemented packages** — don't assume behavior exists just
-  because the package exists: `backend/homework/` has schema metadata only,
-  with no service/router yet; `backend/schedule/router.py` is empty.
-  `backend/notifications/` has only an ORM model, no router/service yet.
+- **Partially implemented packages** — don't assume behavior exists just
+  because the package exists: `backend/homework/` has metadata and private
+  attachment staging/transfer, but no assignment/submission workflows;
+  `backend/schedule/router.py` is empty. `backend/notifications/` has only an
+  ORM model, no router/service yet.
 - Config is split per-domain (`BaseSettings` subclasses), e.g.
   `backend/config.py` (`Settings`, no prefix) and `backend/auth/config.py`
   (`AuthConfig`, `env_prefix="AUTH_"`). Add new env vars to the owning
@@ -100,7 +106,7 @@ a README-described feature.
 | Lessons / breaks / vacations CRUD (one-off + recurring) | **Done** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, confirmed manual-break displacement, teacher-local workday/hour checks, lesson duration defaults/authorization, daily/consecutive limits, database-backed per-teacher mutation serialization, and derived automatic post-lesson reservations are implemented. Lesson snapshots default to zero for existing rows; preference changes apply only to future writes. |
 | Schedule viewing (day/week, timeline, teacher sees student names) | **Partial** | Authenticated viewer-local day/week endpoints and live Telegram Today/This week screens are implemented, including role-scoped results, previous/next-week navigation, refresh, DST-aware rendering, and safe pagination. HTMX/arbitrary-date UI and offline cache are not implemented. |
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
-| Homework (assign/submit/mark done) | **Not started** | Assignment, submission-version, and attachment metadata exist; no service, router, storage, or Telegram homework UI yet. |
+| Homework (assign/submit/mark done) | **Partial** | Approved contract, assignment/submission metadata, and authenticated private attachment staging/download exist; assignment/submission services and Telegram homework UI are not implemented yet. |
 | Student profile view for teacher (history, delete w/ confirm) | **Not started** | No action-log table or endpoint. |
 | Telegram bot | **Partial** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, editable post-onboarding settings, lesson/event management with automatic-break previews, manual breaks, vacations, retry/recovery and edit-in-place screens. Live schedule viewing includes previous/next-week navigation; homework actions, notification delivery and offline schedule cache are not implemented. |
 | HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |
