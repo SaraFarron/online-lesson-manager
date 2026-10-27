@@ -1,10 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.constants import EventType
+from backend.events.constants import RecurrenceMode
+from backend.events.management import build_event_revision
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 
 
@@ -363,6 +365,54 @@ async def test_teacher_context_is_minimal_and_local_resolution_uses_saved_timezo
         },
     )
     assert offset_input.status_code == 422
+
+
+async def test_open_ended_management_reads_and_inspects_distant_occurrences(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    teacher_id, teacher_token, student, _ = await _teacher_with_students(client)
+    anchor = datetime(2000, 1, 1, 9)
+    distant_start = anchor + timedelta(weeks=2087)
+    series = RecurrentEvent(
+        teacher_id=UUID(teacher_id),
+        user_id=UUID(student[0]),
+        event_type=EventType.LESSON.value,
+        start=anchor,
+        end=anchor + timedelta(hours=1),
+        interval=7,
+        interval_end=None,
+        recurrence_mode=RecurrenceMode.UTC_STEP.value,
+    )
+    db_session.add(series)
+    await db_session.commit()
+    open_revision = build_event_revision(series, [])
+
+    detail = await client.get(
+        f"/api/v1/recurrent-lessons/{series.id}",
+        headers=_headers(teacher_token),
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["interval_end"] is None
+    assert detail.json()["revision"] == open_revision
+    assert build_event_revision(series, []) == open_revision
+
+    series.interval_end = datetime(2040, 1, 1, 9)
+    finite_revision = build_event_revision(series, [])
+    series.interval_end = None
+    assert finite_revision != open_revision
+
+    inspected = await client.get(
+        f"/api/v1/recurrent-lessons/{series.id}",
+        params={"occurrence_start": distant_start.isoformat() + "Z"},
+        headers=_headers(teacher_token),
+    )
+    assert inspected.status_code == 200, inspected.text
+    assert inspected.json()["interval_end"] is None
+    assert inspected.json()["inspected_occurrence"] == {
+        "start": distant_start.isoformat() + "+00:00",
+        "end": (distant_start + timedelta(hours=1)).isoformat() + "+00:00",
+        "status": "visible",
+    }
 
 
 async def test_unrelated_teacher_management_lists_are_empty(

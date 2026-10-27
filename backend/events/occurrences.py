@@ -69,7 +69,7 @@ class RecurrenceSeries:
     start: datetime
     end: datetime
     interval: int
-    interval_end: datetime
+    interval_end: datetime | None
     recurrence_mode: RecurrenceMode | str
     recurrence_timezone: str | None
 
@@ -120,7 +120,11 @@ def expand_recurrence(
     """Expand a series into occurrences overlapping a half-open UTC range."""
     start = _as_utc(series.start, "series start")
     end = _as_utc(series.end, "series end")
-    cutoff = _as_utc(series.interval_end, "series cutoff")
+    cutoff = (
+        _as_utc(series.interval_end, "series cutoff")
+        if series.interval_end is not None
+        else None
+    )
     query_start = _as_utc(range_start, "query start")
     query_end = _as_utc(range_end, "query end")
     mode = _recurrence_mode(series.recurrence_mode)
@@ -133,7 +137,7 @@ def expand_recurrence(
         raise ValidationError("Recurrence interval must be positive")
     if start >= end:
         raise ValidationError("Series start time must be before end time")
-    if cutoff <= start:
+    if cutoff is not None and cutoff <= start:
         raise ValidationError("Series cutoff must be after its first occurrence")
     if query_start >= query_end:
         raise ValidationError("Query start time must be before query end time")
@@ -193,7 +197,7 @@ def sort_occurrences(occurrences: Iterable[Occurrence]) -> list[Occurrence]:
 def _expand_utc_step(
     series: RecurrenceSeries,
     anchor: datetime,
-    cutoff: datetime,
+    cutoff: datetime | None,
     query_start: datetime,
     query_end: datetime,
     duration: timedelta,
@@ -208,7 +212,9 @@ def _expand_utc_step(
     for occurrence_index in count(index):
         step_delta = _scaled_step(step, occurrence_index, "UTC recurrence interval")
         occurrence_start = _add(anchor, step_delta, "UTC recurrence start")
-        if occurrence_start >= cutoff or occurrence_start >= query_end:
+        if (
+            cutoff is not None and occurrence_start >= cutoff
+        ) or occurrence_start >= query_end:
             break
         generated += 1
         _check_budget(generated, max_occurrences)
@@ -222,7 +228,7 @@ def _expand_utc_step(
 def _expand_teacher_local(
     series: RecurrenceSeries,
     anchor: datetime,
-    cutoff: datetime,
+    cutoff: datetime | None,
     query_start: datetime,
     query_end: datetime,
     duration: timedelta,
@@ -240,7 +246,9 @@ def _expand_teacher_local(
     index = max(0, (search_local - anchor_local) // step)
 
     local_query_end = _local_wall_time(query_end, zone)
-    local_cutoff = _local_wall_time(cutoff, zone)
+    local_cutoff = (
+        _local_wall_time(cutoff, zone) if cutoff is not None else local_query_end
+    )
     local_stop = _add(
         min(local_query_end, local_cutoff),
         _LOCAL_TIME_SEARCH_PADDING,
@@ -270,7 +278,7 @@ def _expand_teacher_local(
             continue
         seen_starts.add(occurrence_start)
 
-        if occurrence_start >= cutoff:
+        if cutoff is not None and occurrence_start >= cutoff:
             continue
         occurrence_end = _add(occurrence_start, duration, "local recurrence end")
         if intervals_overlap(occurrence_start, occurrence_end, query_start, query_end):

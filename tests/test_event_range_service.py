@@ -271,6 +271,64 @@ async def test_range_service_keeps_last_occurrence_that_crosses_after_cutoff(
     assert occurrences[0].end == from_storage_utc(datetime(2026, 10, 10, 1))
 
 
+async def test_range_service_reads_distant_open_ended_series_and_cancellations(
+    db_session: AsyncSession,
+) -> None:
+    teacher = _user("TEACHER", "open-range-teacher@test.com")
+    student = _user("STUDENT", "open-range-student@test.com", teacher_id=teacher.id)
+    db_session.add_all([teacher, student])
+    await db_session.flush()
+    anchor = datetime(2000, 1, 1, 9)
+    distant_start = anchor + timedelta(weeks=2087)
+    series = RecurrentEvent(
+        teacher_id=teacher.id,
+        user_id=student.id,
+        event_type="LESSON",
+        start=anchor,
+        end=anchor + timedelta(hours=1),
+        interval=7,
+        interval_end=None,
+        recurrence_mode=RecurrenceMode.UTC_STEP.value,
+        post_break_minutes=20,
+    )
+    db_session.add(series)
+    await db_session.flush()
+    db_session.add(
+        RecurrentCancels(
+            recurrent_event_id=series.id,
+            start=distant_start,
+            end=distant_start + timedelta(hours=1),
+        )
+    )
+    await db_session.commit()
+
+    occurrences = await load_raw_occurrences(
+        db_session,
+        teacher.id,
+        distant_start,
+        distant_start + timedelta(days=14),
+        include_automatic_breaks=True,
+    )
+
+    expected_lesson_start = distant_start + timedelta(days=7)
+    lesson = next(
+        item
+        for item in occurrences
+        if item.source.kind == OccurrenceSourceKind.RECURRENT_EVENT
+    )
+    automatic_break = next(
+        item
+        for item in occurrences
+        if item.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+    )
+    assert lesson.start == from_storage_utc(expected_lesson_start)
+    assert automatic_break.start == lesson.end
+    assert automatic_break.end == lesson.end + timedelta(minutes=20)
+    assert all(
+        item.start >= from_storage_utc(expected_lesson_start) for item in occurrences
+    )
+
+
 async def test_range_service_rejects_invalid_overlapping_event_data(
     db_session: AsyncSession,
 ) -> None:

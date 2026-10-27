@@ -390,7 +390,7 @@ async def _inspect_occurrence(
         start=event.start,
         end=event.end,
         interval=event.interval,
-        interval_end=_require_finite_cutoff(event.interval_end),
+        interval_end=event.interval_end,
         recurrence_mode=event.recurrence_mode,
         recurrence_timezone=event.recurrence_timezone,
     )
@@ -445,14 +445,6 @@ async def _cancellation_counts(
     for event_id, count in results:
         counts[event_id] = count
     return counts
-
-
-def _require_finite_cutoff(value: datetime | None) -> datetime:
-    if value is None:
-        raise ValidationError(
-            "Open-ended occurrence inspection is not supported by this backend release"
-        )
-    return value
 
 
 def _timestamp(value: datetime | None) -> str | None:

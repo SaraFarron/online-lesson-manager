@@ -24,7 +24,7 @@ def _datetime(value: str) -> datetime:
 def _series(
     start: str,
     end: str,
-    interval_end: str,
+    interval_end: str | None,
     *,
     interval: int = 7,
     mode: RecurrenceMode = RecurrenceMode.UTC_STEP,
@@ -41,7 +41,7 @@ def _series(
         start=_datetime(start),
         end=_datetime(end),
         interval=interval,
-        interval_end=_datetime(interval_end),
+        interval_end=_datetime(interval_end) if interval_end is not None else None,
         recurrence_mode=mode,
         recurrence_timezone=timezone,
     )
@@ -355,6 +355,39 @@ def test_later_query_seeks_instead_of_walking_all_prior_daily_occurrences(
     assert [occurrence.start for occurrence in occurrences] == [
         _datetime("2039-12-01T09:00:00+00:00"),
         _datetime("2039-12-02T09:00:00+00:00"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("mode", "timezone"),
+    [
+        (RecurrenceMode.UTC_STEP, None),
+        (RecurrenceMode.TEACHER_LOCAL, "Europe/Berlin"),
+    ],
+)
+def test_open_ended_series_seeks_to_distant_bounded_queries(
+    mode: RecurrenceMode, timezone: str | None
+) -> None:
+    anchor = _datetime("2000-01-01T09:00:00+00:00")
+    series = _series(
+        anchor.isoformat(),
+        (anchor + timedelta(hours=1)).isoformat(),
+        None,
+        mode=mode,
+        timezone=timezone,
+    )
+    distant_start = anchor + timedelta(weeks=2087)
+
+    occurrences = expand_recurrence(
+        series,
+        distant_start,
+        distant_start + timedelta(days=14),
+        max_occurrences=10,
+    )
+
+    assert [occurrence.start for occurrence in occurrences] == [
+        distant_start,
+        distant_start + timedelta(days=7),
     ]
 
 

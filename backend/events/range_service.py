@@ -157,10 +157,6 @@ async def _load_raw_occurrences(
     generated_count = len(occurrences)
     for recurrent_event in recurrent_events:
         interval_end = recurrent_event.interval_end
-        if interval_end is None:
-            raise ValidationError(
-                "Open-ended occurrence reads are not supported by this backend release"
-            )
         source = OccurrenceSource(
             kind=OccurrenceSourceKind.RECURRENT_EVENT,
             id=recurrent_event.id,
