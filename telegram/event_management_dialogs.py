@@ -301,11 +301,13 @@ def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
     )
     if detail.is_recurrent:
         assert detail.interval is not None
-        assert detail.interval_end is not None
         recurrence_timezone = detail.recurrence_timezone or "UTC"
-        inclusive_end = detail.interval_end.astimezone(
-            ZoneInfo(timezone)
-        ).date() - timedelta(days=1)
+        inclusive_end = (
+            detail.interval_end.astimezone(ZoneInfo(timezone)).date()
+            - timedelta(days=1)
+            if detail.interval_end is not None
+            else None
+        )
         recurrence_timezone_note = (
             f"\nRecurrence timezone: {recurrence_timezone}"
             if recurrence_timezone != timezone
@@ -313,7 +315,8 @@ def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
         )
         text += (
             f"\nWeekly interval: every {detail.interval} day(s)"
-            f"\nSeries end (inclusive): {_format_date(inclusive_end, timezone)}"
+            f"\nSeries end (inclusive): "
+            f"{_format_date(inclusive_end, timezone) if inclusive_end else 'No end'}"
             f"\nCancelled occurrences: {detail.cancelled_occurrences}"
             f"{recurrence_timezone_note}"
         )
@@ -378,6 +381,9 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "notice": escape(str(data.get("notice", ""))),
         "error": escape(str(data.get("error", ""))),
         "is_recurrent": detail.is_recurrent,
+        "can_edit_cutoff": (
+            detail.is_recurrent and detail.event_type == "LESSON" and not blocked
+        ),
         "has_occurrence": detail.inspected_occurrence is not None,
         "can_manage_occurrence": (
             detail.inspected_occurrence is not None
@@ -559,6 +565,82 @@ async def _continue_date(sender_id: int, chat_id: int, manager: DialogManager) -
     return True
 
 
+async def begin_edit_cutoff(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    detail = _detail(manager)
+    cutoff_data = manager.dialog_data.get(
+        "interval_end",
+        detail.interval_end.isoformat() if detail.interval_end is not None else None,
+    )
+    cutoff = datetime.fromisoformat(cutoff_data) if cutoff_data is not None else None
+    await _open_cutoff_editor(manager, detail, cutoff)
+
+
+async def begin_edit_cutoff_from_detail(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    detail = _detail(manager)
+    await _open_cutoff_editor(
+        manager, detail, detail.interval_end, reset_resolution=True
+    )
+
+
+async def _open_cutoff_editor(
+    manager: DialogManager,
+    detail: EventManagementDetail,
+    cutoff: datetime | None,
+    *,
+    reset_resolution: bool = False,
+) -> None:
+    if not detail.is_recurrent or detail.event_type != "LESSON":
+        raise ValueError("Only a recurring lesson can have an editable cutoff.")
+    if reset_resolution or "resolution" not in manager.dialog_data:
+        manager.dialog_data["resolution"] = {"start": {"utc": detail.start.isoformat()}}
+    manager.dialog_data["interval_end"] = cutoff.isoformat() if cutoff else None
+    _prepare_cutoff_editor(manager, cutoff)
+    await manager.switch_to(LessonManagementScreens.date, show_mode=ShowMode.EDIT)
+
+
+def _prepare_cutoff_editor(manager: DialogManager, cutoff: datetime | None) -> None:
+    timezone = ZoneInfo(manager.dialog_data["viewer_timezone"])
+    cutoff_date = (
+        cutoff.astimezone(timezone).date() - timedelta(days=1)
+        if cutoff is not None
+        else None
+    )
+    manager.dialog_data.update(
+        date_action="cutoff",
+        date_value=cutoff_date.isoformat() if cutoff_date else None,
+        date_prompt=(
+            "Enter the last weekly lesson date (inclusive), "
+            "using DD MM, DD:MM or DD/MM."
+        ),
+        date_confirmation="",
+        error="",
+        notice="",
+    )
+
+
+async def choose_no_end(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if manager.dialog_data.get("date_action") != "cutoff":
+        raise ValueError("The optional series cutoff editor is not active.")
+    manager.dialog_data.update(interval_end=None, error="", notice="")
+    await manager.switch_to(LessonManagementScreens.review, show_mode=ShowMode.EDIT)
+
+
+async def back_from_date(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if manager.dialog_data.get("date_action") == "cutoff":
+        manager.dialog_data.update(error="", notice="")
+        await manager.switch_to(LessonManagementScreens.review, show_mode=ShowMode.EDIT)
+        return
+    await back_to_detail(_callback, _button, manager)
+
+
 async def time_input(
     message: Message,
     _widget: ManagedTextInput[str],
@@ -612,21 +694,19 @@ async def time_input(
         manager.dialog_data["resolution"] = resolution.model_dump(mode="json")
         detail = _detail(manager)
         if detail.is_recurrent:
-            assert detail.interval_end is not None
-            existing_end_day = detail.interval_end.astimezone(
-                ZoneInfo(manager.dialog_data["viewer_timezone"])
-            ).date() - timedelta(days=1)
-            manager.dialog_data.update(
-                date_action="cutoff",
-                date_value=existing_end_day.isoformat(),
-                date_prompt=(
-                    "Enter the last weekly lesson date (inclusive), "
-                    "using DD MM, DD:MM or DD/MM."
-                ),
-                error="",
+            manager.dialog_data["interval_end"] = (
+                detail.interval_end.isoformat()
+                if detail.interval_end is not None
+                else None
             )
+            start, _ = _resolved_interval(
+                resolution.model_dump(mode="json"), _duration_seconds(detail)
+            )
+            if detail.interval_end is not None and detail.interval_end <= start:
+                await _open_cutoff_editor(manager, detail, detail.interval_end)
+                return
             await manager.switch_to(
-                LessonManagementScreens.date, show_mode=ShowMode.EDIT
+                LessonManagementScreens.review, show_mode=ShowMode.EDIT
             )
         else:
             await manager.switch_to(
@@ -702,12 +782,16 @@ def _review_text(manager: DialogManager) -> str:
         relation="each lesson" if detail.is_recurrent else "this lesson",
     )
     if detail.is_recurrent:
-        cutoff = datetime.fromisoformat(data["interval_end"])
-        inclusive_end = _format_date(
-            cutoff.astimezone(timezone).date() - timedelta(days=1),
-            data["viewer_timezone"],
-        )
-        text += f"\nLast weekly lesson (inclusive): {inclusive_end}"
+        cutoff_data = data.get("interval_end")
+        cutoff = datetime.fromisoformat(cutoff_data) if cutoff_data else None
+        if cutoff is None:
+            text += "\nLast weekly lesson (inclusive): No end"
+        else:
+            inclusive_end = _format_date(
+                cutoff.astimezone(timezone).date() - timedelta(days=1),
+                data["viewer_timezone"],
+            )
+            text += f"\nLast weekly lesson (inclusive): {inclusive_end}"
         recurrence_timezone = detail.recurrence_timezone or "UTC"
         if recurrence_timezone != data["viewer_timezone"]:
             text += f"\nWeekly starts use {recurrence_timezone}."
@@ -722,6 +806,12 @@ def _review_text(manager: DialogManager) -> str:
 
 async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     data = dialog_manager.dialog_data
+    detail_data = data.get("detail")
+    detail = (
+        EventManagementDetail.model_validate(detail_data)
+        if detail_data is not None
+        else None
+    )
     try:
         review = _review_text(dialog_manager)
     except (KeyError, TypeError, ValueError, OverflowError) as exc:
@@ -734,6 +824,15 @@ async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             "Move occurrence" if data.get("date_action") == "move" else "Save change"
         ),
         "is_move": data.get("date_action") == "move",
+        "can_change_cutoff": (
+            detail is not None
+            and detail.is_recurrent
+            and detail.event_type == "LESSON"
+            and data.get("date_action") != "move"
+            and not data.get("needs_reload")
+            and not data.get("outcome_unknown")
+        ),
+        "is_cutoff_action": data.get("date_action") == "cutoff",
     }
 
 
@@ -928,7 +1027,12 @@ async def submit_review(
                 end=end,
                 user_id=detail.user_id,
                 interval=detail.interval,
-                interval_end=datetime.fromisoformat(data["interval_end"]),
+                interval_end=(
+                    datetime.fromisoformat(data["interval_end"])
+                    if data.get("interval_end") is not None
+                    else None
+                ),
+                event_type="LESSON",
             )
             await client.write_management_event(
                 "PUT",
@@ -1239,6 +1343,12 @@ def build_event_management_dialog() -> Dialog:
                 when="can_manage_event",
             ),
             Button(
+                Const("Change series end"),
+                id="change_cutoff_from_detail",
+                on_click=begin_edit_cutoff_from_detail,
+                when="can_edit_cutoff",
+            ),
+            Button(
                 Const("Delete lesson or series"),
                 id="delete",
                 on_click=begin_delete,
@@ -1302,13 +1412,20 @@ def build_event_management_dialog() -> Dialog:
         Window(
             Format("{date_prompt}\nTimezone: {viewer_timezone}\n{error}"),
             TextInput("date_input", on_success=date_input),
-            Button(Const("Back"), id="back", on_click=back_to_detail),
+            Button(
+                Const("No end"),
+                id="no_end",
+                on_click=choose_no_end,
+                when="is_cutoff_action",
+            ),
+            Button(Const("Back"), id="back", on_click=back_from_date),
             state=LessonManagementScreens.date,
         ),
         Window(
             Format("{date_confirmation}\nConfirm this inferred next-year date."),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_date),
             Button(Const("Change date"), id="change", on_click=change_date),
+            Button(Const("Back"), id="back", on_click=back_from_date),
             state=LessonManagementScreens.confirm_date,
         ),
         Window(
@@ -1331,6 +1448,12 @@ def build_event_management_dialog() -> Dialog:
                 id="edit",
                 on_click=edit_again,
                 when="can_submit",
+            ),
+            Button(
+                Const("Change series end"),
+                id="change_cutoff",
+                on_click=begin_edit_cutoff,
+                when="can_change_cutoff",
             ),
             Button(
                 Const("Reload event"),

@@ -207,6 +207,104 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         await _close_bot(driver, http)
 
 
+async def test_teacher_manages_open_ended_series_cutoff_without_forcing_a_date(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    series = _series(teacher, student)
+    series.interval_end = None
+    db_session.add(series)
+    await db_session.commit()
+    _freeze_schedule_clock(monkeypatch)
+    driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await _open_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        assert "Series end (inclusive): No end" in driver.session.last_message.text
+
+        await driver.click("Edit lesson or series")
+        await driver.text("03/11/2026")
+        await driver.text("11:00")
+        assert "Last weekly lesson (inclusive): No end" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Change series end")
+        await driver.click("Back")
+        assert "Last weekly lesson (inclusive): No end" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Change series end")
+        await driver.text("30/11/2026")
+        assert "November 30" in driver.session.last_message.text
+        await driver.click("Change series end")
+        await driver.click("Back")
+        assert "Last weekly lesson (inclusive): November 30" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Save change")
+
+        await db_session.refresh(series)
+        assert series.start == datetime(2026, 11, 3, 11)
+        assert series.interval_end == datetime(2026, 12, 1)
+
+        await _open_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        assert "Series end (inclusive): November 30" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Edit lesson or series")
+        await driver.text("04/11/2026")
+        await driver.text("12:00")
+        assert "Last weekly lesson (inclusive): November 30" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Save change")
+        await db_session.refresh(series)
+        assert series.start == datetime(2026, 11, 4, 12)
+        assert series.interval_end == datetime(2026, 12, 1)
+
+        await _open_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Edit lesson or series")
+        await driver.text("05/11/2026")
+        await driver.text("13:00")
+        await driver.click("Back to event")
+        await driver.click("Change series end")
+        await driver.text("30/11/2026")
+        assert "November 4 12:00 - 13:00" in driver.session.last_message.text
+        await driver.click("Save change")
+        await db_session.refresh(series)
+        assert series.start == datetime(2026, 11, 4, 12)
+        assert series.interval_end == datetime(2026, 12, 1)
+
+        await _open_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Change series end")
+        await driver.click("Back")
+        assert "Last weekly lesson (inclusive): November 30" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Back to event")
+        assert "Series end (inclusive): November 30" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Back to list")
+        await db_session.refresh(series)
+        assert series.interval_end == datetime(2026, 12, 1)
+
+        await driver.click(_event_button(driver))
+        await driver.click("Change series end")
+        await driver.click("No end")
+        assert "Last weekly lesson (inclusive): No end" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Save change")
+        await db_session.refresh(series)
+        assert series.interval_end is None
+    finally:
+        await _close_bot(driver, http)
+
+
 async def test_student_management_lists_only_own_hidden_lesson(
     client, db_session, bot_service_key
 ) -> None:
@@ -246,6 +344,7 @@ async def test_student_can_move_and_cancel_own_occurrences_with_break_feedback(
 ) -> None:
     teacher, student = await _seed_accounts(db_session)
     series = _series(teacher, student)
+    series.interval_end = None
     db_session.add(series)
     await db_session.commit()
     _freeze_schedule_clock(monkeypatch)
@@ -253,6 +352,13 @@ async def test_student_can_move_and_cancel_own_occurrences_with_break_feedback(
     try:
         await _open_list(driver, weekly=True)
         await driver.click(_event_button(driver))
+        assert "Series end (inclusive): No end" in driver.session.last_message.text
+        await driver.click("Inspect occurrence")
+        await driver.text("01/11/2027")
+        await driver.text("10:00")
+        assert "(visible)" in driver.session.last_message.text
+        await driver.click("Clear occurrence selection")
+
         await driver.click("Inspect occurrence")
         await driver.text("16/11/2026")
         await driver.text("10:00")

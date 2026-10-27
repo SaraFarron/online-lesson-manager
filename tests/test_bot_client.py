@@ -26,6 +26,7 @@ from telegram.api import (
     HomeworkOutcomeUnknown,
     HomeworkSubmissionPayload,
     RecurrentEventCreatePayload,
+    RecurrentEventUpdatePayload,
     RecurrentEventWriteResult,
     RecurrentOccurrenceCancelPayload,
     RecurrentOccurrenceMovePayload,
@@ -362,6 +363,56 @@ async def test_typed_management_reads_writes_profiles_and_204_delete(
         teacher_id, teacher_id, "recurrent-lessons", series.id
     )
     assert series_detail.cancelled_occurrences == 2
+
+    open_series = await api.write_management_event(
+        "POST",
+        "recurrent-lessons",
+        teacher_id,
+        teacher_id,
+        RecurrentEventCreatePayload(
+            start="2035-02-05T10:00:00Z",
+            end="2035-02-05T11:00:00Z",
+            user_id=student.account.id,
+            event_type="LESSON",
+            interval=7,
+            interval_end=None,
+        ),
+        RecurrentEventWriteResult,
+    )
+    assert open_series.interval_end is None
+    open_detail = await api.read_management_detail(
+        teacher_id, teacher_id, "recurrent-lessons", open_series.id
+    )
+    assert open_detail.interval_end is None
+
+    updated_open_series = await api.write_management_event(
+        "PUT",
+        "recurrent-lessons",
+        teacher_id,
+        teacher_id,
+        RecurrentEventUpdatePayload(
+            start=open_detail.start,
+            end=open_detail.end,
+            user_id=open_detail.user_id,
+            event_type="LESSON",
+            interval=7,
+            interval_end=None,
+        ),
+        RecurrentEventWriteResult,
+        event_id=open_detail.id,
+        revision=open_detail.revision,
+    )
+    assert updated_open_series.interval_end is None
+
+    with pytest.raises(ValueError, match="Only weekly lessons"):
+        RecurrentEventCreatePayload(
+            start="2035-03-05T10:00:00Z",
+            end="2035-03-05T11:00:00Z",
+            user_id=student.account.id,
+            event_type="BREAK",
+            interval=7,
+            interval_end=None,
+        )
 
     teacher_profile = await api.update_teacher_profile(
         teacher_id,

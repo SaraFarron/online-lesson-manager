@@ -447,11 +447,17 @@ class EventManagementDetail(EventManagementItem):
 
     @model_validator(mode="after")
     def validate_recurrence_shape(self) -> Self:
-        recurrence_fields = (self.interval, self.interval_end, self.recurrence_mode)
+        recurrence_fields = (self.interval, self.recurrence_mode)
         if self.is_recurrent and any(value is None for value in recurrence_fields):
             raise ValueError("Recurring event details require recurrence metadata")
+        if (
+            self.is_recurrent
+            and self.interval_end is None
+            and (self.event_type != "LESSON" or self.interval != 7)
+        ):
+            raise ValueError("Only weekly lessons can have an open-ended recurrence")
         if not self.is_recurrent and (
-            any(value is not None for value in recurrence_fields)
+            any(value is not None for value in (*recurrence_fields, self.interval_end))
             or self.recurrence_timezone is not None
             or self.cancels
         ):
@@ -477,7 +483,15 @@ class EventWriteResult(BaseModel):
 
 class RecurrentEventWriteResult(EventWriteResult):
     interval: int = Field(gt=0, strict=True)
-    interval_end: AwareDatetime
+    interval_end: AwareDatetime | None
+
+    @model_validator(mode="after")
+    def validate_open_ended_shape(self) -> Self:
+        if self.interval_end is None and (
+            self.event_type != "LESSON" or self.interval != 7
+        ):
+            raise ValueError("Only weekly lessons can have an open-ended recurrence")
+        return self
 
 
 class EventCreatePayload(BaseModel):
@@ -500,13 +514,30 @@ class EventUpdatePayload(BaseModel):
 
 class RecurrentEventCreatePayload(EventCreatePayload):
     interval: int = Field(gt=0, strict=True)
-    interval_end: AwareDatetime
+    interval_end: AwareDatetime | None
+
+    @model_validator(mode="after")
+    def validate_open_ended_shape(self) -> Self:
+        if self.interval_end is None and (
+            self.event_type != "LESSON" or self.interval != 7
+        ):
+            raise ValueError("Only weekly lessons can have an open-ended recurrence")
+        return self
 
 
 class RecurrentEventUpdatePayload(EventUpdatePayload):
+    event_type: Literal["LESSON", "BREAK", "VACATION"]
     interval: int = Field(gt=0, strict=True)
-    interval_end: AwareDatetime
+    interval_end: AwareDatetime | None
     cancels: list[RecurrentCancel] | None = None
+
+    @model_validator(mode="after")
+    def validate_open_ended_shape(self) -> Self:
+        if self.interval_end is None and (
+            self.event_type != "LESSON" or self.interval != 7
+        ):
+            raise ValueError("Only weekly lessons can have an open-ended recurrence")
+        return self
 
 
 class OccurrenceActionResult(BaseModel):
