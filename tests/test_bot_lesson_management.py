@@ -181,6 +181,8 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         await driver.click(_event_button(driver))
         assert "Alice Learner" in driver.session.last_message.text
         await driver.click("Edit lesson or series")
+        assert "Timezone:" not in driver.session.last_message.text
+        assert "(UTC" not in driver.session.last_message.text
         date_message_id = driver.update_id + 1
         screen_message_id = driver.session.last_message.message_id
         await driver.text("03/11/2026")
@@ -194,6 +196,7 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         assert "Duration: 1 hour" in driver.session.last_message.text
         assert "2026-11-03" not in driver.session.last_message.text
         assert "(UTC" not in driver.session.last_message.text
+        assert "Timezone: UTC" in driver.session.last_message.text
         assert "Autobreak after this lesson: 5 minutes" in (
             driver.session.last_message.text
         )

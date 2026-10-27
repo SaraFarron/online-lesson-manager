@@ -1071,9 +1071,6 @@ async def management_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
     data = dialog_manager.dialog_data
     result = await list_data(dialog_manager)
     result.update(
-        date_hint=escape(
-            f"Enter a local date in {data.get('viewer_timezone', 'your timezone')}."
-        ),
         start_date_confirmation=escape(str(data.get("start_date_confirmation", ""))),
         cutoff_date_confirmation=escape(str(data.get("cutoff_date_confirmation", ""))),
         viewer_timezone=data["viewer_timezone"],
@@ -1172,7 +1169,7 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the break date as DD MM, DD:MM, or DD/MM, optionally with a year.\n{date_hint}\n{error}"
+                "Enter the break date as DD MM, DD:MM, or DD/MM, optionally with a year.\n{error}"
             ),
             TextInput("start_date", on_success=start_date_input, on_error=break_error),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
@@ -1207,7 +1204,7 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the last recurring break date (inclusive) as DD MM, DD:MM, or DD/MM, optionally with a year.\n{date_hint}\n{error}"
+                "Enter the last recurring break date (inclusive) as DD MM, DD:MM, or DD/MM, optionally with a year.\n{error}"
             ),
             TextInput(
                 "cutoff_date", on_success=cutoff_date_input, on_error=break_error

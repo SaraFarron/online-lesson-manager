@@ -312,6 +312,8 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         await driver.click("Change duration")
         await driver.click("Back")
         assert "Selected duration: 45 minutes." in driver.session.last_message.text
+        assert "Timezone:" not in driver.session.last_message.text
+        assert "UTC" not in driver.session.last_message.text
         start_message_id = driver.update_id + 1
         await driver.text("20/10/2026")
         assert driver.deleted_message_ids()[-1] == start_message_id
@@ -321,6 +323,8 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         await driver.click("Back")
         assert "Weekly recurrence with No end" in driver.session.last_message.text
         await driver.click("Change series end")
+        assert "Timezone:" not in driver.session.last_message.text
+        assert "UTC" not in driver.session.last_message.text
         rejected_cutoff_id = driver.update_id + 1
         await driver.text("19/10/2026")
         assert "cannot be before its first lesson" in driver.session.last_message.text
@@ -412,6 +416,7 @@ async def test_teacher_books_student_weekly_with_no_end_by_default(
         assert driver.deleted_message_ids()[-1] == time_message_id
         assert driver.session.last_message.message_id == screen_message_id
         assert "Weekly recurrence with No end" in driver.session.last_message.text
+        assert "Timezone: UTC" in driver.session.last_message.text
         await driver.click("Create lesson")
 
         series = (await db_session.scalars(select(RecurrentEvent))).one()

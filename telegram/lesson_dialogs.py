@@ -255,9 +255,6 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "error": escape(str(data.get("error", ""))),
         "subject_label": escape(str(data.get("subject_label") or "")),
         "review": escape(review),
-        "start_date_hint": escape(
-            f"Enter a local date in {data.get('viewer_timezone', 'your timezone')}."
-        ),
         "start_date_confirmation": escape(
             format_schedule_date_confirmation(
                 ParsedScheduleDate(
@@ -1012,7 +1009,7 @@ def build_lesson_dialog() -> Dialog:
             Format(
                 "{duration_summary}\n"
                 "Enter the lesson start date as DD MM, DD:MM or DD/MM, "
-                "optionally followed by a year.\n{start_date_hint}\n{error}"
+                "optionally followed by a year.\n{error}"
             ),
             TextInput(
                 "start_date", on_success=start_date_input, on_error=_date_input_error
@@ -1045,7 +1042,7 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the last lesson start date (inclusive) as DD MM, DD:MM or DD/MM, optionally followed by a year.\n{start_date_hint}\n{error}"
+                "Enter the last lesson start date (inclusive) as DD MM, DD:MM or DD/MM, optionally followed by a year.\n{error}"
             ),
             TextInput(
                 "cutoff_date", on_success=cutoff_date_input, on_error=_date_input_error

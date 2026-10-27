@@ -900,13 +900,12 @@ async def delete_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
 async def date_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     field = dialog_manager.dialog_data.get("date_field", "start_date")
     prompt = (
-        "Enter the local start date"
+        "Enter the start date"
         if field == "start_date"
         else "Enter the last vacation date (inclusive)"
     )
     return {
         "prompt": f"{prompt} as DD MM, DD:MM or DD/MM, optionally with a year.",
-        "timezone": escape(dialog_manager.dialog_data["viewer_timezone"]),
         "error": escape(str(dialog_manager.dialog_data.get("error", ""))),
     }
 
@@ -1033,7 +1032,7 @@ def build_vacation_dialog() -> Dialog:
             getter=detail_data,
         ),
         Window(
-            Format("{prompt}\nTimezone: {timezone}\n{error}"),
+            Format("{prompt}\n{error}"),
             TextInput(
                 "start_date",
                 on_success=start_date_input,
@@ -1068,7 +1067,7 @@ def build_vacation_dialog() -> Dialog:
             Format(
                 "{prompt}\n"
                 "The vacation ends at local midnight after this date.\n"
-                "Timezone: {timezone}\n{error}"
+                "{error}"
             ),
             TextInput("end_date", on_success=end_date_input, on_error=date_input_error),
             Button(Const("Cancel"), id="cancel", on_click=back_to_menu),

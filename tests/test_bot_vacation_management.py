@@ -151,14 +151,19 @@ async def _create_vacation(
     if subject is not None:
         await driver.click(subject)
     screen_message_id = driver.session.last_message.message_id
+    assert "Timezone:" not in driver.session.last_message.text
+    assert "Asia/Bangkok" not in driver.session.last_message.text
     start_message_id = driver.update_id + 1
     await driver.text(start_date)
     assert driver.deleted_message_ids()[-1] == start_message_id
     assert driver.session.last_message.message_id == screen_message_id
     await driver.text(start_time)
+    assert "Timezone:" not in driver.session.last_message.text
+    assert "Asia/Bangkok" not in driver.session.last_message.text
     end_message_id = driver.update_id + 1
     await driver.text(end_date)
     assert driver.deleted_message_ids()[-1] == end_message_id
+    assert "Timezone:" in driver.session.last_message.text
     await driver.click("Save vacation")
 
 

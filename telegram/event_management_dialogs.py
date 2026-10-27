@@ -1430,7 +1430,7 @@ def build_event_management_dialog() -> Dialog:
             state=LessonManagementScreens.detail,
         ),
         Window(
-            Format("{date_prompt}\nTimezone: {viewer_timezone}\n{error}"),
+            Format("{date_prompt}\n{error}"),
             TextInput("date_input", on_success=date_input),
             Button(
                 Const("No end"),

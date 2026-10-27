@@ -188,6 +188,8 @@ async def _enter_break(
 ) -> None:
     await driver.click("Add break")
     screen_message_id = driver.session.last_message.message_id
+    assert "Timezone:" not in driver.session.last_message.text
+    assert "Asia/Bangkok" not in driver.session.last_message.text
     start_message_id = driver.update_id + 1
     await driver.text(start_date)
     assert driver.deleted_message_ids()[-1] == start_message_id
@@ -195,6 +197,8 @@ async def _enter_break(
     await driver.text(start_time)
     await driver.text(end_time)
     if cutoff_date is not None:
+        assert "Timezone:" not in driver.session.last_message.text
+        assert "Asia/Bangkok" not in driver.session.last_message.text
         cutoff_message_id = driver.update_id + 1
         await driver.text(cutoff_date)
         assert driver.deleted_message_ids()[-1] == cutoff_message_id
