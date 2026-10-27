@@ -242,7 +242,7 @@ async def test_teacher_creates_break_for_all_students_in_local_timezone(
             start_time="10:00",
             end_time="10:30",
         )
-        assert "UTC+07:00" in driver.session.last_message.text
+        assert "Timezone: Asia/Bangkok" in driver.session.last_message.text
         await driver.click("Save break")
 
         created = (
@@ -438,6 +438,8 @@ async def test_confirmed_weekly_break_deletes_exact_lessons_and_cancels_occurren
         preview_text = driver.session.last_message.text
         assert "One-time lesson" in preview_text
         assert "Automatic break reservation (read-only): 5 minutes" in preview_text
+        assert "November 5" in preview_text
+        assert "(UTC" not in preview_text
         assert "Weekly lesson" in preview_text
         assert await db_session.get(Event, one_time.id) is not None
         assert (

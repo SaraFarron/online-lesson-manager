@@ -28,6 +28,8 @@ from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
+    format_human_date,
+    format_local_interval_in_timezone,
     format_local_interval_review,
     format_schedule_date_confirmation,
     parse_integer,
@@ -149,19 +151,32 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     review = ""
     if resolution_data is not None:
         try:
-            review = format_local_interval_review(
-                _resolution(resolution_data),
-                reference_date=reference_date,
-                duration_minutes=int(data["duration_minutes"]),
+            resolution = _resolution(resolution_data)
+            lesson_end = resolution.start.utc + timedelta(
+                minutes=int(data["duration_minutes"])
             )
+            interval = format_local_interval_in_timezone(
+                resolution.start.utc,
+                lesson_end,
+                data["viewer_timezone"],
+                reference_date=reference_date,
+            )
+            review = f"New lesson at {interval}\nTimezone: {data['viewer_timezone']}"
         except KeyError, TypeError, ValueError:
+            review = "The lesson interval is invalid. Edit the duration or start time."
+        except OverflowError:
             review = "The lesson interval is invalid. Edit the duration or start time."
 
     if data.get("kind") == "weekly" and data.get("cutoff_date"):
+        teacher_timezone_note = (
+            f"; weekly starts use {data['teacher_timezone']}"
+            if data["teacher_timezone"] != data["viewer_timezone"]
+            else ""
+        )
         review += (
-            f"\nWeekly through {data['cutoff_date']} inclusive "
-            f"(date in {data['viewer_timezone']}; weekly starts use "
-            f"{data['teacher_timezone']})."
+            f"\nWeekly through "
+            f"{format_human_date(date.fromisoformat(data['cutoff_date']), reference_date=reference_date)} "
+            f"inclusive{teacher_timezone_note}."
         )
     if data.get("custom_duration"):
         review += (
@@ -171,37 +186,16 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     if resolution_data is not None:
         try:
             break_minutes = int(data["between_lessons_break"])
-            lesson_end = _resolution(resolution_data).start.utc + timedelta(
-                minutes=int(data["duration_minutes"])
-            )
             if break_minutes == 0:
                 frequency = (
                     "each lesson" if data.get("kind") == "weekly" else "this lesson"
                 )
                 review += f"\nNo automatic break is reserved after {frequency}."
             else:
-                break_end = lesson_end + timedelta(minutes=break_minutes)
-                zone = ZoneInfo(data["viewer_timezone"])
-                break_start_local = lesson_end.astimezone(zone)
-                break_end_local = break_end.astimezone(zone)
-                break_start_offset = break_start_local.strftime("%z")
-                break_end_offset = break_end_local.strftime("%z")
-                interval = (
-                    f"{break_start_local:%Y-%m-%d %H:%M} "
-                    f"(UTC{break_start_offset[:3]}:{break_start_offset[3:]}) – "
-                    f"{break_end_local:%Y-%m-%d %H:%M} "
-                    f"(UTC{break_end_offset[:3]}:{break_end_offset[3:]})"
-                )
                 if data.get("kind") == "weekly":
-                    review += (
-                        f"\nAutomatic break after each lesson: {break_minutes} "
-                        f"minutes; first occurrence {interval}."
-                    )
+                    review += f"\nAutobreak after each lesson: {break_minutes} minutes."
                 else:
-                    review += (
-                        f"\nAutomatic break after this lesson: {break_minutes} "
-                        f"minutes; {interval}."
-                    )
+                    review += f"\nAutobreak after new lesson: {break_minutes} minutes."
         except KeyError, TypeError, ValueError, OverflowError:
             review += "\nThe automatic break interval could not be displayed."
 

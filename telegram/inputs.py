@@ -122,6 +122,23 @@ def format_local_interval(
     return f"{start_date} {start_clock} - {end_date} {end_clock}"
 
 
+def format_human_datetime_in_timezone(
+    value: datetime, timezone: str, *, reference_date: date
+) -> str:
+    return format_human_datetime(
+        value.astimezone(ZoneInfo(timezone)), reference_date=reference_date
+    )
+
+
+def format_local_interval_in_timezone(
+    start: datetime, end: datetime, timezone: str, *, reference_date: date
+) -> str:
+    zone = ZoneInfo(timezone)
+    return format_local_interval(
+        start.astimezone(zone), end.astimezone(zone), reference_date=reference_date
+    )
+
+
 def _format_clock(value: datetime) -> str:
     return f"{value.hour}:{value.minute:02d}"
 

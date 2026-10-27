@@ -14,7 +14,9 @@ from telegram.inputs import (
     combine_schedule_date_time,
     format_compact_schedule_date,
     format_human_datetime,
+    format_human_datetime_in_timezone,
     format_local_interval,
+    format_local_interval_in_timezone,
     format_local_interval_review,
     format_schedule_date_confirmation,
     parse_schedule_date,
@@ -144,6 +146,25 @@ def test_human_datetime_helpers_keep_dates_compact_and_years_unambiguous() -> No
     assert (
         format_compact_schedule_date(date(2027, 11, 5), reference_date=reference_date)
         == "fri, Nov 5 (2027)"
+    )
+
+
+def test_timezone_formatters_use_viewer_local_dates_and_clocks() -> None:
+    reference_date = date(2026, 11, 5)
+    start = datetime(2026, 11, 5, 20, tzinfo=UTC)
+    end = datetime(2026, 11, 5, 21, tzinfo=UTC)
+
+    assert (
+        format_human_datetime_in_timezone(
+            start, "America/New_York", reference_date=reference_date
+        )
+        == "November 5 at 15:00"
+    )
+    assert (
+        format_local_interval_in_timezone(
+            start, end, "Europe/London", reference_date=reference_date
+        )
+        == "November 5 20:00 - 21:00"
     )
 
 

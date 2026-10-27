@@ -30,6 +30,9 @@ from telegram.api import (
 from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     combine_schedule_date_time,
+    format_human_date,
+    format_human_datetime_in_timezone,
+    format_local_interval_in_timezone,
     format_schedule_date_confirmation,
     parse_schedule_date,
     parse_schedule_time,
@@ -217,31 +220,36 @@ async def select_managed_lesson(
 
 
 def _format_datetime(value: datetime, timezone: str) -> str:
-    local = value.astimezone(ZoneInfo(timezone))
-    return f"{local:%a, %Y-%m-%d %H:%M} (UTC{local.strftime('%z')[:3]}:{local.strftime('%z')[3:]})"
+    return format_human_datetime_in_timezone(
+        value,
+        timezone,
+        reference_date=datetime.now(ZoneInfo(timezone)).date(),
+    )
+
+
+def _format_interval(start: datetime, end: datetime, timezone: str) -> str:
+    return format_local_interval_in_timezone(
+        start,
+        end,
+        timezone,
+        reference_date=datetime.now(ZoneInfo(timezone)).date(),
+    )
+
+
+def _format_date(value: date, timezone: str) -> str:
+    return format_human_date(
+        value, reference_date=datetime.now(ZoneInfo(timezone)).date()
+    )
 
 
 def _automatic_break_text(
-    lesson_end: datetime,
     minutes: int,
-    timezone: str,
     *,
     relation: str,
-    repeated: bool = False,
 ) -> str:
     if minutes == 0:
         return f"No automatic break is reserved after {relation}."
-    break_end = lesson_end + timedelta(minutes=minutes)
-    label = (
-        f"after {relation} ({minutes} min; first occurrence shown)"
-        if repeated
-        else f"after {relation} ({minutes} min)"
-    )
-    return (
-        f"Automatic break {label}: "
-        f"{_format_datetime(lesson_end, timezone)} – "
-        f"{_format_datetime(break_end, timezone)}."
-    )
+    return f"Autobreak after {relation}: {minutes} minutes."
 
 
 def _list_label(item: EventManagementItem, timezone: str) -> str:
@@ -275,6 +283,7 @@ async def event_list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
             (_list_label(item, data["viewer_timezone"]), str(item.id)) for item in items
         ],
         "page": page,
+        "timezone": escape(data["viewer_timezone"]),
         "error": escape(str(data.get("error", ""))),
         "notice": escape(str(data.get("notice", ""))),
         "has_previous": skip > 0,
@@ -293,8 +302,7 @@ async def back_to_management_menu(
 def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
     text = (
         f"{detail.subject_label}\n"
-        f"First start: {_format_datetime(detail.start, timezone)}\n"
-        f"End: {_format_datetime(detail.end, timezone)}"
+        f"First lesson: {_format_interval(detail.start, detail.end, timezone)}"
     )
     if detail.is_recurrent:
         assert detail.interval is not None
@@ -303,19 +311,21 @@ def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
         inclusive_end = detail.interval_end.astimezone(
             ZoneInfo(timezone)
         ).date() - timedelta(days=1)
+        recurrence_timezone_note = (
+            f"\nRecurrence timezone: {recurrence_timezone}"
+            if recurrence_timezone != timezone
+            else ""
+        )
         text += (
             f"\nWeekly interval: every {detail.interval} day(s)"
-            f"\nSeries end (inclusive): {inclusive_end.isoformat()}"
-            f"\nRecurrence timezone: {recurrence_timezone}"
+            f"\nSeries end (inclusive): {_format_date(inclusive_end, timezone)}"
             f"\nCancelled occurrences: {detail.cancelled_occurrences}"
+            f"{recurrence_timezone_note}"
         )
         if detail.event_type == "LESSON":
             text += "\n" + _automatic_break_text(
-                detail.end,
                 detail.post_break_minutes,
-                timezone,
                 relation="each lesson",
-                repeated=True,
             )
         if detail.cancels:
             text += (
@@ -324,9 +334,7 @@ def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
     else:
         if detail.event_type == "LESSON":
             text += "\n" + _automatic_break_text(
-                detail.end,
                 detail.post_break_minutes,
-                timezone,
                 relation="this lesson",
             )
         if detail.visibility_status == "hidden_by_vacation":
@@ -339,8 +347,9 @@ def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
             "cancelled": "cancelled",
         }[occurrence.status]
         text += (
-            f"\nSelected occurrence: {_format_datetime(occurrence.start, timezone)}"
-            f" – {_format_datetime(occurrence.end, timezone)} ({status})"
+            f"\nSelected occurrence: "
+            f"{_format_interval(occurrence.start, occurrence.end, timezone)} "
+            f"({status})"
         )
         if detail.event_type == "LESSON":
             if occurrence.status == "cancelled":
@@ -349,11 +358,10 @@ def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
                 )
             else:
                 text += "\n" + _automatic_break_text(
-                    occurrence.end,
                     detail.post_break_minutes,
-                    timezone,
                     relation="this occurrence",
                 )
+    text += f"\nTimezone: {timezone}"
     return text
 
 
@@ -683,41 +691,38 @@ def _review_text(manager: DialogManager) -> str:
         )
         return (
             f"Move this exact occurrence?\n"
-            f"From: {_format_datetime(occurrence.start, data['viewer_timezone'])} – "
-            f"{_format_datetime(occurrence.end, data['viewer_timezone'])}\n"
-            f"To: {_format_datetime(start, data['viewer_timezone'])} – "
-            f"{_format_datetime(end, data['viewer_timezone'])}\n"
+            f"From: {_format_interval(occurrence.start, occurrence.end, data['viewer_timezone'])}\n"
+            f"To: {_format_interval(start, end, data['viewer_timezone'])}\n"
             "The original weekly occurrence will be cancelled and replaced by "
             "a one-time lesson.\n"
             + _automatic_break_text(
-                end,
                 detail.post_break_minutes,
-                data["viewer_timezone"],
-                relation="the replacement lesson",
+                relation="replacement lesson",
             )
+            + f"\nTimezone: {data['viewer_timezone']}"
         )
 
     resolution = data["resolution"]
     start, end = _resolved_interval(resolution, _duration_seconds(detail))
     text = (
         f"Review lesson change for {detail.subject_label}\n"
-        f"Timezone: {data['viewer_timezone']}\n"
-        f"Start: {_format_datetime(start, data['viewer_timezone'])}\n"
-        f"End: {_format_datetime(end, data['viewer_timezone'])}"
+        f"Lesson time: {_format_interval(start, end, data['viewer_timezone'])}\n"
+        f"Timezone: {data['viewer_timezone']}"
     )
     text += "\n" + _automatic_break_text(
-        end,
         detail.post_break_minutes,
-        data["viewer_timezone"],
         relation="each lesson" if detail.is_recurrent else "this lesson",
-        repeated=detail.is_recurrent,
     )
     if detail.is_recurrent:
         cutoff = datetime.fromisoformat(data["interval_end"])
-        inclusive_end = (
-            cutoff.astimezone(timezone).date() - timedelta(days=1)
-        ).isoformat()
+        inclusive_end = _format_date(
+            cutoff.astimezone(timezone).date() - timedelta(days=1),
+            data["viewer_timezone"],
+        )
         text += f"\nLast weekly lesson (inclusive): {inclusive_end}"
+        recurrence_timezone = detail.recurrence_timezone or "UTC"
+        if recurrence_timezone != data["viewer_timezone"]:
+            text += f"\nWeekly starts use {recurrence_timezone}."
         old_start, old_end = detail.start, detail.end
         if start != old_start or end != old_end or cutoff != detail.interval_end:
             text += (
@@ -784,6 +789,7 @@ async def begin_cancel_occurrence(
         confirm_text=(
             "Cancel only this weekly occurrence?\n"
             f"{_format_datetime(occurrence.start, manager.dialog_data['viewer_timezone'])}\n"
+            f"Timezone: {manager.dialog_data['viewer_timezone']}\n"
             "The rest of the series will remain unchanged."
             + (
                 "\nIts automatic break reservation will also be removed."
@@ -918,10 +924,8 @@ async def submit_review(
                 (
                     "The occurrence was moved; its replacement is a one-time lesson. "
                     + _automatic_break_text(
-                        end,
                         detail.post_break_minutes,
-                        data["viewer_timezone"],
-                        relation="the replacement lesson",
+                        relation="replacement lesson",
                     )
                 ),
             )
@@ -1198,7 +1202,7 @@ def build_event_management_dialog() -> Dialog:
             state=LessonManagementScreens.menu,
         ),
         Window(
-            Format("{title}\n{page}\n{notice}\n{error}"),
+            Format("{title}\n{page}\n{notice}\n{error}\nTimezone: {timezone}"),
             Select(
                 Format("{item[0]}"),
                 id="managed_lesson",

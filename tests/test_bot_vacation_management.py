@@ -291,14 +291,16 @@ async def test_teacher_creates_edits_and_deletes_student_vacation(
         )
         assert [item.id for item in listed.items] == [vacation.id]
         await driver.click(_vacation_button(driver, "Alice Learner"))
-        assert "Last vacation date (inclusive): 2030-11-04" in (
+        assert "Last vacation date (inclusive): November 4" in (
             driver.session.last_message.text
         )
+        assert "2030-11-04" not in driver.session.last_message.text
+        assert "(UTC" not in driver.session.last_message.text
 
         await driver.click("Edit vacation")
         await driver.click("Change last vacation date")
         await driver.text("06/11/2030")
-        assert "2030-11-06" in driver.session.last_message.text
+        assert "November 6" in driver.session.last_message.text
         await driver.click("Save vacation")
         assert "Vacation updated." in driver.session.last_message.text
         updated = await db_session.get(Event, vacation.id)

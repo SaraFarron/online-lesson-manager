@@ -28,13 +28,14 @@ from telegram.api import (
     RecurrentEventCreatePayload,
     RecurrentEventUpdatePayload,
     RecurrentEventWriteResult,
-    ResolvedLocalInstant,
     SessionView,
 )
 from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
+    format_human_date,
+    format_local_interval_in_timezone,
     format_schedule_date_confirmation,
     parse_schedule_date,
     parse_schedule_time,
@@ -130,23 +131,24 @@ def _parse_local_date(manager: DialogManager, value: str) -> ParsedScheduleDate:
     return parse_schedule_date(value, datetime.now(timezone).date())
 
 
-def _format_datetime(value: datetime, timezone: str) -> str:
-    local = value.astimezone(ZoneInfo(timezone))
-    offset = local.strftime("%z")
-    return f"{local:%a, %Y-%m-%d %H:%M} (UTC{offset[:3]}:{offset[3:]})"
+def _format_interval(start: datetime, end: datetime, timezone: str) -> str:
+    return format_local_interval_in_timezone(
+        start,
+        end,
+        timezone,
+        reference_date=datetime.now(ZoneInfo(timezone)).date(),
+    )
 
 
-def _format_resolved(value: ResolvedLocalInstant) -> str:
-    local = value.local
-    return f"{local:%a, %Y-%m-%d %H:%M} (UTC{value.utc_offset})"
+def _format_date(value: date, timezone: str) -> str:
+    return format_human_date(
+        value, reference_date=datetime.now(ZoneInfo(timezone)).date()
+    )
 
 
 def _break_label(item: EventManagementItem, timezone: str) -> str:
     label = "Weekly break" if item.is_recurrent else "One-time break"
-    return (
-        f"{label} · {_format_datetime(item.start, timezone)} – "
-        f"{_format_datetime(item.end, timezone)}"
-    )
+    return f"{label} · {_format_interval(item.start, item.end, timezone)}"
 
 
 async def _load_page(
@@ -507,16 +509,18 @@ def _review_text(manager: DialogManager) -> str:
     action = "Update" if data.get("form_action") == "edit" else "Create"
     text = (
         f"{action} {'weekly' if _kind(manager) == 'weekly' else 'one-time'} break\n"
-        f"Timezone: {resolution.timezone}\n"
-        f"Start: {_format_resolved(resolution.start)}\n"
-        f"End: {_format_resolved(resolution.end)}"
+        f"Break time: {_format_interval(resolution.start.utc, resolution.end.utc, resolution.timezone)}\n"
+        f"Timezone: {resolution.timezone}"
     )
     if _kind(manager) == "weekly":
         interval_end = datetime.fromisoformat(data["interval_end"])
         inclusive_end = interval_end.astimezone(
             ZoneInfo(data["viewer_timezone"])
         ).date() - timedelta(days=1)
-        text += f"\nLast break date (inclusive): {inclusive_end.isoformat()}"
+        text += (
+            f"\nLast break date (inclusive): "
+            f"{_format_date(inclusive_end, data['viewer_timezone'])}"
+        )
     if data.get("form_action") == "edit" and _kind(manager) == "weekly":
         detail = _detail(manager)
         if (
@@ -742,16 +746,12 @@ async def next_preview(
 
 def _occurrence_label(occurrence: DisplacedOccurrence, timezone: str) -> str:
     kind = "One-time lesson" if occurrence.source_kind == "event" else "Weekly lesson"
-    label = (
-        f"{kind} · {_format_datetime(occurrence.start, timezone)} – "
-        f"{_format_datetime(occurrence.end, timezone)}"
-    )
+    label = f"{kind} · {_format_interval(occurrence.start, occurrence.end, timezone)}"
     if occurrence.automatic_break is not None:
         label += (
             f"\n  Automatic break reservation (read-only): "
             f"{occurrence.automatic_break.duration_minutes} minutes · "
-            f"{_format_datetime(occurrence.automatic_break.start, timezone)} – "
-            f"{_format_datetime(occurrence.automatic_break.end, timezone)}"
+            f"{_format_interval(occurrence.automatic_break.start, occurrence.automatic_break.end, timezone)}"
         )
     return label
 
@@ -770,6 +770,7 @@ async def displacement_data(dialog_manager: DialogManager, **_: Any) -> dict[str
             f"Showing affected lessons {skip + 1}–{min(skip + len(items), total)} "
             f"of {total}"
         ),
+        "timezone": escape(data["viewer_timezone"]),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
         "warning": (
@@ -1021,8 +1022,7 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     timezone = data["viewer_timezone"]
     text = (
         f"{'Recurring' if detail.is_recurrent else 'One-time'} break\n"
-        f"Start: {_format_datetime(detail.start, timezone)}\n"
-        f"End: {_format_datetime(detail.end, timezone)}"
+        f"Break time: {_format_interval(detail.start, detail.end, timezone)}"
     )
     if detail.is_recurrent:
         assert detail.interval is not None
@@ -1032,8 +1032,9 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         ).date() - timedelta(days=1)
         text += (
             f"\nRepeats every {detail.interval} days"
-            f"\nLast break date (inclusive): {last_day.isoformat()}"
+            f"\nLast break date (inclusive): {_format_date(last_day, timezone)}"
         )
+    text += f"\nTimezone: {timezone}"
     blocked = bool(data.get("needs_reload") or data.get("outcome_unknown"))
     return {
         "detail_text": escape(text),
@@ -1053,6 +1054,7 @@ async def list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
         "title": "One-time breaks"
         if data.get("kind") == "once"
         else "Recurring breaks",
+        "timezone": escape(data["viewer_timezone"]),
         "breaks": [
             (_break_label(item, data["viewer_timezone"]), str(item.id))
             for item in items
@@ -1111,7 +1113,7 @@ def build_break_dialog() -> Dialog:
             state=BreakScreens.menu,
         ),
         Window(
-            Format("{title}\n{page}\n{notice}\n{error}"),
+            Format("{title}\n{page}\n{notice}\n{error}\nTimezone: {timezone}"),
             Select(
                 Format("{item[0]}"),
                 id="break",
@@ -1280,7 +1282,7 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "This break overlaps the following lessons:\n{affected}\n{page}\n{warning}\n{error}"
+                "This break overlaps the following lessons:\n{affected}\n{page}\n{warning}\n{error}\nTimezone: {timezone}"
             ),
             Row(
                 Button(

@@ -184,17 +184,18 @@ async def test_teacher_books_student_and_omits_default_duration(
         assert "Hour must be 0–23" in driver.session.last_message.text
         await driver.text("10:00")
         assert "Timezone: UTC" in driver.session.last_message.text
-        assert "Automatic break after this lesson: 5 minutes" in (
-            driver.session.last_message.text
-        )
-        assert "2026-10-20 10:45 (UTC+00:00) – 2026-10-20 10:50 (UTC+00:00)" in (
+        assert "New lesson at October 20" in driver.session.last_message.text
+        assert "10:00 - 10:45" in driver.session.last_message.text
+        assert "2026-10-20" not in driver.session.last_message.text
+        assert "(UTC" not in driver.session.last_message.text
+        assert "Autobreak after new lesson: 5 minutes" in (
             driver.session.last_message.text
         )
         await driver.click("Change assignee")
         assert "Current assignee: Alice Learner." in driver.session.last_message.text
         await driver.click("Back")
         assert "Review lesson for Alice Learner" in driver.session.last_message.text
-        assert "Automatic break after this lesson: 5 minutes" in (
+        assert "Autobreak after new lesson: 5 minutes" in (
             driver.session.last_message.text
         )
         submit = driver.callback_data("Create lesson")
@@ -304,29 +305,22 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         cutoff_message_id = driver.update_id + 1
         await driver.text("27/10/2026")
         assert driver.deleted_message_ids()[-1] == cutoff_message_id
-        assert "Weekly through 2026-10-27 inclusive" in (
-            driver.session.last_message.text
-        )
+        assert "Weekly through October 27" in (driver.session.last_message.text)
         assert "Custom duration applies only to this lesson or series" in (
             driver.session.last_message.text
         )
-        assert "Automatic break after each lesson: 5 minutes" in (
+        assert "Autobreak after each lesson: 5 minutes" in (
             driver.session.last_message.text
         )
         await driver.click("Change duration")
         await driver.click("Use default (60 min)")
-        assert "Weekly through 2026-10-27 inclusive" in (
-            driver.session.last_message.text
-        )
+        assert "Weekly through October 27" in (driver.session.last_message.text)
         await driver.click("Change duration")
         await driver.click("Custom duration")
         await driver.text("45")
-        assert "Weekly through 2026-10-27 inclusive" in (
-            driver.session.last_message.text
-        )
-        assert "2026-10-20 10:45 (UTC+00:00) – 2026-10-20 10:50 (UTC+00:00)" in (
-            driver.session.last_message.text
-        )
+        assert "Weekly through October 27" in (driver.session.last_message.text)
+        assert "New lesson at October 20" in driver.session.last_message.text
+        assert "10:00 - 10:45" in driver.session.last_message.text
         await driver.click("Create lesson")
 
         series = list((await db_session.scalars(select(RecurrentEvent))).all())
@@ -431,12 +425,11 @@ async def test_student_books_self_weekly_without_duration_or_subject_forgery(
         await driver.text("20/10/2026")
         await driver.text("10:00")
         await driver.text("20/10/2026")
-        assert "Automatic break after each lesson: 5 minutes" in (
+        assert "Autobreak after each lesson: 5 minutes" in (
             driver.session.last_message.text
         )
-        assert "2026-10-20 11:00 (UTC-07:00) – 2026-10-20 11:05 (UTC-07:00)" in (
-            driver.session.last_message.text
-        )
+        assert "New lesson at October 20" in driver.session.last_message.text
+        assert "10:00 - 11:00" in driver.session.last_message.text
         await driver.click("Create lesson")
 
         series = list((await db_session.scalars(select(RecurrentEvent))).all())

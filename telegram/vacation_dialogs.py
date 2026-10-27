@@ -27,6 +27,9 @@ from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
+    format_human_date,
+    format_human_datetime,
+    format_human_datetime_in_timezone,
     format_schedule_date_confirmation,
     parse_schedule_date,
     parse_schedule_time,
@@ -97,9 +100,11 @@ def _detail(manager: DialogManager) -> EventManagementDetail:
 
 
 def _format_datetime(value: datetime, timezone: str) -> str:
-    local = value.astimezone(ZoneInfo(timezone))
-    offset = local.strftime("%z")
-    return f"{local:%Y-%m-%d %H:%M} (UTC{offset[:3]}:{offset[3:]})"
+    return format_human_datetime_in_timezone(
+        value,
+        timezone,
+        reference_date=datetime.now(ZoneInfo(timezone)).date(),
+    )
 
 
 def _inclusive_end_date(value: datetime, timezone: str) -> date:
@@ -108,11 +113,10 @@ def _inclusive_end_date(value: datetime, timezone: str) -> date:
 
 
 def _vacation_label(item: EventManagementItem, timezone: str) -> str:
-    local_start = item.start.astimezone(ZoneInfo(timezone))
     inclusive_end = _inclusive_end_date(item.end, timezone)
     return (
-        f"{item.subject_label} · {local_start:%Y-%m-%d %H:%M} "
-        f"through {inclusive_end.isoformat()}"
+        f"{item.subject_label} · {_format_datetime(item.start, timezone)} "
+        f"through {format_human_date(inclusive_end, reference_date=datetime.now(ZoneInfo(timezone)).date())}"
     )
 
 
@@ -536,8 +540,9 @@ async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         start, end = _local_interval(data)
         interval = (
             f"Timezone: {data['viewer_timezone']}\n"
-            f"Starts: {start:%Y-%m-%d %H:%M}\n"
-            f"Last vacation date (inclusive): {date.fromisoformat(data['end_date']).isoformat()}\n"
+            f"Starts: {format_human_datetime(start, reference_date=datetime.now(ZoneInfo(data['viewer_timezone'])).date())}\n"
+            f"Last vacation date (inclusive): "
+            f"{format_human_date(date.fromisoformat(data['end_date']), reference_date=datetime.now(ZoneInfo(data['viewer_timezone'])).date())}\n"
             "The backend end is midnight after the last vacation date."
         )
         valid = True
@@ -830,6 +835,7 @@ async def list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
         "page": f"Vacations {skip + 1}–{min(skip + len(items), total)} of {total}"
         if total
         else "No vacations.",
+        "timezone": escape(data["viewer_timezone"]),
         "error": escape(str(data.get("error", ""))),
         "notice": escape(str(data.get("notice", ""))),
         "has_previous": skip > 0,
@@ -867,7 +873,9 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "detail_text": escape(
             f"{detail.subject_label}\n"
             f"Starts: {_format_datetime(detail.start, timezone)}\n"
-            f"Last vacation date (inclusive): {inclusive_end.isoformat()}\n"
+            f"Last vacation date (inclusive): "
+            f"{format_human_date(inclusive_end, reference_date=datetime.now(ZoneInfo(timezone)).date())}\n"
+            f"Timezone: {timezone}\n"
             "This vacation hides overlapping schedule events without deleting them."
         ),
         "error": escape(str(data.get("error", ""))),
@@ -966,7 +974,7 @@ def build_vacation_dialog() -> Dialog:
             getter=subject_data,
         ),
         Window(
-            Format("{page}\n{notice}\n{error}"),
+            Format("{page}\n{notice}\n{error}\nTimezone: {timezone}"),
             Select(
                 Format("{item[0]}"),
                 id="vacation",

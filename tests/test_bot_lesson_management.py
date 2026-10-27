@@ -179,21 +179,22 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         assert driver.deleted_message_ids()[-1] == date_message_id
         assert driver.session.last_message.message_id == screen_message_id
         await driver.text("11:00")
-        assert "Start: Tue, 2026-11-03 11:00" in driver.session.last_message.text
-        assert "Automatic break after this lesson (5 min)" in (
+        assert "Lesson time: November 3" in driver.session.last_message.text
+        assert "11:00 - 12:00" in driver.session.last_message.text
+        assert "2026-11-03" not in driver.session.last_message.text
+        assert "(UTC" not in driver.session.last_message.text
+        assert "Autobreak after this lesson: 5 minutes" in (
             driver.session.last_message.text
         )
-        assert "Tue, 2026-11-03 12:00" in driver.session.last_message.text
         await driver.click("Save change")
 
         await db_session.refresh(event)
         assert event.start == datetime(2026, 11, 3, 11)
         assert event.end == datetime(2026, 11, 3, 12)
         assert event.post_break_minutes == 5
-        assert "Automatic break after this lesson (5 min)" in (
+        assert "Autobreak after this lesson: 5 minutes" in (
             driver.session.last_message.text
         )
-        assert "Tue, 2026-11-03 12:00" in driver.session.last_message.text
         update = next(
             request
             for request in requests
@@ -254,18 +255,18 @@ async def test_student_can_move_and_cancel_own_occurrences_with_break_feedback(
         await driver.click("Inspect occurrence")
         await driver.text("16/11/2026")
         await driver.text("10:00")
-        assert "Automatic break after this occurrence (5 min)" in (
+        assert "Autobreak after this occurrence: 5 minutes" in (
             driver.session.last_message.text
         )
 
         await driver.click("Move this occurrence")
         await driver.text("16/11/2026")
         await driver.text("12:00")
-        assert "Automatic break after the replacement lesson (5 min)" in (
+        assert "Autobreak after replacement lesson: 5 minutes" in (
             driver.session.last_message.text
         )
         await driver.click("Move occurrence")
-        assert "Automatic break after the replacement lesson (5 min)" in (
+        assert "Autobreak after replacement lesson: 5 minutes" in (
             driver.session.last_message.text
         )
         assert "(cancelled)" in driver.session.last_message.text
@@ -519,7 +520,7 @@ async def test_cancelled_occurrence_selector_is_paged(
             if button.text.startswith("Cancelled ·")
         )
         await driver.click(last_cancelled)
-        assert "Mon, 2027-01-18 10:00" in driver.session.last_message.text
+        assert "January 18" in driver.session.last_message.text
         assert "(cancelled)" in driver.session.last_message.text
     finally:
         await _close_bot(driver, http)
@@ -548,7 +549,7 @@ async def test_recurring_occurrence_move_cancels_exact_source_and_creates_one_of
         assert "The original weekly occurrence will be cancelled" in (
             driver.session.last_message.text
         )
-        assert "Automatic break after the replacement lesson (5 min)" in (
+        assert "Autobreak after replacement lesson: 5 minutes" in (
             driver.session.last_message.text
         )
         assert not list((await db_session.scalars(select(RecurrentCancels))).all())
@@ -571,7 +572,7 @@ async def test_recurring_occurrence_move_cancels_exact_source_and_creates_one_of
         assert replacement is not None
         assert replacement.end == datetime(2026, 11, 17, 13)
         assert "replacement is a one-time lesson" in driver.session.last_message.text
-        assert "Automatic break after the replacement lesson (5 min)" in (
+        assert "Autobreak after replacement lesson: 5 minutes" in (
             driver.session.last_message.text
         )
         assert (
@@ -661,7 +662,7 @@ async def test_stale_revision_requires_reload_before_edit_can_submit(
             for button in row
         )
         await driver.click("Reload event")
-        assert "Mon, 2026-11-02 10:30" in driver.session.last_message.text
+        assert "November 2" in driver.session.last_message.text
         assert event.start == datetime(2026, 11, 2, 10, 30)
         assert sum(request.method == "PUT" for request in requests) == 1
     finally:
@@ -696,7 +697,7 @@ async def test_unknown_update_outcome_requires_reload_without_replay(
         assert event.start == datetime(2026, 11, 3, 11)
         await driver.click("Reload event")
         assert "no write was repeated" in driver.session.last_message.text
-        assert "Tue, 2026-11-03 11:00" in driver.session.last_message.text
+        assert "November 3" in driver.session.last_message.text
         assert sum(request.method == "PUT" for request in requests) == 1
     finally:
         await _close_bot(driver, http)
