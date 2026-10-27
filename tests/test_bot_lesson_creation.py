@@ -565,9 +565,14 @@ async def test_lesson_date_cleanup_preserves_invalid_input_and_reports_failures(
         driver.session.delete_failure = "Bad Request: message to delete not found"
         await driver.text("19/10")
         assert driver.deleted_message_ids() == [expected_message_id]
-        assert "Date accepted, but Telegram could not remove your message." in (
-            driver.session.last_message.text
+        cleanup_warning = (
+            "Date accepted, but Telegram could not remove your message. "
+            "Delete it manually if needed."
         )
+        assert driver.session.last_message.text.startswith(
+            f"<b>⚠️ Attention</b>\n{cleanup_warning}\n\n"
+        )
+        assert driver.session.last_message.text.count(cleanup_warning) == 1
         assert "next year" in driver.session.last_message.text
         assert "Could not delete accepted date input" in caplog.text
 
@@ -701,6 +706,77 @@ async def test_policy_rejection_keeps_review_editable(
         await _close_bot(driver, http)
 
 
+async def test_weekly_work_hours_rejections_are_prominent_and_correctable(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
+    )
+    _, driver, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        await driver.click("Weekly")
+        await driver.text("20/10/2026")
+        await driver.text("17:30")
+        review_message_id = driver.session.last_message.message_id
+        await driver.click("Create lesson")
+
+        rejected = driver.session.last_message.text
+        reason = "That time is after the teacher&#x27;s working hours."
+        assert driver.session.last_message.message_id == review_message_id
+        assert rejected.startswith(f"<b>❌ Error</b>\n{reason}\n\n")
+        assert rejected.count(reason) == 1
+        assert rejected.index("❌ Error") < rejected.index("Review lesson")
+        assert driver.callback_data("Change time")
+        assert not list((await db_session.scalars(select(RecurrentEvent))).all())
+        assert (
+            sum(
+                request.method == "POST"
+                and request.url.path == "/api/v1/recurrent-lessons/"
+                for request in requests
+            )
+            == 1
+        )
+
+        await driver.click("Change time")
+        await driver.text("17:15")
+        await driver.click("Create lesson")
+        repeated_rejection = driver.session.last_message.text
+        assert driver.session.last_message.message_id == review_message_id
+        assert repeated_rejection.startswith(f"<b>❌ Error</b>\n{reason}\n\n")
+        assert repeated_rejection.count(reason) == 1
+        assert driver.callback_data("Change time")
+        assert not list((await db_session.scalars(select(RecurrentEvent))).all())
+
+        await driver.click("Change time")
+        await driver.text("16:00")
+        await driver.click("Create lesson")
+
+        series = list((await db_session.scalars(select(RecurrentEvent))).all())
+        assert len(series) == 1
+        assert driver.session.last_message.message_id == review_message_id
+        assert "❌ Error" not in driver.session.last_message.text
+        assert "That time is after the teacher's working hours." not in (
+            driver.session.last_message.text
+        )
+        assert (
+            sum(
+                request.method == "POST"
+                and request.url.path == "/api/v1/recurrent-lessons/"
+                for request in requests
+            )
+            == 3
+        )
+    finally:
+        await _close_bot(driver, http)
+
+
 async def test_lost_create_response_requires_schedule_reload_without_retry(
     client, db_session, bot_service_key, monkeypatch
 ) -> None:
@@ -726,7 +802,14 @@ async def test_lost_create_response_requires_schedule_reload_without_retry(
         await driver.text("12:00")
         await driver.click("Create lesson")
 
-        assert "outcome is unknown" in driver.session.last_message.text
+        unknown = (
+            "The save outcome is unknown. Reload the latest data before trying "
+            "again; do not repeat the action."
+        )
+        assert driver.session.last_message.text.startswith(
+            f"<b>⚠️ Attention</b>\n{unknown}\n\n"
+        )
+        assert driver.session.last_message.text.count(unknown) == 1
         assert driver.callback_data("Reload schedule")
         assert len(list((await db_session.scalars(select(Event))).all())) == 1
         await driver.click("Reload schedule")

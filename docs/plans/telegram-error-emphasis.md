@@ -172,16 +172,16 @@ is retained.
 
 ### Acceptance Criteria
 
-- [ ] A real-backend weekly lesson ending after saved work hours shows the
+- [x] A real-backend weekly lesson ending after saved work hours shows the
   mapped reason in the very first block, above the review, exactly once.
-- [ ] The failed create persists no lesson, retains the draft and correction
+- [x] The failed create persists no lesson, retains the draft and correction
   controls, and edits the existing message. Correcting and submitting succeeds
   without stale error text or an extra write.
-- [ ] Invalid date/time/duration, conflicts, failed inspection, and unavailable
+- [x] Invalid date/time/duration, conflicts, failed inspection, and unavailable
   reads use the same prominent treatment across creation and management.
-- [ ] Unknown write outcomes and cleanup failures use attention, never imply
+- [x] Unknown write outcomes and cleanup failures use attention, never imply
   a definite rejection, and preserve existing reconciliation/retry guards.
-- [ ] One-off/weekly, teacher/student, optional cutoff, edit/move/cancel,
+- [x] One-off/weekly, teacher/student, optional cutoff, edit/move/cancel,
   accepted-input deletion, and post-write navigation behavior remain intact.
 
 ### Out of scope / Suitable for

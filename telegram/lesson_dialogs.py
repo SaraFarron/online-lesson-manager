@@ -28,6 +28,7 @@ from telegram.date_cleanup import (
     delete_accepted_date_message,
     delete_accepted_input_message,
 )
+from telegram.feedback import feedback_block
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
@@ -84,6 +85,7 @@ async def open_lesson_creation(
         "cutoff_date": None,
         "interval_end": None,
         "error": "",
+        "warning": "",
         "submitted": False,
         "submitting": False,
         "outcome_unknown": False,
@@ -252,7 +254,10 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "kind_assignee_text": kind_assignee_text,
         "has_previous_students": skip > 0,
         "has_next_students": skip + len(items) < total,
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "subject_label": escape(str(data.get("subject_label") or "")),
         "review": escape(review),
         "start_date_confirmation": escape(
@@ -859,7 +864,11 @@ async def submit_lesson(
             )
     except BackendOutcomeUnknown as exc:
         data.update(
-            submitting=False, submitted=True, outcome_unknown=True, error=str(exc)
+            submitting=False,
+            submitted=True,
+            outcome_unknown=True,
+            error="",
+            warning=str(exc),
         )
         await manager.show(show_mode=ShowMode.EDIT)
         return
@@ -937,8 +946,8 @@ def build_lesson_dialog() -> Dialog:
     return Dialog(
         Window(
             Format(
-                "Choose a student or book a {personal_label}.\n"
-                "Current assignee: {subject_label}.\n{picker_page}\n{error}"
+                "{feedback}Choose a student or book a {personal_label}.\n"
+                "Current assignee: {subject_label}.\n{picker_page}"
             ),
             Column(
                 Select(
@@ -972,7 +981,7 @@ def build_lesson_dialog() -> Dialog:
             state=LessonScreens.subject,
         ),
         Window(
-            Format("{kind_assignee_text}\n{error}"),
+            Format("{feedback}{kind_assignee_text}"),
             Button(Const("One time"), id="once", on_click=choose_once),
             Button(Const("Weekly"), id="weekly", on_click=choose_weekly),
             Button(
@@ -986,7 +995,8 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Choose lesson duration. The teacher default is {default_duration}.\n{error}"
+                "{feedback}Choose lesson duration. The teacher default is "
+                "{default_duration}."
             ),
             Button(
                 Format("Use default ({default_duration})"),
@@ -999,7 +1009,8 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the custom duration in minutes. Only teachers can change it.\n{error}"
+                "{feedback}Enter the custom duration in minutes. Only teachers "
+                "can change it."
             ),
             TextInput("duration", on_success=duration_input),
             Button(Const("Back"), id="back", on_click=cancel_duration_edit),
@@ -1007,9 +1018,9 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{duration_summary}\n"
+                "{feedback}{duration_summary}\n"
                 "Enter the lesson start date as DD MM, DD:MM or DD/MM, "
-                "optionally followed by a year.\n{error}"
+                "optionally followed by a year."
             ),
             TextInput(
                 "start_date", on_success=start_date_input, on_error=_date_input_error
@@ -1025,14 +1036,15 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{start_date_confirmation}\nConfirm this inferred next-year date.\n{error}"
+                "{feedback}{start_date_confirmation}\nConfirm this inferred "
+                "next-year date."
             ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_start_date),
             Button(Const("Change date"), id="change", on_click=edit_start_date),
             state=LessonScreens.confirm_start_date,
         ),
         Window(
-            Format("Enter the local lesson start time as HH:MM or HH MM.\n{error}"),
+            Format("{feedback}Enter the local lesson start time as HH:MM or HH MM."),
             TextInput(
                 "start_time", on_success=start_time_input, on_error=_date_input_error
             ),
@@ -1042,7 +1054,8 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the last lesson start date (inclusive) as DD MM, DD:MM or DD/MM, optionally followed by a year.\n{error}"
+                "{feedback}Enter the last lesson start date (inclusive) as DD MM, "
+                "DD:MM or DD/MM, optionally followed by a year."
             ),
             TextInput(
                 "cutoff_date", on_success=cutoff_date_input, on_error=_date_input_error
@@ -1057,7 +1070,8 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{cutoff_date_confirmation}\nConfirm the inferred end date. The series cutoff is the following local midnight.\n{error}"
+                "{feedback}{cutoff_date_confirmation}\nConfirm the inferred end "
+                "date. The series cutoff is the following local midnight."
             ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_cutoff_date),
             Button(Const("Change date"), id="change", on_click=change_cutoff_date),
@@ -1066,7 +1080,7 @@ def build_lesson_dialog() -> Dialog:
             state=LessonScreens.confirm_cutoff_date,
         ),
         Window(
-            Format("Review lesson for {subject_label}\n{review}\n{error}"),
+            Format("{feedback}Review lesson for {subject_label}\n{review}"),
             Button(
                 Const("Create lesson"),
                 id="submit",
@@ -1113,7 +1127,7 @@ def build_lesson_dialog() -> Dialog:
             state=LessonScreens.review,
         ),
         Window(
-            Format("{error}\nReturn home and retry after the backend is available."),
+            Format("{feedback}Return home and retry after the backend is available."),
             Button(Const("Back to home"), id="home", on_click=return_home),
             state=LessonScreens.unavailable,
         ),

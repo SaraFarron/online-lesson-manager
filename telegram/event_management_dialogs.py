@@ -31,6 +31,7 @@ from telegram.date_cleanup import (
     delete_accepted_date_message,
     delete_accepted_input_message,
 )
+from telegram.feedback import feedback_block
 from telegram.inputs import (
     combine_schedule_date_time,
     format_duration,
@@ -79,6 +80,7 @@ async def open_event_management(
             "total": 0,
             "detail": None,
             "error": "",
+            "warning": "",
             "notice": "",
             "needs_reload": False,
             "outcome_unknown": False,
@@ -146,6 +148,7 @@ async def _load_page(
             items=[item.model_dump(mode="json") for item in page.items],
             total=page.total,
             error="",
+            warning="",
         )
     await manager.switch_to(LessonManagementScreens.events, show_mode=ShowMode.EDIT)
 
@@ -283,7 +286,10 @@ async def event_list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
         ],
         "empty_state": "No lessons." if total == 0 else "",
         "timezone": escape(data["viewer_timezone"]),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
@@ -383,7 +389,10 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "detail_text": escape(_format_detail(detail, data["viewer_timezone"])),
         "cancellation_items": cancellation_items,
         "notice": escape(str(data.get("notice", ""))),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "is_recurrent": detail.is_recurrent,
         "can_edit_cutoff": (
             detail.is_recurrent and detail.event_type == "LESSON" and not blocked
@@ -838,7 +847,10 @@ async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         review = f"Review could not be displayed: {exc}"
     return {
         "review": escape(review),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "save_label": (
             "Move occurrence" if data.get("date_action") == "move" else "Save change"
@@ -971,8 +983,9 @@ async def confirm_action(
             outcome_unknown=True,
             needs_reload=True,
             operation=action,
-            error=str(exc),
-            notice="The write outcome is unknown. Reload before taking another action.",
+            error="",
+            warning=str(exc),
+            notice="",
         )
     except BackendError as exc:
         data.update(
@@ -1090,8 +1103,9 @@ async def submit_review(
             outcome_unknown=True,
             needs_reload=True,
             operation=action,
-            error=str(exc),
-            notice="The write outcome is unknown. Reload before taking another action.",
+            error="",
+            warning=str(exc),
+            notice="",
         )
     except BackendError as exc:
         stale = exc.status == 409
@@ -1127,7 +1141,8 @@ async def _refresh_detail_after_write(
             submitting=False,
             needs_reload=True,
             error=str(exc),
-            notice="The write succeeded, but fresh details could not be loaded.",
+            warning="The write succeeded, but fresh details could not be loaded.",
+            notice="",
         )
     else:
         data.update(
@@ -1138,6 +1153,7 @@ async def _refresh_detail_after_write(
             outcome_unknown=False,
             operation=None,
             error="",
+            warning="",
         )
     await manager.switch_to(LessonManagementScreens.detail, show_mode=ShowMode.EDIT)
 
@@ -1164,7 +1180,8 @@ async def _refresh_after_occurrence_action(
         data.update(
             needs_reload=True,
             error=str(exc),
-            notice=f"{notice} Fresh series details could not be loaded.",
+            warning=f"{notice} Fresh series details could not be loaded.",
+            notice="",
         )
     else:
         data.update(
@@ -1173,6 +1190,7 @@ async def _refresh_after_occurrence_action(
             needs_reload=False,
             outcome_unknown=False,
             error="",
+            warning="",
             notice=notice,
         )
     await manager.switch_to(LessonManagementScreens.detail, show_mode=ShowMode.EDIT)
@@ -1200,6 +1218,7 @@ async def reload_management_state(
                     needs_reload=False,
                     notice="The lesson is no longer available.",
                     error="",
+                    warning="",
                     operation=None,
                 )
                 return
@@ -1232,11 +1251,12 @@ async def reload_management_state(
         callback.message.chat.id,
         occurrence_start=occurrence_start,
     )
-    if previous_outcome_unknown:
-        manager.dialog_data["notice"] = (
+    if previous_outcome_unknown and not manager.dialog_data.get("needs_reload"):
+        manager.dialog_data["warning"] = (
             "The previous write outcome was unknown. Current details were reloaded; "
             "no write was repeated."
         )
+        manager.dialog_data["notice"] = ""
 
 
 async def _reload_detail(
@@ -1280,6 +1300,7 @@ async def _load_detail(
             detail=detail.model_dump(mode="json"),
             cancel_skip=0,
             error="",
+            warning="",
             needs_reload=False,
             outcome_unknown=False,
         )
@@ -1314,7 +1335,7 @@ def build_event_management_dialog() -> Dialog:
             state=LessonManagementScreens.menu,
         ),
         Window(
-            Format("{title}\n{empty_state}\n{notice}\n{error}\nTimezone: {timezone}"),
+            Format("{feedback}{title}\n{empty_state}\n{notice}\nTimezone: {timezone}"),
             Select(
                 Format("{item[0]}"),
                 id="managed_lesson",
@@ -1355,7 +1376,7 @@ def build_event_management_dialog() -> Dialog:
             state=LessonManagementScreens.events,
         ),
         Window(
-            Format("{detail_text}\n{notice}\n{error}"),
+            Format("{feedback}{detail_text}\n{notice}"),
             Button(
                 Const("Edit lesson or series"),
                 id="edit",
@@ -1430,7 +1451,7 @@ def build_event_management_dialog() -> Dialog:
             state=LessonManagementScreens.detail,
         ),
         Window(
-            Format("{date_prompt}\n{error}"),
+            Format("{feedback}{date_prompt}"),
             TextInput("date_input", on_success=date_input),
             Button(
                 Const("No end"),
@@ -1442,21 +1463,23 @@ def build_event_management_dialog() -> Dialog:
             state=LessonManagementScreens.date,
         ),
         Window(
-            Format("{date_confirmation}\nConfirm this inferred next-year date."),
+            Format(
+                "{feedback}{date_confirmation}\nConfirm this inferred next-year date."
+            ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_date),
             Button(Const("Change date"), id="change", on_click=change_date),
             Button(Const("Back"), id="back", on_click=back_from_date),
             state=LessonManagementScreens.confirm_date,
         ),
         Window(
-            Format("{time_prompt}\nTimezone: {viewer_timezone}\n{error}"),
+            Format("{feedback}{time_prompt}\nTimezone: {viewer_timezone}"),
             TextInput("time_input", on_success=time_input),
             Button(Const("Change date"), id="date", on_click=change_date),
             Button(Const("Back to event"), id="detail", on_click=back_to_detail),
             state=LessonManagementScreens.time,
         ),
         Window(
-            Format("{review}\n{notice}\n{error}"),
+            Format("{feedback}{review}\n{notice}"),
             Button(
                 Format("{save_label}"),
                 id="submit",
@@ -1485,7 +1508,7 @@ def build_event_management_dialog() -> Dialog:
             state=LessonManagementScreens.review,
         ),
         Window(
-            Format("{confirm_text}\n{error}"),
+            Format("{feedback}{confirm_text}"),
             Button(
                 Const("Confirm"),
                 id="confirm",

@@ -36,8 +36,8 @@ async def delete_accepted_input_message(
             f"{input_type.title()} accepted, but Telegram could not remove your message. "
             "Delete it manually if needed."
         )
-        current = manager.dialog_data.get("error")
-        manager.dialog_data["error"] = f"{current}\n{notice}" if current else notice
+        current = manager.dialog_data.get("warning")
+        manager.dialog_data["warning"] = f"{current}\n{notice}" if current else notice
         return False
     return True
 

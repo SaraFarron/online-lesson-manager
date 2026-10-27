@@ -852,7 +852,14 @@ async def test_unknown_update_outcome_requires_reload_without_replay(
         await driver.text("11:00")
         await driver.click("Save change")
 
-        assert "outcome is unknown" in driver.session.last_message.text
+        unknown = (
+            "The save outcome is unknown. Reload the latest data before trying "
+            "again; do not repeat the action."
+        )
+        assert driver.session.last_message.text.startswith(
+            f"<b>⚠️ Attention</b>\n{unknown}\n\n"
+        )
+        assert driver.session.last_message.text.count(unknown) == 1
         assert driver.callback_data("Reload event")
         await db_session.refresh(event)
         assert event.start == datetime(2026, 11, 3, 11)
