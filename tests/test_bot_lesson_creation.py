@@ -725,11 +725,31 @@ async def test_weekly_work_hours_rejections_are_prominent_and_correctable(
         await driver.text("20/10/2026")
         await driver.text("17:30")
         review_message_id = driver.session.last_message.message_id
+        send_count = sum(
+            call.__api_method__ == "sendMessage" for call in driver.session.calls
+        )
+        calls_before_rejection = len(driver.session.calls)
         await driver.click("Create lesson")
 
         rejected = driver.session.last_message.text
         reason = "That time is after the teacher&#x27;s working hours."
         assert driver.session.last_message.message_id == review_message_id
+        rejection_calls = driver.session.calls[calls_before_rejection:]
+        assert not any(call.__api_method__ == "sendMessage" for call in rejection_calls)
+        assert any(
+            call.__api_method__ == "editMessageText"
+            and call.message_id == review_message_id
+            for call in rejection_calls
+        )
+        assert not any(
+            call.__api_method__ == "answerCallbackQuery"
+            and getattr(call, "show_alert", False)
+            for call in rejection_calls
+        )
+        assert (
+            sum(call.__api_method__ == "sendMessage" for call in driver.session.calls)
+            == send_count
+        )
         assert rejected.startswith(f"<b>❌ Error</b>\n{reason}\n\n")
         assert rejected.count(reason) == 1
         assert rejected.index("❌ Error") < rejected.index("Review lesson")
@@ -746,9 +766,30 @@ async def test_weekly_work_hours_rejections_are_prominent_and_correctable(
 
         await driver.click("Change time")
         await driver.text("17:15")
+        calls_before_repeated_rejection = len(driver.session.calls)
         await driver.click("Create lesson")
         repeated_rejection = driver.session.last_message.text
         assert driver.session.last_message.message_id == review_message_id
+        repeated_rejection_calls = driver.session.calls[
+            calls_before_repeated_rejection:
+        ]
+        assert not any(
+            call.__api_method__ == "sendMessage" for call in repeated_rejection_calls
+        )
+        assert any(
+            call.__api_method__ == "editMessageText"
+            and call.message_id == review_message_id
+            for call in repeated_rejection_calls
+        )
+        assert not any(
+            call.__api_method__ == "answerCallbackQuery"
+            and getattr(call, "show_alert", False)
+            for call in repeated_rejection_calls
+        )
+        assert (
+            sum(call.__api_method__ == "sendMessage" for call in driver.session.calls)
+            == send_count
+        )
         assert repeated_rejection.startswith(f"<b>❌ Error</b>\n{reason}\n\n")
         assert repeated_rejection.count(reason) == 1
         assert driver.callback_data("Change time")

@@ -5,7 +5,7 @@
 Make errors immediately noticeable on every bot screen without losing the
 current draft, obscuring recovery instructions, or sending extra chat messages.
 
-**Status:** In progress; Tasks 1–4 complete, Tasks 5–6 pending.
+**Status:** Complete; Tasks 1–6 verified.
 
 ## Scope (README.md sections covered)
 
@@ -319,21 +319,21 @@ Existing simulated updates, real ASGI/SQLite backend, `BotDriver`,
 
 ### Acceptance Criteria
 
-- [ ] Tests check exact first-block placement, HTML safety, no duplicated
+- [x] Tests check exact first-block placement, HTML safety, no duplicated
   reason, no empty banner, and error/attention distinctions.
-- [ ] Cover the reported work-hours rejection end to end, correction,
+- [x] Cover the reported work-hours rejection end to end, correction,
   repeated rejection, recovery, unavailable state, and unknown write outcome.
-- [ ] Recording transport confirms edits rather than extra sends, preserved
+- [x] Recording transport confirms edits rather than extra sends, preserved
   message identity/buttons, no new ordinary-error alerts, and unchanged
   request counts/authorization.
-- [ ] Check UTF-16 length of complete rendered boundary cases, not only
+- [x] Check UTF-16 length of complete rendered boundary cases, not only
   helper output. Existing schedule packing remains lossless.
-- [ ] Run affected test selectors together, then `uv run pytest -q tests`.
+- [x] Run affected test selectors together, then `uv run pytest -q tests`.
   Run `uv run ruff check telegram tests`,
   `uv run ruff format --check telegram tests`, and `uv run mypy telegram`.
-- [ ] No backend/schema changes means no migration or backend lint sweep.
+- [x] No backend/schema changes means no migration or backend lint sweep.
   Preserve user debugging edits and report pre-existing blockers separately.
-- [ ] Record simulated checks as simulated. A real Telegram visual smoke
+- [x] Record simulated checks as simulated. A real Telegram visual smoke
   check on desktop/mobile is optional and requires owner access; do not claim
   it occurred merely because recording-transport tests passed.
 

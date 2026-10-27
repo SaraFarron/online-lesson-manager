@@ -131,6 +131,11 @@ are implemented and verified; [homework](docs/plans/homework-backend-and-telegra
 teacher and student Telegram actions are implemented, with Task 11
 cross-flow/restart/storage verification remaining. Notification delivery is
 not implemented.
+[Telegram error feedback](docs/plans/telegram-error-emphasis.md) defines the
+verified bot presentation contract: escaped errors and attention notices lead
+the active screen, ordinary failures do not add messages or callback popups,
+and long homework text is paginated inline without truncation. Preserve drafts,
+buttons, and safe retry/reconciliation behavior when changing these dialogs.
 
 ## Scheduling Foundation Boundaries
 

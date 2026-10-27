@@ -152,15 +152,21 @@ the backend session before resubmitting. Teacher workdays/hours, lesson
 duration defaults, and daily/consecutive lesson limits are enforced by the
 backend. Automatic post-lesson breaks are derived from each lesson's saved
 duration snapshot and shown in Telegram booking and management flows.
-Notification delivery, free-slot selection, offline schedule cache, Telegram
-teacher homework review/management UI, and account linking/transfers remain
-unimplemented. Teachers can create text, file, or mixed assignments for their
-own students through Telegram and optionally link an exact upcoming lesson
-occurrence. Students can browse authorized assignments, view their text,
-download materials as separate Telegram documents, and submit or resubmit
-text/files; a successful submission completes the assignment. Teacher review,
-manual completion, and deletion remain available through the backend API until
-their Telegram dialogs are implemented.
+Validation and backend failures appear at the start of the active Telegram
+screen as an escaped **❌ Error** block. Use **⚠️ Attention** for uncertain
+write outcomes, accepted input that Telegram could not remove, and committed
+writes whose refresh failed. Drafts and recovery controls remain available;
+ordinary errors do not create extra messages or callback popups.
+Long homework text is paginated in the existing screen without truncation.
+Notification delivery, free-slot selection, offline schedule cache, and
+account linking/transfers remain unimplemented. Teachers can create text,
+file, or mixed assignments for their own students through Telegram and
+optionally link an exact upcoming lesson occurrence. Students can browse
+authorized assignments, view their text, download materials as separate
+Telegram documents, and submit or resubmit text/files; a successful submission
+completes the assignment. Teachers can review current and prior submissions,
+mark assignments complete, and confirm assignment deletion through Telegram;
+uncertain writes retain their retry or status-reconciliation safeguards.
 Teachers and students can edit their saved account and role preferences from
 Settings in the Telegram role home. Account and role preferences are saved
 separately; timezone changes do not move stored event instants, and notification
@@ -276,6 +282,7 @@ intermediate mismatch returns authentication errors, not offline success.
    реализовано и проверено на SQLite/PostgreSQL; наследуемые уроки не изменяются автоматически.
 3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md) — реализованы контракт, backend, создание и управление заданиями учителем, а также просмотр/сдача решений учеником в Telegram; осталось сквозное подтверждение хранения, поведения после перезапуска и передача требований для будущих уведомлений.
 4. [Сокращение интерфейса Telegram](./docs/plans/telegram-interface-streamlining.md) — завершено и проверено. Этот план заменяет только старую грамматику дат и контракт отображения расписания (UTC-смещения, счетчики страниц, Refresh); он не меняет API, правила расписания или авторизацию.
+5. [Ошибки в интерфейсе Telegram](./docs/plans/telegram-error-emphasis.md) — ошибки и неопределённые исходы выделяются в начале текущего экрана; длинный текст заданий разбит на страницы без усечения.
 
 Следующий шаг плана домашних заданий — сквозная проверка и документирование требований для будущих уведомлений; доставка уведомлений остается нереализованной.
 
