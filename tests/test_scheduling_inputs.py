@@ -13,15 +13,54 @@ from telegram.api import (
 from telegram.inputs import (
     combine_schedule_date_time,
     format_compact_schedule_date,
+    format_duration,
     format_human_datetime,
     format_human_datetime_in_timezone,
     format_local_interval,
     format_local_interval_in_timezone,
     format_local_interval_review,
     format_schedule_date_confirmation,
+    format_working_days,
     parse_schedule_date,
     parse_schedule_time,
 )
+
+
+@pytest.mark.parametrize(
+    ("days", "expected"),
+    [
+        ([5], "Fri"),
+        ([1, 2], "Mon, Tue"),
+        ([2, 3, 4, 5, 6, 7], "Tue - Sun"),
+        ([1, 2, 3, 5, 6, 7], "Mon - Wed, Fri - Sun"),
+        ([1, 2, 3, 6, 7], "Mon - Wed, Sat, Sun"),
+        ([1, 2, 3, 4, 5, 6, 7], "Mon - Sun"),
+        ([7, 3, 1, 6, 2], "Mon - Wed, Sat, Sun"),
+    ],
+)
+def test_working_days_are_grouped_in_iso_order(days: list[int], expected: str) -> None:
+    assert format_working_days(days) == expected
+
+
+@pytest.mark.parametrize(
+    ("minutes", "expected"),
+    [
+        (0, "0 minutes"),
+        (1, "1 minute"),
+        (45, "45 minutes"),
+        (60, "1 hour"),
+        (61, "1 hour 1 minute"),
+        (90, "1 hour 30 minutes"),
+        (120, "2 hours"),
+    ],
+)
+def test_duration_uses_human_hours_and_minutes(minutes: int, expected: str) -> None:
+    assert format_duration(minutes) == expected
+
+
+def test_duration_rejects_negative_values() -> None:
+    with pytest.raises(ValueError, match="cannot be negative"):
+        format_duration(-1)
 
 
 @pytest.mark.parametrize(

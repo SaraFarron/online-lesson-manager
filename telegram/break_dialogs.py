@@ -34,6 +34,7 @@ from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
+    format_duration,
     format_human_date,
     format_local_interval_in_timezone,
     format_schedule_date_confirmation,
@@ -750,7 +751,7 @@ def _occurrence_label(occurrence: DisplacedOccurrence, timezone: str) -> str:
     if occurrence.automatic_break is not None:
         label += (
             f"\n  Automatic break reservation (read-only): "
-            f"{occurrence.automatic_break.duration_minutes} minutes · "
+            f"{format_duration(occurrence.automatic_break.duration_minutes)} · "
             f"{_format_interval(occurrence.automatic_break.start, occurrence.automatic_break.end, timezone)}"
         )
     return label

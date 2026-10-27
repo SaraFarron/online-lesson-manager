@@ -16,7 +16,7 @@ from telegram.homework_teacher_dialogs import open_homework_creation
 from telegram.homework_teacher_management_dialogs import (
     open_teacher_homework_management,
 )
-from telegram.inputs import digest_clock, parse_timezone
+from telegram.inputs import digest_clock, format_working_days, parse_timezone
 from telegram.lesson_dialogs import open_lesson_creation
 from telegram.onboarding import begin_student, begin_teacher
 from telegram.schedule_dialogs import open_today, open_week
@@ -52,10 +52,12 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             home += (
                 f"Teacher code: {profile.code}\n"
                 f"Work hours: {profile.work_start}–{profile.work_end}\n"
-                f"ISO weekdays: {profile.working_days}\n"
+                f"Workdays: {format_working_days(profile.working_days)}\n"
                 f"Lesson/break minutes: {profile.lesson_length}/{profile.between_lessons_break}\n"
                 f"Consecutive/daily limits: {profile.max_consecutive_lessons}/{profile.max_lessons_per_day}\n"
             )
+        elif account.role == "TEACHER":
+            home += "Teacher profile unavailable.\n"
         if view.student is not None:
             lesson = (
                 "off"
@@ -68,13 +70,15 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
                 else f"{view.student.notification_homework} days"
             )
             home += f"Lesson reminder: {lesson}\nHomework reminder: {homework}\n"
-        if account.role in {"TEACHER", "STUDENT"}:
+        elif account.role == "STUDENT":
+            home += "Student profile unavailable.\n"
+        if account.role == "STUDENT":
             home += (
                 "Preferences saved. Lesson booking and schedule viewing are available. "
                 "Existing events can be managed. "
                 "Notifications are not active yet."
             )
-        else:
+        elif account.role == "ADMIN":
             home += (
                 "Preferences saved. Booking rules and notifications are not active yet."
             )

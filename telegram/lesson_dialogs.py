@@ -28,6 +28,7 @@ from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
+    format_duration,
     format_human_date,
     format_local_interval_in_timezone,
     format_local_interval_review,
@@ -206,9 +207,15 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
                 review += f"\nNo automatic break is reserved after {frequency}."
             else:
                 if data.get("kind") == "weekly":
-                    review += f"\nAutobreak after each lesson: {break_minutes} minutes."
+                    review += (
+                        f"\nAutobreak after each lesson: "
+                        f"{format_duration(break_minutes)}."
+                    )
                 else:
-                    review += f"\nAutobreak after new lesson: {break_minutes} minutes."
+                    review += (
+                        f"\nAutobreak after new lesson: "
+                        f"{format_duration(break_minutes)}."
+                    )
         except KeyError, TypeError, ValueError, OverflowError:
             review += "\nThe automatic break interval could not be displayed."
 
@@ -225,9 +232,9 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         data.get("duration_minutes") or data.get("default_duration", 0)
     )
     duration_summary = (
-        f"Selected duration: {duration_minutes} minutes."
+        f"Selected duration: {format_duration(duration_minutes)}."
         if data.get("custom_duration")
-        else f"Uses the default duration: {duration_minutes} minutes."
+        else f"Uses the default duration: {format_duration(duration_minutes)}."
     )
     if data.get("is_teacher") and data.get("subject_id") == data.get("account_id"):
         kind_assignee_text = "A personal lesson is assigned to you by default."
@@ -237,7 +244,7 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "students": students,
         "picker_page": f"Page {page_number} of {page_count} ({total} students)",
         "personal_label": "personal lesson",
-        "default_duration": data.get("default_duration", ""),
+        "default_duration": format_duration(int(data.get("default_duration") or 0)),
         "duration_summary": duration_summary,
         "kind_assignee_text": kind_assignee_text,
         "has_previous_students": skip > 0,
@@ -977,10 +984,10 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Choose lesson duration. The teacher default is {default_duration} minutes.\n{error}"
+                "Choose lesson duration. The teacher default is {default_duration}.\n{error}"
             ),
             Button(
-                Format("Use default ({default_duration} min)"),
+                Format("Use default ({default_duration})"),
                 id="default_duration",
                 on_click=use_default_duration,
             ),

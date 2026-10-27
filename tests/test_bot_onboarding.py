@@ -1,5 +1,6 @@
 import asyncio
 import re
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -7,6 +8,7 @@ from sqlalchemy import func, select
 
 from backend.auth.models import TeacherProfile, User
 from telegram.api import BackendClient, Registration
+from telegram.dialogs import screen_data
 from telegram.inputs import parse_clock
 from telegram.onboarding import STUDENT_STEPS, TEACHER_STEPS, Step
 from telegram.runtime import build_dispatcher
@@ -179,6 +181,11 @@ async def test_student_deep_link_hours_and_existing_invitation(
         )
         assert driver.session.last_message.message_id == first_id
         assert sum(c.__api_method__ == "sendMessage" for c in driver.session.calls) == 1
+        await driver.text("/start")
+        assert (
+            "Preferences saved. Lesson booking and schedule viewing are available."
+            in (driver.session.last_message.text)
+        )
         other = await registered_teacher(api, 6000000001)
         await driver.text("/start " + other.teacher.code)
         assert "did not change" in driver.session.last_message.text
@@ -243,8 +250,22 @@ async def test_returning_teacher_gets_refreshed_short_invitation(
 
         await driver.text("/start")
         assert "Teacher code: t_NEW123" in driver.session.last_message.text
+        assert "Workdays: Mon - Fri" in driver.session.last_message.text
+        assert "ISO weekdays" not in driver.session.last_message.text
+        assert "Preferences saved." not in driver.session.last_message.text
         invitation = driver.session.last_message.text.split("Student invitation: ")[1]
         assert parse_qs(urlsplit(invitation).query)["start"] == ["t_NEW123"]
+
+        missing_profile_view = view.model_dump(mode="json")
+        missing_profile_view["teacher"] = None
+        home = await screen_data(
+            SimpleNamespace(
+                dialog_data={"view": missing_profile_view},
+                middleware_data={},
+            )
+        )
+        assert "Teacher profile unavailable." in home["home"]
+        assert "Preferences saved." not in home["home"]
     finally:
         await driver.close()
 

@@ -30,6 +30,7 @@ from telegram.api import (
 from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     combine_schedule_date_time,
+    format_duration,
     format_human_date,
     format_human_datetime_in_timezone,
     format_local_interval_in_timezone,
@@ -249,7 +250,7 @@ def _automatic_break_text(
 ) -> str:
     if minutes == 0:
         return f"No automatic break is reserved after {relation}."
-    return f"Autobreak after {relation}: {minutes} minutes."
+    return f"Autobreak after {relation}: {format_duration(minutes)}."
 
 
 def _list_label(item: EventManagementItem, timezone: str) -> str:
@@ -733,6 +734,14 @@ def _duration_seconds(detail: EventManagementDetail) -> int:
     return duration
 
 
+def _format_duration_seconds(duration_seconds: int) -> str:
+    minutes, seconds = divmod(duration_seconds, 60)
+    formatted = format_duration(minutes)
+    if seconds:
+        formatted += f" {seconds} seconds"
+    return formatted
+
+
 def _resolved_interval(
     resolution_data: dict[str, Any], duration_seconds: int
 ) -> tuple[datetime, datetime]:
@@ -761,6 +770,7 @@ def _review_text(manager: DialogManager) -> str:
             f"Move this exact occurrence?\n"
             f"From: {_format_interval(occurrence.start, occurrence.end, data['viewer_timezone'])}\n"
             f"To: {_format_interval(start, end, data['viewer_timezone'])}\n"
+            f"Duration: {_format_duration_seconds(_duration_seconds(detail))}\n"
             "The original weekly occurrence will be cancelled and replaced by "
             "a one-time lesson.\n"
             + _automatic_break_text(
@@ -775,6 +785,7 @@ def _review_text(manager: DialogManager) -> str:
     text = (
         f"Review lesson change for {detail.subject_label}\n"
         f"Lesson time: {_format_interval(start, end, data['viewer_timezone'])}\n"
+        f"Duration: {_format_duration_seconds(_duration_seconds(detail))}\n"
         f"Timezone: {data['viewer_timezone']}"
     )
     text += "\n" + _automatic_break_text(

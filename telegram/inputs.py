@@ -1,4 +1,5 @@
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -20,7 +21,8 @@ _MONTH_NAMES = (
     "December",
 )
 _SHORT_MONTH_NAMES = tuple(month[:3] for month in _MONTH_NAMES)
-_SHORT_WEEKDAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_SHORT_WEEKDAY_NAMES = tuple(name.lower() for name in DAY_NAMES)
 _DATE_PATTERNS = (
     re.compile(
         r"(?P<day>[0-9]{1,2})\s+(?P<month>[0-9]{1,2})(?:\s+(?P<year>[0-9]{4}))?"
@@ -29,6 +31,46 @@ _DATE_PATTERNS = (
     re.compile(r"(?P<day>[0-9]{1,2})/(?P<month>[0-9]{1,2})(?:/(?P<year>[0-9]{4}))?"),
 )
 _SCHEDULE_CLOCK_PATTERN = re.compile(r"[0-9]{1,2}(?::| )[0-9]{1,2}")
+
+
+def format_working_days(days: Sequence[int]) -> str:
+    ordered = sorted(set(days))
+    if any(day < 1 or day > 7 for day in ordered):
+        raise ValueError("Working days must use ISO weekday numbers from 1 to 7.")
+    if not ordered:
+        return "None"
+
+    ranges: list[tuple[int, int]] = []
+    start = end = ordered[0]
+    for day in ordered[1:]:
+        if day == end + 1:
+            end = day
+        else:
+            ranges.append((start, end))
+            start = end = day
+    ranges.append((start, end))
+
+    labels: list[str] = []
+    for start, end in ranges:
+        if end - start >= 2:
+            labels.append(f"{DAY_NAMES[start - 1]} - {DAY_NAMES[end - 1]}")
+        else:
+            labels.extend(DAY_NAMES[day - 1] for day in range(start, end + 1))
+    return ", ".join(labels)
+
+
+def format_duration(minutes: int) -> str:
+    if minutes < 0:
+        raise ValueError("Duration cannot be negative.")
+    hours, remaining_minutes = divmod(minutes, 60)
+    parts = []
+    if hours:
+        parts.append(f"{hours} {'hour' if hours == 1 else 'hours'}")
+    if remaining_minutes or not hours:
+        parts.append(
+            f"{remaining_minutes} {'minute' if remaining_minutes == 1 else 'minutes'}"
+        )
+    return " ".join(parts)
 
 
 @dataclass(frozen=True)

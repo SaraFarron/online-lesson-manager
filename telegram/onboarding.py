@@ -12,7 +12,13 @@ from aiogram_dialog.widgets.kbd.select import ManagedMultiselect
 from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import BackendClient, BackendError, BackendUnavailable, Registration
-from telegram.inputs import digest_clock, parse_clock, parse_integer, parse_timezone
+from telegram.inputs import (
+    DAY_NAMES,
+    digest_clock,
+    parse_clock,
+    parse_integer,
+    parse_timezone,
+)
 from telegram.invitations import create_teacher_invitation
 
 
@@ -63,7 +69,6 @@ TEACHER_STEPS = (
         "Enter local HH:MM, HH MM or HH/MM, or disable.",
     ),
 )
-DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 STUDENT_STEPS = (
     TEACHER_STEPS[0],
     TEACHER_STEPS[-1],

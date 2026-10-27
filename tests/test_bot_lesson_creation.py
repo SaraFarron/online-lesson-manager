@@ -258,7 +258,7 @@ async def test_failed_optional_student_picker_does_not_block_personal_booking(
         )
 
         await driver.click("One time")
-        assert "Uses the default duration: 60 minutes." in (
+        assert "Uses the default duration: 1 hour." in (
             driver.session.last_message.text
         )
         await driver.text("20/10/2026")
@@ -292,7 +292,7 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
             driver.session.last_message.text
         )
         await driver.click("Weekly")
-        assert "Uses the default duration: 60 minutes." in (
+        assert "Uses the default duration: 1 hour." in (
             driver.session.last_message.text
         )
         await driver.click("Change duration")
@@ -335,7 +335,7 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
             driver.session.last_message.text
         )
         await driver.click("Change duration")
-        await driver.click("Use default (60 min)")
+        await driver.click("Use default (1 hour)")
         assert "Weekly through October 27" in (driver.session.last_message.text)
         await driver.click("Change duration")
         await driver.click("Custom duration")
@@ -483,7 +483,7 @@ async def test_student_books_self_weekly_without_duration_or_subject_forgery(
             for button in row
         ]
         await driver.click("Weekly")
-        assert "Uses the default duration: 60 minutes." in (
+        assert "Uses the default duration: 1 hour." in (
             driver.session.last_message.text
         )
         assert "Change duration" not in [

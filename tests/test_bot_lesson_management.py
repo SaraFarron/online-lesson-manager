@@ -182,6 +182,7 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         await driver.text("11:00")
         assert "Lesson time: November 3" in driver.session.last_message.text
         assert "11:00 - 12:00" in driver.session.last_message.text
+        assert "Duration: 1 hour" in driver.session.last_message.text
         assert "2026-11-03" not in driver.session.last_message.text
         assert "(UTC" not in driver.session.last_message.text
         assert "Autobreak after this lesson: 5 minutes" in (

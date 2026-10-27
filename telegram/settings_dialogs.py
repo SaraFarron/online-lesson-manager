@@ -20,9 +20,14 @@ from telegram.api import (
     StudentProfileUpdate,
     TeacherProfileUpdate,
 )
-from telegram.inputs import digest_clock, parse_clock, parse_integer, parse_timezone
+from telegram.inputs import (
+    DAY_NAMES,
+    digest_clock,
+    parse_clock,
+    parse_integer,
+    parse_timezone,
+)
 
-DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 ACCOUNT_FIELDS = ("timezone", "notification_lessons_today")
 TEACHER_FIELDS = (
     "work_start",
