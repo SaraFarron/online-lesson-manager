@@ -303,12 +303,12 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             try:
                 await teacher_bot.click("Today")
                 teacher_today = teacher_bot.session.last_message.text
-                assert "mon, Oct 19" in teacher_today
+                assert "Mon, Oct 19" in teacher_today
                 assert "NOW" in teacher_today
                 assert "Alice Learner" in teacher_today
                 assert "Bob Learner" in teacher_today
                 assert "Unrelated" not in teacher_today
-                assert teacher_today.count("mon, Oct 19 23:30–tue, Oct 20 1:30") == 1
+                assert teacher_today.count("Mon, Oct 19 23:30–Tue, Oct 20 1:30") == 1
                 day_select_count = sum(
                     statement.lstrip().upper().startswith("SELECT")
                     for statement in statements
@@ -338,10 +338,8 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             assert "Bob Learner" in teacher_week_text
             assert "Unrelated Teacher" not in teacher_week_text
             assert "Unrelated Student" not in teacher_week_text
-            assert teacher_week_text.count("mon, Oct 19 23:30–tue, Oct 20 1:30") == 1
-            assert teacher_week_text.index("NOW") < teacher_week_text.index(
-                "[UPCOMING]"
-            )
+            assert teacher_week_text.count("Mon, Oct 19 23:30–Tue, Oct 20 1:30") == 1
+            assert teacher_week_text.index("NOW") < teacher_week_text.index("⏳")
 
             teacher_token = api.tokens[TEACHER_TG_ID]
             teacher_response = await _raw_schedule(
@@ -436,9 +434,9 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             await alice_bot.click("Today")
             alice_text = alice_bot.session.last_message.text
             assert requests == [("GET", "/api/v1/schedule/day")]
-            assert "sun, Oct 18" in alice_text
+            assert "Sun, Oct 18" in alice_text
             assert "19:00–20:00" in alice_text
-            assert "sun, Oct 18 23:00–mon, Oct 19 0:00" in alice_text
+            assert "Sun, Oct 18 23:00–Mon, Oct 19 0:00" in alice_text
             assert "Alice Learner" not in alice_text
             assert "Bob Learner" not in alice_text
             assert "Teacher Owner" not in alice_text
@@ -448,7 +446,7 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             await bob_bot.click("Today")
             bob_text = bob_bot.session.last_message.text
             assert requests == [("GET", "/api/v1/schedule/day")]
-            assert "sun, Oct 18" in bob_text
+            assert "Sun, Oct 18" in bob_text
             assert "20:00–21:00" in bob_text
             assert "Alice Learner" not in bob_text
             assert "Unrelated Student" not in bob_text
@@ -661,10 +659,10 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
             assert 0 < select_count <= 12
             assert len(initial_pages) > 1
             visible_pages = [_VisibleText().text(page) for page in initial_pages]
-            assert sum(page.count("[UPCOMING]") for page in visible_pages) == 122
+            assert sum(page.count("Long <&> 😀") for page in visible_pages) == 123
             assert sum(page.count("[PAST]") for page in visible_pages) == 1
             assert visible_pages[0].index("[PAST]") < visible_pages[0].index("NOW")
-            assert visible_pages[0].index("NOW") < visible_pages[0].index("[UPCOMING]")
+            assert visible_pages[0].index("NOW") < visible_pages[0].index("⏳")
             assert "1:30 (first occurrence)" in visible_pages[0]
             assert "1:30 (second occurrence)" in visible_pages[0]
             assert all(
@@ -682,7 +680,7 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
                 for line in page.splitlines()
                 if "Long <&>" in line
             )
-            label = row.split(" — ", maxsplit=1)[1].rsplit("  [", maxsplit=1)[0]
+            label = row.split(" — ", maxsplit=1)[1].rsplit("  ", maxsplit=1)[0]
             assert len(label) == MAX_LABEL_CODEPOINTS
             assert "&lt;&amp;" in initial_pages[0]
             assert len(visible_pages) > 1
@@ -710,7 +708,7 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
             assert requests == [("GET", "/api/v1/schedule/week")]
             assert len(week_pages) > 1
             week_text = [_VisibleText().text(page) for page in week_pages]
-            assert sum(page.count("[UPCOMING]") for page in week_text) == 122
+            assert sum(page.count("Long <&> 😀") for page in week_text) == 123
             assert sum(page.count("[PAST]") for page in week_text) == 1
             assert sum(page.count("No events") for page in week_text) == 6
             assert all(

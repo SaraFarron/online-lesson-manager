@@ -234,8 +234,9 @@ async def test_teacher_books_student_and_omits_default_duration(
         assert "end" not in body
         assert body["user_id"] == str(student.id)
         assert "Alice Learner" in driver.session.last_message.text
-        assert "tue, Oct 20" in driver.session.last_message.text
-        assert "Automatic break (read-only)" in driver.session.last_message.text
+        assert "Tue, Oct 20" in driver.session.last_message.text
+        assert "Automatic break" in driver.session.last_message.text
+        assert "(read-only)" not in driver.session.last_message.text
     finally:
         await _close_bot(driver, http)
 
@@ -376,7 +377,7 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         assert (series[0].end - series[0].start).total_seconds() == 45 * 60
         assert series[0].interval_end == datetime(2026, 11, 6)
         assert "Personal lesson" in driver.session.last_message.text
-        assert "thu, Oct 29" in driver.session.last_message.text
+        assert "Thu, Oct 29" in driver.session.last_message.text
         create_request = next(
             request
             for request in requests
@@ -737,7 +738,7 @@ async def test_lost_create_response_requires_schedule_reload_without_retry(
         ]
         assert len(create_requests) == 1
         assert "Alice Learner" in driver.session.last_message.text
-        assert "tue, Oct 20" in driver.session.last_message.text
+        assert "Tue, Oct 20" in driver.session.last_message.text
         _assert_no_schedule_refresh(driver)
     finally:
         await _close_bot(driver, http)

@@ -44,14 +44,12 @@ async def test_registered_teacher_can_navigate_and_reopen_in_place(
         await _register_teacher(driver, api)
         view = await api.view(driver.user_id, driver.user_id)
         message_id = driver.session.last_message.message_id
-        assert "Lesson booking and schedule viewing are available" in (
-            driver.session.last_message.text
-        )
-        assert "Notifications are not active yet" in driver.session.last_message.text
+        assert "Work hours: 09:00–18:00" in driver.session.last_message.text
+        assert "Workdays: Mon - Fri" in driver.session.last_message.text
 
         await driver.click("Today")
         _assert_no_refresh(driver)
-        assert "mon, Oct 19" in driver.session.last_message.text
+        assert "Mon, Oct 19" in driver.session.last_message.text
         assert "No events" in driver.session.last_message.text
         assert driver.session.last_message.message_id == message_id
 
@@ -75,12 +73,11 @@ async def test_registered_teacher_can_navigate_and_reopen_in_place(
         now[0] = datetime(2026, 10, 20, 0, 1, tzinfo=UTC)
         await driver.click("Today")
         _assert_no_refresh(driver)
-        assert "tue, Oct 20" in driver.session.last_message.text
-        assert "Updated tue, Oct 20 at 0:01" in driver.session.last_message.text
+        assert "Tue, Oct 20" in driver.session.last_message.text
+        assert "Updated Tue, Oct 20 at 0:01" in driver.session.last_message.text
         assert "Personal lesson" in driver.session.last_message.text
-        assert "10:00–10:05  Automatic break (read-only)  [UPCOMING]" in (
-            driver.session.last_message.text
-        )
+        assert "10:00–10:05  Automatic break  ⏳" in (driver.session.last_message.text)
+        assert "(read-only)" not in driver.session.last_message.text
         assert "No events" not in driver.session.last_message.text
 
         db_session.add(
@@ -95,14 +92,13 @@ async def test_registered_teacher_can_navigate_and_reopen_in_place(
         await db_session.commit()
         await driver.click("Back to home")
         assert "TEACHER:" in driver.session.last_message.text
-        assert "Lesson booking and schedule viewing are available" in (
-            driver.session.last_message.text
-        )
+        assert "Work hours: 09:00–18:00" in driver.session.last_message.text
         assert driver.session.last_message.message_id == message_id
         await driver.click("Today")
         assert "Today's schedule" in driver.session.last_message.text
         assert "Personal lesson" in driver.session.last_message.text
-        assert "Automatic break (read-only)" in driver.session.last_message.text
+        assert "Automatic break" in driver.session.last_message.text
+        assert "(read-only)" not in driver.session.last_message.text
         assert "11:00–12:00" in driver.session.last_message.text
         _assert_no_refresh(driver)
 
@@ -302,18 +298,18 @@ async def test_teacher_and_student_can_navigate_selected_week_with_fresh_data(
                 message_id = driver.session.last_message.message_id
                 await driver.click("This week")
                 _assert_no_refresh(driver)
-                assert "mon, Oct 19" in (driver.session.last_message.text)
+                assert "Mon, Oct 19" in (driver.session.last_message.text)
                 assert driver.callback_data("◀ Previous week")
                 assert driver.callback_data("Next week ▶")
 
                 await driver.click("◀ Previous week")
-                assert "mon, Oct 12" in driver.session.last_message.text
+                assert "Mon, Oct 12" in driver.session.last_message.text
                 if index == 0:
                     assert "No events" in driver.session.last_message.text
                 await driver.click("Next week ▶")
-                assert "mon, Oct 19" in driver.session.last_message.text
+                assert "Mon, Oct 19" in driver.session.last_message.text
                 await driver.click("◀ Previous week")
-                assert "mon, Oct 12" in driver.session.last_message.text
+                assert "Mon, Oct 12" in driver.session.last_message.text
                 if index == 0:
                     db_session.add(
                         Event(
@@ -328,7 +324,7 @@ async def test_teacher_and_student_can_navigate_selected_week_with_fresh_data(
                 await driver.click("Next week ▶")
                 await driver.click("◀ Previous week")
                 _assert_no_refresh(driver)
-                assert "mon, Oct 12" in driver.session.last_message.text
+                assert "Mon, Oct 12" in driver.session.last_message.text
                 assert "9:00–10:00" in driver.session.last_message.text
                 assert driver.session.last_message.message_id == message_id
 

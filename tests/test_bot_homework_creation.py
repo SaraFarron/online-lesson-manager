@@ -274,17 +274,17 @@ async def test_assignment_can_link_exact_upcoming_lesson_occurrence(
         await _open_assignment(driver, "Alice Learner")
         await driver.text("Prepare for the lesson")
         await driver.click("Link or change lesson")
-        assert "Week: mon, Nov 4 – sun, Nov 10" in driver.session.last_message.text
+        assert "Week: Mon, Nov 4 – Sun, Nov 10" in driver.session.last_message.text
         assert "Timezone: UTC" in driver.session.last_message.text
         assert "Options " not in driver.session.last_message.text
         lesson_choice = next(
             button.text
             for row in driver.session.last_message.reply_markup.inline_keyboard
             for button in row
-            if "tue, Nov 5 9:00 (event)" in button.text
+            if "Tue, Nov 5 9:00 (event)" in button.text
         )
         await driver.click(lesson_choice)
-        assert "tue, Nov 5 9:00 (event)" in driver.session.last_message.text
+        assert "Tue, Nov 5 9:00 (event)" in driver.session.last_message.text
         assert "2030-11-05" not in driver.session.last_message.text
         assert "(UTC" not in driver.session.last_message.text
         await driver.click("Review")
@@ -324,7 +324,7 @@ async def test_assignment_can_link_exact_upcoming_lesson_occurrence(
             button.text
             for row in driver.session.last_message.reply_markup.inline_keyboard
             for button in row
-            if "tue, Nov 5 11:00 (recurrent event)" in button.text
+            if "Tue, Nov 5 11:00 (recurrent event)" in button.text
         )
         await driver.click(recurring_choice)
         await driver.click("Review")
@@ -385,15 +385,15 @@ async def test_lesson_picker_fallback_week_label_and_week_navigation(
         await driver.text("/start")
         await _open_assignment(driver, "Alice Learner")
         await driver.click("Link or change lesson")
-        assert "Week: mon, Nov 4 – sun, Nov 10" in driver.session.last_message.text
+        assert "Week: Mon, Nov 4 – Sun, Nov 10" in driver.session.last_message.text
         assert "No upcoming lessons" not in driver.session.last_message.text
         assert "2030-11-" not in driver.session.last_message.text
         assert "Options " not in driver.session.last_message.text
 
         await driver.click("Later week")
-        assert "Week: mon, Nov 11 – sun, Nov 17" in driver.session.last_message.text
+        assert "Week: Mon, Nov 11 – Sun, Nov 17" in driver.session.last_message.text
         await driver.click("Earlier week")
-        assert "Week: mon, Nov 4 – sun, Nov 10" in driver.session.last_message.text
+        assert "Week: Mon, Nov 4 – Sun, Nov 10" in driver.session.last_message.text
     finally:
         await _close_driver(driver, http)
 
@@ -435,7 +435,7 @@ async def test_lesson_picker_option_pagination_stays_bounded_without_page_count(
         await driver.text("/start")
         await _open_assignment(driver, "Alice Learner")
         await driver.click("Link or change lesson")
-        assert "Week: mon, Nov 4 – sun, Nov 10" in driver.session.last_message.text
+        assert "Week: Mon, Nov 4 – Sun, Nov 10" in driver.session.last_message.text
         assert "Options " not in driver.session.last_message.text
         option_labels = [
             button.text
@@ -444,7 +444,7 @@ async def test_lesson_picker_option_pagination_stays_bounded_without_page_count(
             if button.text.endswith("(event)")
         ]
         assert len(option_labels) == 10
-        assert "tue, Nov 5 8:00 (event)" in option_labels
+        assert "Tue, Nov 5 8:00 (event)" in option_labels
 
         await driver.click("Next options")
         next_page_labels = [
@@ -453,7 +453,7 @@ async def test_lesson_picker_option_pagination_stays_bounded_without_page_count(
             for button in row
             if button.text.endswith("(event)")
         ]
-        assert next_page_labels == ["tue, Nov 5 18:00 (event)"]
+        assert next_page_labels == ["Tue, Nov 5 18:00 (event)"]
         assert "Options " not in driver.session.last_message.text
 
         await driver.click("Previous options")
@@ -465,7 +465,7 @@ async def test_lesson_picker_option_pagination_stays_bounded_without_page_count(
         ]
         assert len(first_page_labels) == 10
         await driver.click(first_page_labels[0])
-        assert "Lesson: tue, Nov 5 8:00 (event)" in driver.session.last_message.text
+        assert "Lesson: Tue, Nov 5 8:00 (event)" in driver.session.last_message.text
     finally:
         await _close_driver(driver, http)
 

@@ -180,11 +180,11 @@ def test_human_datetime_helpers_keep_dates_compact_and_years_unambiguous() -> No
     )
     assert (
         format_compact_schedule_date(date(2026, 11, 5), reference_date=reference_date)
-        == "thu, Nov 5"
+        == "Thu, Nov 5"
     )
     assert (
         format_compact_schedule_date(date(2027, 11, 5), reference_date=reference_date)
-        == "fri, Nov 5 (2027)"
+        == "Fri, Nov 5 (2027)"
     )
 
 

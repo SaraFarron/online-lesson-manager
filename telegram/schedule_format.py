@@ -19,8 +19,8 @@ _EVENT_LABELS = {
     "VACATION": "Vacation",
 }
 _AUTOMATIC_BREAK_LABELS: dict[ViewerRole, str] = {
-    "TEACHER": "Automatic break (read-only)",
-    "STUDENT": "Teacher's automatic break (read-only)",
+    "TEACHER": "Automatic break",
+    "STUDENT": "Teacher's automatic break",
 }
 
 
@@ -175,11 +175,9 @@ def _render_item(
         subject = f" — {safe_label}"
         markup_subject = f" — {escape(safe_label, quote=False)}"
 
-    status = item.status.upper()
-    plain = f"{interval}  {event_label}{subject}  [{status}]"
-    markup = (
-        f"{escape(interval, quote=False)}  {event_label}{markup_subject}  [{status}]"
-    )
+    status = "⏳" if item.status == "upcoming" else f"[{item.status.upper()}]"
+    plain = f"{interval}  {event_label}{subject}  {status}"
+    markup = f"{escape(interval, quote=False)}  {event_label}{markup_subject}  {status}"
     return _TextLine(markup, plain)
 
 

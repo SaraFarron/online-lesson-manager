@@ -22,7 +22,6 @@ _MONTH_NAMES = (
 )
 _SHORT_MONTH_NAMES = tuple(month[:3] for month in _MONTH_NAMES)
 DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-_SHORT_WEEKDAY_NAMES = tuple(name.lower() for name in DAY_NAMES)
 _DATE_PATTERNS = (
     re.compile(
         r"(?P<day>[0-9]{1,2})\s+(?P<month>[0-9]{1,2})(?:\s+(?P<year>[0-9]{4}))?"
@@ -151,7 +150,7 @@ def format_human_time(value: datetime) -> str:
 def format_compact_schedule_date(value: date, *, reference_date: date) -> str:
     year = f" ({value.year})" if value.year != reference_date.year else ""
     return (
-        f"{_SHORT_WEEKDAY_NAMES[value.weekday()]}, "
+        f"{DAY_NAMES[value.weekday()]}, "
         f"{_SHORT_MONTH_NAMES[value.month - 1]} {value.day}{year}"
     )
 
