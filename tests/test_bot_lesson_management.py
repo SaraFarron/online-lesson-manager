@@ -99,6 +99,7 @@ async def _make_bot(
     telegram_id: int,
     *,
     lose_update_response: bool = False,
+    occurrence_detail_failure: bool = False,
 ) -> tuple[BotDriver, httpx.AsyncClient, list[httpx.Request]]:
     requests: list[httpx.Request] = []
     lost_response = False
@@ -106,6 +107,12 @@ async def _make_bot(
     async def forward(request: httpx.Request) -> httpx.Response:
         nonlocal lost_response
         requests.append(request)
+        if (
+            occurrence_detail_failure
+            and request.method == "GET"
+            and request.url.params.get("occurrence_start") is not None
+        ):
+            return httpx.Response(503, json={"detail": "Occurrence unavailable."})
         response = await client.send(request)
         if (
             lose_update_response
@@ -179,7 +186,9 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         await driver.text("03/11/2026")
         assert driver.deleted_message_ids()[-1] == date_message_id
         assert driver.session.last_message.message_id == screen_message_id
+        time_message_id = driver.update_id + 1
         await driver.text("11:00")
+        assert driver.deleted_message_ids()[-1] == time_message_id
         assert "Lesson time: November 3" in driver.session.last_message.text
         assert "11:00 - 12:00" in driver.session.last_message.text
         assert "Duration: 1 hour" in driver.session.last_message.text
@@ -356,20 +365,26 @@ async def test_student_can_move_and_cancel_own_occurrences_with_break_feedback(
         assert "Series end (inclusive): No end" in driver.session.last_message.text
         await driver.click("Inspect occurrence")
         await driver.text("01/11/2027")
+        inspect_time_message_id = driver.update_id + 1
         await driver.text("10:00")
+        assert driver.deleted_message_ids()[-1] == inspect_time_message_id
         assert "(visible)" in driver.session.last_message.text
         await driver.click("Clear occurrence selection")
 
         await driver.click("Inspect occurrence")
         await driver.text("16/11/2026")
+        inspect_time_message_id = driver.update_id + 1
         await driver.text("10:00")
+        assert driver.deleted_message_ids()[-1] == inspect_time_message_id
         assert "Autobreak after this occurrence: 5 minutes" in (
             driver.session.last_message.text
         )
 
         await driver.click("Move this occurrence")
         await driver.text("16/11/2026")
+        move_time_message_id = driver.update_id + 1
         await driver.text("12:00")
+        assert driver.deleted_message_ids()[-1] == move_time_message_id
         assert "Autobreak after replacement lesson: 5 minutes" in (
             driver.session.last_message.text
         )
@@ -635,6 +650,36 @@ async def test_cancelled_occurrence_selector_is_paged(
         assert "January 18" in driver.session.last_message.text
         assert "Cancelled occurrences: 11" in driver.session.last_message.text
         assert "(cancelled)" in driver.session.last_message.text
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_inspection_time_is_not_deleted_when_occurrence_read_fails(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    series = _series(teacher, student)
+    db_session.add(series)
+    await db_session.commit()
+    _freeze_schedule_clock(monkeypatch)
+    driver, http, _ = await _make_bot(
+        client,
+        bot_service_key,
+        _telegram_id(student),
+        occurrence_detail_failure=True,
+    )
+    try:
+        await _open_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Inspect occurrence")
+        await driver.text("16/11/2026")
+        existing_deletions = driver.deleted_message_ids()
+        time_message_id = driver.update_id + 1
+        await driver.text("10:00")
+
+        assert driver.deleted_message_ids() == existing_deletions
+        assert time_message_id not in driver.deleted_message_ids()
+        assert "Backend unavailable." in driver.session.last_message.text
     finally:
         await _close_bot(driver, http)
 

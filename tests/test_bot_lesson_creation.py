@@ -87,6 +87,7 @@ async def _make_bot(
     lose_write_response: bool = False,
     schedule_change_conflict: bool = False,
     student_picker_failure: bool = False,
+    resolution_failure_status: int | None = None,
 ) -> tuple[BackendClient, BotDriver, httpx.AsyncClient, list[httpx.Request]]:
     requests: list[httpx.Request] = []
     lost_response = False
@@ -113,6 +114,15 @@ async def _make_bot(
             and request.url.path == "/api/v1/auth/teacher/students"
         ):
             return httpx.Response(503, json={"detail": "Student picker unavailable."})
+        if (
+            resolution_failure_status is not None
+            and request.method == "POST"
+            and request.url.path == "/api/v1/events/resolve-local-time"
+        ):
+            return httpx.Response(
+                resolution_failure_status,
+                json={"detail": "Local interval resolution rejected."},
+            )
         response = await client.send(request)
         if (
             lose_write_response
@@ -396,7 +406,11 @@ async def test_teacher_books_student_weekly_with_no_end_by_default(
         await driver.click("Alice Learner")
         await driver.click("Weekly")
         await driver.text("20/10/2026")
+        time_message_id = driver.update_id + 1
+        screen_message_id = driver.session.last_message.message_id
         await driver.text("10:00")
+        assert driver.deleted_message_ids()[-1] == time_message_id
+        assert driver.session.last_message.message_id == screen_message_id
         assert "Weekly recurrence with No end" in driver.session.last_message.text
         await driver.click("Create lesson")
 
@@ -410,6 +424,109 @@ async def test_teacher_books_student_weekly_with_no_end_by_default(
             and request.url.path == "/api/v1/recurrent-lessons/"
         )
         assert json.loads(create_request.content)["interval_end"] is None
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_lesson_time_cleanup_reports_expected_deletion_failure(
+    client, db_session, bot_service_key, monkeypatch, caplog
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
+    )
+    _, driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        await driver.click("One time")
+        await driver.text("21/10/2026")
+        accepted_message_id = driver.update_id + 1
+        screen_message_id = driver.session.last_message.message_id
+        driver.session.delete_failure = "Bad Request: message to delete not found"
+        await driver.text("10:00")
+
+        assert accepted_message_id in driver.deleted_message_ids()
+        assert driver.session.last_message.message_id == screen_message_id
+        assert "Time accepted, but Telegram could not remove your message." in (
+            driver.session.last_message.text
+        )
+        assert "10:00 - 11:00" in driver.session.last_message.text
+        assert driver.callback_data("Create lesson")
+        assert "Could not delete accepted time input" in caplog.text
+    finally:
+        await _close_bot(driver, http)
+
+
+@pytest.mark.parametrize("failure_status", [422, 503])
+async def test_invalid_or_backend_rejected_lesson_times_are_not_deleted(
+    client, db_session, bot_service_key, monkeypatch, failure_status
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    teacher.timezone = "America/New_York"
+    await db_session.commit()
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
+    )
+    _, driver, http, _ = await _make_bot(
+        client,
+        bot_service_key,
+        _telegram_id(teacher),
+        resolution_failure_status=failure_status,
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        await driver.click("One time")
+        await driver.text("16/03/2027")
+        initial_deletions = driver.deleted_message_ids()
+
+        invalid_message_id = driver.update_id + 1
+        await driver.text("25:61")
+        assert driver.deleted_message_ids() == initial_deletions
+        assert "hour must be 0–23" in driver.session.last_message.text.lower()
+
+        rejected_message_id = driver.update_id + 1
+        await driver.text("10:00")
+        assert driver.deleted_message_ids() == initial_deletions
+        assert invalid_message_id not in driver.deleted_message_ids()
+        assert rejected_message_id not in driver.deleted_message_ids()
+        expected_error = (
+            "Check the date, time, and selected student."
+            if failure_status == 422
+            else "Backend unavailable."
+        )
+        assert expected_error in driver.session.last_message.text
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_dst_gap_lesson_time_is_deleted_after_backend_resolution(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    teacher.timezone = "America/New_York"
+    await db_session.commit()
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
+    )
+    _, driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        await driver.click("One time")
+        await driver.text("14/03/2027")
+        time_message_id = driver.update_id + 1
+        await driver.text("02:30")
+
+        assert driver.deleted_message_ids()[-1] == time_message_id
+        assert "3:30 - 4:30" in driver.session.last_message.text
     finally:
         await _close_bot(driver, http)
 

@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message
@@ -12,8 +13,10 @@ _EXPECTED_DELETE_FAILURES = (
 )
 
 
-async def delete_accepted_date_message(
-    message: Message, manager: DialogManager
+async def delete_accepted_input_message(
+    message: Message,
+    manager: DialogManager,
+    input_type: Literal["date", "time"],
 ) -> bool:
     try:
         await message.delete()
@@ -23,16 +26,23 @@ async def delete_accepted_date_message(
             raise
 
         logger.warning(
-            "Could not delete accepted date input (chat_id=%s, message_id=%s): %s",
+            "Could not delete accepted %s input (chat_id=%s, message_id=%s): %s",
+            input_type,
             message.chat.id,
             message.message_id,
             exc,
         )
         notice = (
-            "Date accepted, but Telegram could not remove your message. "
+            f"{input_type.title()} accepted, but Telegram could not remove your message. "
             "Delete it manually if needed."
         )
         current = manager.dialog_data.get("error")
         manager.dialog_data["error"] = f"{current}\n{notice}" if current else notice
         return False
     return True
+
+
+async def delete_accepted_date_message(
+    message: Message, manager: DialogManager
+) -> bool:
+    return await delete_accepted_input_message(message, manager, "date")

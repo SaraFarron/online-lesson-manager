@@ -24,7 +24,10 @@ from telegram.api import (
     SessionView,
     StudentPickerPage,
 )
-from telegram.date_cleanup import delete_accepted_date_message
+from telegram.date_cleanup import (
+    delete_accepted_date_message,
+    delete_accepted_input_message,
+)
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
@@ -552,9 +555,11 @@ async def start_time_input(
                     "Choose a later end date or change the start."
                 ),
             )
+            await delete_accepted_input_message(message, manager, "time")
             await manager.switch_to(LessonScreens.cutoff_date, show_mode=ShowMode.EDIT)
             return
     manager.dialog_data["cutoff_invalid"] = False
+    await delete_accepted_input_message(message, manager, "time")
     await manager.switch_to(LessonScreens.review, show_mode=ShowMode.EDIT)
 
 

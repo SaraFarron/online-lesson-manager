@@ -27,7 +27,10 @@ from telegram.api import (
     RecurrentOccurrenceMovePayload,
     SessionView,
 )
-from telegram.date_cleanup import delete_accepted_date_message
+from telegram.date_cleanup import (
+    delete_accepted_date_message,
+    delete_accepted_input_message,
+)
 from telegram.inputs import (
     combine_schedule_date_time,
     format_duration,
@@ -689,6 +692,7 @@ async def time_input(
             needs_reload=False,
             outcome_unknown=False,
         )
+        await delete_accepted_input_message(message, manager, "time")
         await manager.switch_to(LessonManagementScreens.detail, show_mode=ShowMode.EDIT)
         return
     if action == "edit":
@@ -705,17 +709,22 @@ async def time_input(
             )
             if detail.interval_end is not None and detail.interval_end <= start:
                 await _open_cutoff_editor(manager, detail, detail.interval_end)
+                if not await delete_accepted_input_message(message, manager, "time"):
+                    await manager.show(show_mode=ShowMode.EDIT)
                 return
+            await delete_accepted_input_message(message, manager, "time")
             await manager.switch_to(
                 LessonManagementScreens.review, show_mode=ShowMode.EDIT
             )
         else:
+            await delete_accepted_input_message(message, manager, "time")
             await manager.switch_to(
                 LessonManagementScreens.review, show_mode=ShowMode.EDIT
             )
         return
     if action == "move":
         manager.dialog_data["move_resolution"] = resolution.model_dump(mode="json")
+        await delete_accepted_input_message(message, manager, "time")
         await manager.switch_to(LessonManagementScreens.review, show_mode=ShowMode.EDIT)
         return
     raise ValueError("Unsupported event management action")
