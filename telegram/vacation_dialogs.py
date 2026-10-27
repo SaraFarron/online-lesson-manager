@@ -24,6 +24,7 @@ from telegram.api import (
     SessionView,
 )
 from telegram.date_cleanup import delete_accepted_date_message
+from telegram.feedback import feedback_block
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
@@ -73,6 +74,7 @@ async def open_vacation_management(
             "total": 0,
             "detail": None,
             "error": "",
+            "warning": "",
             "notice": "",
             "form_action": None,
             "start_date": None,
@@ -149,6 +151,7 @@ async def _load_page(
             items=[item.model_dump(mode="json") for item in page.items],
             total=page.total,
             error="",
+            warning="",
         )
     await manager.switch_to(VacationScreens.events, show_mode=ShowMode.EDIT)
 
@@ -554,7 +557,10 @@ async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             str(data.get("subject_label") or "the selected person")
         ),
         "review": escape(interval),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "is_create": data.get("form_action") == "create",
         "can_submit": (
@@ -633,16 +639,19 @@ async def submit_vacation(
             revision=revision,
         )
     except BackendOutcomeUnknown:
+        warning = (
+            "The save result is unknown. Current vacations are reloaded; "
+            "the write will not be repeated."
+        )
         data.update(
             submitting=False,
             outcome_unknown=True,
-            notice=(
-                "The save result is unknown. Current vacations are reloaded; "
-                "the write will not be repeated."
-            ),
             error="",
+            warning="",
+            notice="",
         )
         await _load_page(callback, manager, int(data.get("skip", 0)))
+        manager.dialog_data["warning"] = warning
         return
     except BackendError as exc:
         stale = exc.code == "stale_event_revision" or exc.status == 409
@@ -672,6 +681,7 @@ async def submit_vacation(
         needs_reload=False,
         notice="Vacation updated." if method == "PUT" else "Vacation created.",
         error="",
+        warning="",
     )
     if method == "PUT":
         await _reload_detail(callback, manager)
@@ -714,15 +724,18 @@ async def confirm_delete(
             revision=detail.revision,
         )
     except BackendOutcomeUnknown:
+        warning = (
+            "The delete result is unknown. Current vacations are reloaded; "
+            "the delete will not be repeated."
+        )
         data.update(
             submitting=False,
             outcome_unknown=True,
-            notice=(
-                "The delete result is unknown. Current vacations are reloaded; "
-                "the delete will not be repeated."
-            ),
+            warning="",
+            notice="",
         )
         await _load_page(callback, manager, int(data.get("skip", 0)))
+        manager.dialog_data["warning"] = warning
         return
     except BackendError as exc:
         stale = exc.code == "stale_event_revision" or exc.status == 409
@@ -770,7 +783,12 @@ async def _reload_detail(callback: CallbackQuery, manager: DialogManager) -> Non
             old_detail.id,
         )
     except (BackendError, BackendUnavailable) as exc:
-        data.update(error=str(exc), needs_reload=True)
+        data.update(
+            error=str(exc),
+            needs_reload=True,
+            warning="The vacation was saved, but fresh details could not be loaded.",
+            notice="",
+        )
         await manager.switch_to(VacationScreens.detail, show_mode=ShowMode.EDIT)
         return
     data.update(
@@ -778,6 +796,7 @@ async def _reload_detail(callback: CallbackQuery, manager: DialogManager) -> Non
         needs_reload=False,
         outcome_unknown=False,
         error="",
+        warning="",
     )
     await manager.switch_to(VacationScreens.detail, show_mode=ShowMode.EDIT)
 
@@ -817,7 +836,10 @@ async def return_home(
 
 async def menu_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     return {
-        "error": escape(str(dialog_manager.dialog_data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(dialog_manager.dialog_data.get("error", "")),
+            warning=str(dialog_manager.dialog_data.get("warning", "")),
+        ),
         "notice": escape(str(dialog_manager.dialog_data.get("notice", ""))),
     }
 
@@ -834,7 +856,10 @@ async def list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
         ],
         "empty_state": "No vacations." if total == 0 else "",
         "timezone": escape(data["viewer_timezone"]),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
@@ -856,7 +881,10 @@ async def subject_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any
             if total
             else "No students are linked to this teacher."
         ),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
     }
@@ -876,7 +904,10 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             f"Timezone: {timezone}\n"
             "This vacation hides overlapping schedule events without deleting them."
         ),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "can_manage": not data.get("needs_reload") and not data.get("outcome_unknown"),
         "can_reload": bool(data.get("needs_reload") or data.get("outcome_unknown")),
@@ -890,7 +921,10 @@ async def delete_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             "Lessons deleted or cancelled by an earlier confirmed break will not "
             "be restored."
         ),
-        "error": escape(str(dialog_manager.dialog_data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(dialog_manager.dialog_data.get("error", "")),
+            warning=str(dialog_manager.dialog_data.get("warning", "")),
+        ),
         "can_confirm": not dialog_manager.dialog_data.get("submitting")
         and not dialog_manager.dialog_data.get("needs_reload")
         and not dialog_manager.dialog_data.get("outcome_unknown"),
@@ -906,7 +940,10 @@ async def date_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     )
     return {
         "prompt": f"{prompt} as DD MM, DD:MM or DD/MM, optionally with a year.",
-        "error": escape(str(dialog_manager.dialog_data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(dialog_manager.dialog_data.get("error", "")),
+            warning=str(dialog_manager.dialog_data.get("warning", "")),
+        ),
     }
 
 
@@ -915,7 +952,10 @@ async def timezone_error_data(
 ) -> dict[str, Any]:
     return {
         "timezone": escape(dialog_manager.dialog_data["viewer_timezone"]),
-        "error": escape(str(dialog_manager.dialog_data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(dialog_manager.dialog_data.get("error", "")),
+            warning=str(dialog_manager.dialog_data.get("warning", "")),
+        ),
     }
 
 
@@ -924,14 +964,19 @@ async def confirmation_data(dialog_manager: DialogManager, **_: Any) -> dict[str
         "confirmation": escape(
             str(dialog_manager.dialog_data.get("date_confirmation", ""))
         ),
-        "error": escape(str(dialog_manager.dialog_data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(dialog_manager.dialog_data.get("error", "")),
+            warning=str(dialog_manager.dialog_data.get("warning", "")),
+        ),
     }
 
 
 def build_vacation_dialog() -> Dialog:
     return Dialog(
         Window(
-            Const("Vacations hide overlapping events but do not delete them."),
+            Format(
+                "{feedback}Vacations hide overlapping events but do not delete them."
+            ),
             Button(Const("Vacation list"), id="list", on_click=open_vacation_list),
             Button(Const("Add vacation"), id="add", on_click=begin_create),
             Button(Const("Back to home"), id="home", on_click=return_home),
@@ -939,7 +984,7 @@ def build_vacation_dialog() -> Dialog:
             getter=menu_data,
         ),
         Window(
-            Format("{page}\n{error}"),
+            Format("{feedback}{page}"),
             Select(
                 Format("{item[0]}"),
                 id="student",
@@ -971,7 +1016,7 @@ def build_vacation_dialog() -> Dialog:
             getter=subject_data,
         ),
         Window(
-            Format("{empty_state}\n{notice}\n{error}\nTimezone: {timezone}"),
+            Format("{feedback}{empty_state}\n{notice}\nTimezone: {timezone}"),
             Select(
                 Format("{item[0]}"),
                 id="vacation",
@@ -1008,7 +1053,7 @@ def build_vacation_dialog() -> Dialog:
             getter=list_data,
         ),
         Window(
-            Format("{detail_text}\n{notice}\n{error}"),
+            Format("{feedback}{detail_text}\n{notice}"),
             Button(
                 Const("Edit vacation"),
                 id="edit",
@@ -1032,7 +1077,7 @@ def build_vacation_dialog() -> Dialog:
             getter=detail_data,
         ),
         Window(
-            Format("{prompt}\n{error}"),
+            Format("{feedback}{prompt}"),
             TextInput(
                 "start_date",
                 on_success=start_date_input,
@@ -1043,7 +1088,7 @@ def build_vacation_dialog() -> Dialog:
             getter=date_data,
         ),
         Window(
-            Format("{confirmation}\nConfirm this inferred next-year date.\n{error}"),
+            Format("{feedback}{confirmation}\nConfirm this inferred next-year date."),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_date),
             Button(Const("Change date"), id="change", on_click=change_date),
             state=VacationScreens.confirm_date,
@@ -1051,8 +1096,8 @@ def build_vacation_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the local start time as HH:MM or HH MM.\n"
-                "Timezone: {timezone}\n{error}"
+                "{feedback}Enter the local start time as HH:MM or HH MM.\n"
+                "Timezone: {timezone}"
             ),
             TextInput(
                 "start_time",
@@ -1065,9 +1110,8 @@ def build_vacation_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{prompt}\n"
+                "{feedback}{prompt}\n"
                 "The vacation ends at local midnight after this date.\n"
-                "{error}"
             ),
             TextInput("end_date", on_success=end_date_input, on_error=date_input_error),
             Button(Const("Cancel"), id="cancel", on_click=back_to_menu),
@@ -1076,8 +1120,8 @@ def build_vacation_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Review vacation for {subject_label}\n{review}\n"
-                "Overlapping events are hidden, not erased.\n{notice}\n{error}"
+                "{feedback}Review vacation for {subject_label}\n{review}\n"
+                "Overlapping events are hidden, not erased.\n{notice}"
             ),
             Button(
                 Const("Save vacation"),
@@ -1114,7 +1158,7 @@ def build_vacation_dialog() -> Dialog:
             getter=review_data,
         ),
         Window(
-            Format("{warning}\n{error}"),
+            Format("{feedback}{warning}"),
             Button(
                 Const("Confirm delete"),
                 id="confirm",

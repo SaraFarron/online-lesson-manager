@@ -461,7 +461,14 @@ async def test_student_creates_own_vacation_and_unknown_create_is_not_replayed(
             start_time="09:30",
             end_date="05/11/2030",
         )
-        assert "result is unknown" in driver.session.last_message.text
+        unknown = (
+            "The save result is unknown. Current vacations are reloaded; "
+            "the write will not be repeated."
+        )
+        assert driver.session.last_message.text.startswith(
+            f"<b>⚠️ Attention</b>\n{unknown}\n\n"
+        )
+        assert driver.session.last_message.text.count(unknown) == 1
         vacation = (
             await db_session.execute(
                 select(Event).where(Event.event_type == EventType.VACATION.value)

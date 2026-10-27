@@ -866,7 +866,14 @@ async def test_lost_break_create_response_is_not_replayed(
             end_time="10:30",
         )
         await driver.click("Save break")
-        assert "outcome is unknown" in driver.session.last_message.text
+        unknown = (
+            "The save outcome is unknown. Reload the latest data before trying "
+            "again; do not repeat the action."
+        )
+        assert driver.session.last_message.text.startswith(
+            f"<b>⚠️ Attention</b>\n{unknown}\n\n"
+        )
+        assert driver.session.last_message.text.count(unknown) == 1
         assert (
             len(
                 (
@@ -882,6 +889,9 @@ async def test_lost_break_create_response_is_not_replayed(
             == 1
         )
         await driver.click("Reload")
+        assert driver.session.last_message.text.startswith(
+            "<b>⚠️ Attention</b>\nThe break list was reloaded."
+        )
         assert "check it before retrying" in driver.session.last_message.text.casefold()
         assert (
             sum(

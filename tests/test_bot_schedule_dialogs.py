@@ -147,6 +147,10 @@ async def test_schedule_outage_offers_navigation_recovery_without_stale_rows(
             offline[0] = True
             await driver.click("This week")
             error_text = driver.session.last_message.text
+            assert error_text.startswith(
+                "<b>❌ Error</b>\nSchedule is unavailable right now.\n\n"
+            )
+            assert len(error_text.encode("utf-16-le")) // 2 <= 4096
             assert "Schedule is unavailable" in error_text
             assert "No events" not in error_text
             assert "return home and reopen" in error_text
@@ -164,6 +168,10 @@ async def test_schedule_outage_offers_navigation_recovery_without_stale_rows(
             offline[0] = True
             await driver.click("◀ Previous week")
             error_text = driver.session.last_message.text
+            assert error_text.startswith(
+                "<b>❌ Error</b>\nSchedule is unavailable right now.\n\n"
+            )
+            assert len(error_text.encode("utf-16-le")) // 2 <= 4096
             assert "Schedule is unavailable" in error_text
             assert "No events" not in error_text
             assert "return home and reopen" in error_text
@@ -201,6 +209,7 @@ async def test_expired_token_recovers_and_inactive_account_gets_schedule_error(
         await driver.click("Today")
 
         error_text = driver.session.last_message.text
+        assert error_text.startswith("<b>❌ Error</b>\n")
         assert "cannot view a schedule" in error_text
         assert "No events" not in error_text
         assert "return home and reopen" in error_text

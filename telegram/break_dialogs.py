@@ -31,6 +31,7 @@ from telegram.api import (
     SessionView,
 )
 from telegram.date_cleanup import delete_accepted_date_message
+from telegram.feedback import feedback_block
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
@@ -82,6 +83,7 @@ async def open_break_management(
             "total": 0,
             "detail": None,
             "error": "",
+            "warning": "",
             "notice": "",
             "form_action": None,
             "resolution": None,
@@ -176,6 +178,7 @@ async def _load_page(
             items=[item.model_dump(mode="json") for item in page.items],
             total=page.total,
             error="",
+            warning="",
         )
     await manager.switch_to(BreakScreens.events, show_mode=ShowMode.EDIT)
 
@@ -545,7 +548,10 @@ async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     blocked = bool(data.get("needs_reload") or data.get("outcome_unknown"))
     return {
         "review": escape(review),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "save_label": "Save break"
         if data.get("form_action") == "create"
@@ -680,8 +686,9 @@ async def _send_write(
             outcome_unknown=True,
             needs_reload=True,
             operation="update" if is_edit else "create",
-            error=str(exc),
-            notice="The write outcome is unknown. Reload before taking another action.",
+            error="",
+            warning=str(exc),
+            notice="",
             preview=None,
         )
         await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
@@ -776,7 +783,10 @@ async def displacement_data(dialog_manager: DialogManager, **_: Any) -> dict[str
             "cancels exact weekly occurrences. Deleting this break later will not "
             "restore them."
         ),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "can_confirm": not data.get("submitting"),
     }
 
@@ -881,8 +891,9 @@ async def confirm_delete(
             outcome_unknown=True,
             needs_reload=True,
             operation="delete",
-            error=str(exc),
-            notice="The delete outcome is unknown. Reload before taking another action.",
+            error="",
+            warning=str(exc),
+            notice="",
         )
         await manager.show(show_mode=ShowMode.EDIT)
         return
@@ -916,8 +927,9 @@ async def reload_state(
     if operation == "create":
         data.update(outcome_unknown=False, needs_reload=False, preview=None)
         await _load_page(callback, manager, _kind(manager), int(data["skip"]))
-        manager.dialog_data["notice"] = (
-            "The break list was reloaded. Check it before retrying; no write was repeated."
+        manager.dialog_data["warning"] = (
+            "The break list was reloaded. Check it before retrying; "
+            "no write was repeated."
         )
         return
     detail = _detail(manager)
@@ -934,7 +946,8 @@ async def reload_state(
             manager.dialog_data.update(
                 outcome_unknown=False,
                 needs_reload=False,
-                notice="The break is no longer available. No write was repeated.",
+                notice="",
+                warning="The break is no longer available. No write was repeated.",
                 error="",
                 operation=None,
             )
@@ -953,7 +966,8 @@ async def reload_state(
         operation=None,
         preview=None,
         error="",
-        notice="Current break details were reloaded. No write was repeated.",
+        warning="Current break details were reloaded. No write was repeated.",
+        notice="",
     )
     await manager.switch_to(BreakScreens.detail, show_mode=ShowMode.EDIT)
 
@@ -974,7 +988,8 @@ async def _refresh_detail(callback: CallbackQuery, manager: DialogManager) -> No
             needs_reload=True,
             operation="update",
             error=str(exc),
-            notice="The break was saved, but fresh details could not be loaded.",
+            warning="The break was saved, but fresh details could not be loaded.",
+            notice="",
         )
     else:
         data.update(
@@ -983,6 +998,7 @@ async def _refresh_detail(callback: CallbackQuery, manager: DialogManager) -> No
             outcome_unknown=False,
             operation=None,
             error="",
+            warning="",
         )
     await manager.switch_to(BreakScreens.detail, show_mode=ShowMode.EDIT)
 
@@ -1036,7 +1052,10 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     blocked = bool(data.get("needs_reload") or data.get("outcome_unknown"))
     return {
         "detail_text": escape(text),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "can_manage": not blocked,
         "can_reload": blocked,
@@ -1058,7 +1077,10 @@ async def list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
             for item in items
         ],
         "empty_state": "No breaks." if total == 0 else "",
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
@@ -1104,7 +1126,7 @@ def build_break_dialog() -> Dialog:
             state=BreakScreens.menu,
         ),
         Window(
-            Format("{title}\n{empty_state}\n{notice}\n{error}\nTimezone: {timezone}"),
+            Format("{feedback}{title}\n{empty_state}\n{notice}\nTimezone: {timezone}"),
             Select(
                 Format("{item[0]}"),
                 id="break",
@@ -1148,7 +1170,7 @@ def build_break_dialog() -> Dialog:
             state=BreakScreens.events,
         ),
         Window(
-            Format("{detail_text}\n{notice}\n{error}"),
+            Format("{feedback}{detail_text}\n{notice}"),
             Button(
                 Const("Edit break"), id="edit", on_click=begin_edit, when="can_manage"
             ),
@@ -1169,7 +1191,8 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the break date as DD MM, DD:MM, or DD/MM, optionally with a year.\n{error}"
+                "{feedback}Enter the break date as DD MM, DD:MM, or DD/MM, "
+                "optionally with a year."
             ),
             TextInput("start_date", on_success=start_date_input, on_error=break_error),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
@@ -1177,7 +1200,8 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{start_date_confirmation}\nConfirm this inferred next-year date.\n{error}"
+                "{feedback}{start_date_confirmation}\nConfirm this inferred "
+                "next-year date."
             ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_start_date),
             Button(Const("Change date"), id="change", on_click=change_start_date),
@@ -1186,7 +1210,8 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the break start time as HH:MM or HH MM.\nTimezone: {viewer_timezone}\n{error}"
+                "{feedback}Enter the break start time as HH:MM or HH MM.\n"
+                "Timezone: {viewer_timezone}"
             ),
             TextInput("start_time", on_success=start_time_input, on_error=break_error),
             Button(Const("Change date"), id="date", on_click=change_start_date),
@@ -1195,7 +1220,8 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the break end time on the same local date.\nTimezone: {viewer_timezone}\n{error}"
+                "{feedback}Enter the break end time on the same local date.\n"
+                "Timezone: {viewer_timezone}"
             ),
             TextInput("end_time", on_success=end_time_input, on_error=break_error),
             Button(Const("Change start time"), id="start", on_click=change_start_time),
@@ -1204,7 +1230,8 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the last recurring break date (inclusive) as DD MM, DD:MM, or DD/MM, optionally with a year.\n{error}"
+                "{feedback}Enter the last recurring break date (inclusive) as "
+                "DD MM, DD:MM, or DD/MM, optionally with a year."
             ),
             TextInput(
                 "cutoff_date", on_success=cutoff_date_input, on_error=break_error
@@ -1215,7 +1242,8 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{cutoff_date_confirmation}\nConfirm the inferred end date. The series cutoff is the following local midnight.\n{error}"
+                "{feedback}{cutoff_date_confirmation}\nConfirm the inferred end "
+                "date. The series cutoff is the following local midnight."
             ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_cutoff_date),
             Button(Const("Change date"), id="change", on_click=change_cutoff_date),
@@ -1223,7 +1251,7 @@ def build_break_dialog() -> Dialog:
             state=BreakScreens.confirm_cutoff_date,
         ),
         Window(
-            Format("{review}\n{notice}\n{error}"),
+            Format("{feedback}{review}\n{notice}"),
             Button(
                 Format("{save_label}"),
                 id="submit",
@@ -1273,7 +1301,8 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "This break overlaps the following lessons:\n{affected}\n{affected_count}\n{warning}\n{error}\nTimezone: {timezone}"
+                "{feedback}This break overlaps the following lessons:\n"
+                "{affected}\n{affected_count}\n{warning}\nTimezone: {timezone}"
             ),
             Row(
                 Button(
@@ -1304,7 +1333,7 @@ def build_break_dialog() -> Dialog:
             getter=displacement_data,
         ),
         Window(
-            Format("{confirm_text}\n{notice}\n{error}"),
+            Format("{feedback}{confirm_text}\n{notice}"),
             Button(
                 Const("Confirm delete"),
                 id="confirm",

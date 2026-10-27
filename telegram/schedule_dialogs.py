@@ -1,5 +1,4 @@
 from datetime import date, timedelta
-from html import escape
 from typing import Any, Literal
 
 from aiogram.fsm.state import State, StatesGroup
@@ -10,6 +9,7 @@ from aiogram_dialog.widgets.text import Const, Format
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from telegram.api import BackendError, BackendUnavailable, SessionView
+from telegram.feedback import feedback_block
 from telegram.onboarding import backend
 from telegram.schedule_format import ViewerRole, format_schedule_pages
 
@@ -170,8 +170,7 @@ async def schedule_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
     if state.pages:
         schedule_text = state.pages[state.page]
     else:
-        schedule_text = (
-            f"{escape(state.error)}\n"
+        schedule_text = feedback_block(error=state.error) + (
             "Use the available schedule-view buttons to switch views, "
             "or return home and reopen the schedule."
         )

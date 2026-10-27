@@ -210,13 +210,13 @@ break-displacement confirmation, and schedule page formatting.
 
 ### Acceptance Criteria
 
-- [ ] Failed scheduling inputs/writes and unavailable day/week views start
+- [x] Failed scheduling inputs/writes and unavailable day/week views start
   with one shared feedback block and retain recovery controls.
-- [ ] Break displacement previews/confirmations, vacation visibility, and
+- [x] Break displacement previews/confirmations, vacation visibility, and
   successful-write/failed-reload semantics remain unchanged.
-- [ ] Healthy schedule pages and navigation remain unchanged and retain their
+- [x] Healthy schedule pages and navigation remain unchanged and retain their
   3,500-unit UTF-16 budget. Error views also fit the message limit.
-- [ ] No lost schedule rows, changed write counts, or new chat sends.
+- [x] No lost schedule rows, changed write counts, or new chat sends.
 
 ### Out of scope / Suitable for
 
