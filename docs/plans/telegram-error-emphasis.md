@@ -5,7 +5,7 @@
 Make errors immediately noticeable on every bot screen without losing the
 current draft, obscuring recovery instructions, or sending extra chat messages.
 
-**Status:** Planned; no application changes implemented.
+**Status:** In progress; Task 1 complete, Tasks 2–6 pending.
 
 ## Scope (README.md sections covered)
 
@@ -137,13 +137,13 @@ and recording transport. Leave safe error mapping in the API client.
 
 ### Acceptance Criteria
 
-- [ ] Empty errors render nothing; errors and warnings use their exact heading,
+- [x] Empty errors render nothing; errors and warnings use their exact heading,
   escaped reason, and blank-line separation.
-- [ ] Tests cover multiline text, `<`, `>`, `&`, quotes, emoji, and repeated
+- [x] Tests cover multiline text, `<`, `>`, `&`, quotes, emoji, and repeated
   rendering without double escaping or nested duplicate blocks.
-- [ ] Feedback never changes the raw stored reason or derives severity from
+- [x] Feedback never changes the raw stored reason or derives severity from
   message wording. A combined error/warning has deterministic ordering.
-- [ ] No backend change, dependency, migration, or global exception handler.
+- [x] No backend change, dependency, migration, or global exception handler.
 
 ### Out of scope / Suitable for
 
