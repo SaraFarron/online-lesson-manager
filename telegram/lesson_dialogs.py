@@ -93,15 +93,12 @@ async def open_lesson_creation(
                 teacher_id=str(view.account.id),
                 teacher_timezone=view.account.timezone,
                 default_duration=view.teacher.lesson_length,
+                duration_minutes=view.teacher.lesson_length,
                 between_lessons_break=view.teacher.between_lessons_break,
+                subject_id=str(view.account.id),
+                subject_label="Personal lesson",
             )
-            page = await client.read_student_picker(
-                callback.from_user.id,
-                callback.message.chat.id,
-                limit=STUDENT_PAGE_SIZE,
-            )
-            _store_picker_page(data, page, 0)
-            state = LessonScreens.subject
+            state = LessonScreens.kind
         else:
             context = await client.read_teacher_booking_context(
                 callback.from_user.id, callback.message.chat.id
@@ -217,11 +214,25 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
 
     start_date = data.get("start_date")
     cutoff_date = data.get("cutoff_date")
+    duration_minutes = int(
+        data.get("duration_minutes") or data.get("default_duration", 0)
+    )
+    duration_summary = (
+        f"Selected duration: {duration_minutes} minutes."
+        if data.get("custom_duration")
+        else f"Uses the default duration: {duration_minutes} minutes."
+    )
+    if data.get("is_teacher") and data.get("subject_id") == data.get("account_id"):
+        kind_assignee_text = "A personal lesson is assigned to you by default."
+    else:
+        kind_assignee_text = f"Assigned to {data.get('subject_label') or 'you'}."
     return {
         "students": students,
         "picker_page": f"Page {page_number} of {page_count} ({total} students)",
         "personal_label": "personal lesson",
         "default_duration": data.get("default_duration", ""),
+        "duration_summary": duration_summary,
+        "kind_assignee_text": kind_assignee_text,
         "has_previous_students": skip > 0,
         "has_next_students": skip + len(items) < total,
         "error": escape(str(data.get("error", ""))),
@@ -289,6 +300,8 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
 async def select_student(
     _callback: CallbackQuery, _widget: Select[str], manager: DialogManager, item: str
 ) -> None:
+    if not manager.dialog_data.get("is_teacher"):
+        raise ValueError("Only teachers can change the lesson assignee.")
     selected = next(
         (
             student
@@ -306,18 +319,33 @@ async def select_student(
         subject_label=selected["display_label"],
         error="",
     )
-    await manager.switch_to(LessonScreens.kind, show_mode=ShowMode.EDIT)
+    await _return_from_subject_picker(manager)
 
 
 async def choose_personal_lesson(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    if not manager.dialog_data.get("is_teacher"):
+        raise ValueError("Only teachers can change the lesson assignee.")
     manager.dialog_data.update(
         subject_id=manager.dialog_data["account_id"],
         subject_label="Personal lesson",
         error="",
     )
-    await manager.switch_to(LessonScreens.kind, show_mode=ShowMode.EDIT)
+    await _return_from_subject_picker(manager)
+
+
+async def cancel_subject_picker(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await _return_from_subject_picker(manager)
+
+
+async def _return_from_subject_picker(manager: DialogManager) -> None:
+    return_to = manager.dialog_data.pop("subject_return_state", "kind")
+    state = LessonScreens.review if return_to == "review" else LessonScreens.kind
+    await manager.switch_to(state, show_mode=ShowMode.EDIT)
 
 
 async def previous_students(
@@ -370,29 +398,28 @@ async def choose_weekly(
 
 async def _choose_kind(manager: DialogManager, kind: str) -> None:
     manager.dialog_data.update(kind=kind, error="")
-    state = (
-        LessonScreens.duration
-        if manager.dialog_data["is_teacher"]
-        else LessonScreens.start_date
-    )
-    await manager.switch_to(state, show_mode=ShowMode.EDIT)
+    await manager.switch_to(LessonScreens.start_date, show_mode=ShowMode.EDIT)
 
 
 async def use_default_duration(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    if not manager.dialog_data.get("is_teacher"):
+        raise ValueError("Only teachers can change the lesson duration.")
     manager.dialog_data.update(
         duration_minutes=manager.dialog_data["default_duration"],
         custom_duration=False,
         error="",
     )
-    await manager.switch_to(LessonScreens.start_date, show_mode=ShowMode.EDIT)
+    await _return_from_duration_edit(manager)
 
 
 async def custom_duration(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data.update(custom_duration=True, error="")
+    if not manager.dialog_data.get("is_teacher"):
+        raise ValueError("Only teachers can change the lesson duration.")
+    manager.dialog_data["error"] = ""
     await manager.switch_to(LessonScreens.duration_input, show_mode=ShowMode.EDIT)
 
 
@@ -402,6 +429,8 @@ async def duration_input(
     manager: DialogManager,
     value: str,
 ) -> None:
+    if not manager.dialog_data.get("is_teacher"):
+        raise ValueError("Only teachers can change the lesson duration.")
     try:
         minutes = parse_integer(value)
     except (OverflowError, ValueError) as exc:
@@ -409,7 +438,20 @@ async def duration_input(
         await manager.show(show_mode=ShowMode.EDIT)
         return
     manager.dialog_data.update(duration_minutes=minutes, custom_duration=True, error="")
-    await manager.switch_to(LessonScreens.start_date, show_mode=ShowMode.EDIT)
+    await _return_from_duration_edit(manager)
+
+
+async def cancel_duration_edit(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await _return_from_duration_edit(manager)
+
+
+async def _return_from_duration_edit(manager: DialogManager) -> None:
+    return_to = manager.dialog_data.pop("duration_return_state", "start_date")
+    state = LessonScreens.review if return_to == "review" else LessonScreens.start_date
+    await manager.switch_to(state, show_mode=ShowMode.EDIT)
 
 
 async def start_date_input(
@@ -576,6 +618,20 @@ async def edit_start_date(
 async def edit_subject(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    await _open_subject_picker(callback, manager, "review")
+
+
+async def edit_subject_from_kind(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _open_subject_picker(callback, manager, "kind")
+
+
+async def _open_subject_picker(
+    callback: CallbackQuery, manager: DialogManager, return_to: str
+) -> None:
+    if not manager.dialog_data.get("is_teacher"):
+        raise ValueError("Only teachers can change the lesson assignee.")
     if callback.message is None:
         raise ValueError("Student selection requires a private chat")
     try:
@@ -593,7 +649,7 @@ async def edit_subject(
         await manager.show(show_mode=ShowMode.EDIT)
         return
     _store_picker_page(manager.dialog_data, page, 0)
-    manager.dialog_data.update(subject_id=None, subject_label=None, error="")
+    manager.dialog_data.update(subject_return_state=return_to, error="")
     await manager.switch_to(LessonScreens.subject, show_mode=ShowMode.EDIT)
 
 
@@ -607,7 +663,19 @@ async def edit_start_time(
 async def edit_duration(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data.update(error="")
+    await _begin_duration_edit(manager, "review")
+
+
+async def edit_duration_from_start_date(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _begin_duration_edit(manager, "start_date")
+
+
+async def _begin_duration_edit(manager: DialogManager, return_to: str) -> None:
+    if not manager.dialog_data.get("is_teacher"):
+        raise ValueError("Only teachers can change the lesson duration.")
+    manager.dialog_data.update(duration_return_state=return_to, error="")
     await manager.switch_to(LessonScreens.duration, show_mode=ShowMode.EDIT)
 
 
@@ -765,7 +833,8 @@ def build_lesson_dialog() -> Dialog:
     return Dialog(
         Window(
             Format(
-                "Choose a student or book a {personal_label}.\n{picker_page}\n{error}"
+                "Choose a student or book a {personal_label}.\n"
+                "Current assignee: {subject_label}.\n{picker_page}\n{error}"
             ),
             Column(
                 Select(
@@ -795,13 +864,19 @@ def build_lesson_dialog() -> Dialog:
                 id="personal",
                 on_click=choose_personal_lesson,
             ),
-            Button(Const("Cancel"), id="cancel", on_click=return_home),
+            Button(Const("Back"), id="back", on_click=cancel_subject_picker),
             state=LessonScreens.subject,
         ),
         Window(
-            Format("Create a lesson for {subject_label}.\n{error}"),
+            Format("{kind_assignee_text}\n{error}"),
             Button(Const("One time"), id="once", on_click=choose_once),
             Button(Const("Weekly"), id="weekly", on_click=choose_weekly),
+            Button(
+                Const("Change assignee"),
+                id="change_assignee",
+                on_click=edit_subject_from_kind,
+                when="can_edit_subject",
+            ),
             Button(Const("Cancel"), id="cancel", on_click=return_home),
             state=LessonScreens.kind,
         ),
@@ -815,7 +890,7 @@ def build_lesson_dialog() -> Dialog:
                 on_click=use_default_duration,
             ),
             Button(Const("Custom duration"), id="custom", on_click=custom_duration),
-            Button(Const("Cancel"), id="cancel", on_click=return_home),
+            Button(Const("Back"), id="back", on_click=cancel_duration_edit),
             state=LessonScreens.duration,
         ),
         Window(
@@ -823,16 +898,23 @@ def build_lesson_dialog() -> Dialog:
                 "Enter the custom duration in minutes. Only teachers can change it.\n{error}"
             ),
             TextInput("duration", on_success=duration_input),
-            Button(Const("Back"), id="back", on_click=edit_duration),
-            Button(Const("Cancel"), id="cancel", on_click=return_home),
+            Button(Const("Back"), id="back", on_click=cancel_duration_edit),
             state=LessonScreens.duration_input,
         ),
         Window(
             Format(
-                "Enter the lesson start date as DD MM, DD:MM or DD/MM, optionally followed by a year.\n{start_date_hint}\n{error}"
+                "{duration_summary}\n"
+                "Enter the lesson start date as DD MM, DD:MM or DD/MM, "
+                "optionally followed by a year.\n{start_date_hint}\n{error}"
             ),
             TextInput(
                 "start_date", on_success=start_date_input, on_error=_date_input_error
+            ),
+            Button(
+                Const("Change duration"),
+                id="edit_duration",
+                on_click=edit_duration_from_start_date,
+                when="can_edit_duration",
             ),
             Button(Const("Cancel"), id="cancel", on_click=return_home),
             state=LessonScreens.start_date,
@@ -902,7 +984,7 @@ def build_lesson_dialog() -> Dialog:
                 when="can_edit_duration",
             ),
             Button(
-                Const("Change student"),
+                Const("Change assignee"),
                 id="edit_subject",
                 on_click=edit_subject,
                 when="can_edit_subject",

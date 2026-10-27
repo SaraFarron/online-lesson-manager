@@ -78,6 +78,7 @@ async def _make_bot(
     *,
     lose_write_response: bool = False,
     schedule_change_conflict: bool = False,
+    student_picker_failure: bool = False,
 ) -> tuple[BackendClient, BotDriver, httpx.AsyncClient, list[httpx.Request]]:
     requests: list[httpx.Request] = []
     lost_response = False
@@ -98,6 +99,12 @@ async def _make_bot(
                 409,
                 json={"detail": "Schedule is being changed; retry this request."},
             )
+        if (
+            student_picker_failure
+            and request.method == "GET"
+            and request.url.path == "/api/v1/auth/teacher/students"
+        ):
+            return httpx.Response(503, json={"detail": "Student picker unavailable."})
         response = await client.send(request)
         if (
             lose_write_response
@@ -130,6 +137,12 @@ async def test_teacher_books_student_and_omits_default_duration(
     client, db_session, bot_service_key, monkeypatch
 ) -> None:
     teacher, student = await _seed_accounts(db_session)
+    teacher_profile = await db_session.scalar(
+        select(TeacherProfile).where(TeacherProfile.teacher_id == teacher.id)
+    )
+    assert teacher_profile is not None
+    teacher_profile.lesson_length = 45
+    await db_session.commit()
     monkeypatch.setitem(
         app.dependency_overrides,
         get_schedule_clock,
@@ -141,10 +154,25 @@ async def test_teacher_books_student_and_omits_default_duration(
     try:
         await driver.text("/start")
         await driver.click("Add lesson")
-        assert driver.callback_data("Alice Learner")
+        assert "personal lesson is assigned to you by default" in (
+            driver.session.last_message.text
+        )
+        assert not any(
+            request.url.path == "/api/v1/auth/teacher/students" for request in requests
+        )
+        await driver.click("Change assignee")
+        assert "Current assignee: Personal lesson." in driver.session.last_message.text
+        await driver.click("Back")
+        assert "personal lesson is assigned to you by default" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Change assignee")
         await driver.click("Alice Learner")
         await driver.click("One time")
-        await driver.click("Use default (60 min)")
+        assert "Uses the default duration: 45 minutes." in (
+            driver.session.last_message.text
+        )
+        assert "Choose lesson duration" not in driver.session.last_message.text
         date_message_id = driver.update_id + 1
         screen_message_id = driver.session.last_message.message_id
         await driver.text("20 10 2026")
@@ -159,7 +187,14 @@ async def test_teacher_books_student_and_omits_default_duration(
         assert "Automatic break after this lesson: 5 minutes" in (
             driver.session.last_message.text
         )
-        assert "2026-10-20 11:00 (UTC+00:00) – 2026-10-20 11:05 (UTC+00:00)" in (
+        assert "2026-10-20 10:45 (UTC+00:00) – 2026-10-20 10:50 (UTC+00:00)" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Change assignee")
+        assert "Current assignee: Alice Learner." in driver.session.last_message.text
+        await driver.click("Back")
+        assert "Review lesson for Alice Learner" in driver.session.last_message.text
+        assert "Automatic break after this lesson: 5 minutes" in (
             driver.session.last_message.text
         )
         submit = driver.callback_data("Create lesson")
@@ -168,7 +203,7 @@ async def test_teacher_books_student_and_omits_default_duration(
         events = list((await db_session.scalars(select(Event))).all())
         assert len(events) == 1
         assert events[0].user_id == student.id
-        assert (events[0].end - events[0].start).total_seconds() == 3600
+        assert (events[0].end - events[0].start).total_seconds() == 45 * 60
         create_requests = [
             request
             for request in requests
@@ -177,10 +212,54 @@ async def test_teacher_books_student_and_omits_default_duration(
         assert len(create_requests) == 1
         body = json.loads(create_requests[0].content)
         assert set(body) == {"start", "user_id", "event_type"}
+        assert "end" not in body
         assert body["user_id"] == str(student.id)
         assert "Alice Learner" in driver.session.last_message.text
         assert "Tuesday, October 20, 2026" in driver.session.last_message.text
         assert "Automatic break (read-only)" in driver.session.last_message.text
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_failed_optional_student_picker_does_not_block_personal_booking(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
+    )
+    _, driver, http, requests = await _make_bot(
+        client,
+        bot_service_key,
+        _telegram_id(teacher),
+        student_picker_failure=True,
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        assert not any(
+            request.url.path == "/api/v1/auth/teacher/students" for request in requests
+        )
+        await driver.click("Change assignee")
+        assert "Backend unavailable" in driver.session.last_message.text
+        assert "personal lesson is assigned to you by default" in (
+            driver.session.last_message.text
+        )
+
+        await driver.click("One time")
+        assert "Uses the default duration: 60 minutes." in (
+            driver.session.last_message.text
+        )
+        await driver.text("20/10/2026")
+        await driver.text("10:00")
+        await driver.click("Create lesson")
+        created = (
+            await db_session.execute(select(Event).where(Event.event_type == "LESSON"))
+        ).scalar_one()
+        assert created.user_id == teacher.id
+        assert (created.end - created.start).total_seconds() == 3600
     finally:
         await _close_bot(driver, http)
 
@@ -194,14 +273,26 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         get_schedule_clock,
         lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
     )
-    _, driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    _, driver, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
     try:
         await driver.text("/start")
         await driver.click("Add lesson")
-        await driver.click("Personal lesson")
+        assert "personal lesson is assigned to you by default" in (
+            driver.session.last_message.text
+        )
         await driver.click("Weekly")
+        assert "Uses the default duration: 60 minutes." in (
+            driver.session.last_message.text
+        )
+        await driver.click("Change duration")
         await driver.click("Custom duration")
         await driver.text("45")
+        assert "Selected duration: 45 minutes." in driver.session.last_message.text
+        await driver.click("Change duration")
+        await driver.click("Back")
+        assert "Selected duration: 45 minutes." in driver.session.last_message.text
         start_message_id = driver.update_id + 1
         await driver.text("20/10/2026")
         assert driver.deleted_message_ids()[-1] == start_message_id
@@ -222,6 +313,17 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         assert "Automatic break after each lesson: 5 minutes" in (
             driver.session.last_message.text
         )
+        await driver.click("Change duration")
+        await driver.click("Use default (60 min)")
+        assert "Weekly through 2026-10-27 inclusive" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Change duration")
+        await driver.click("Custom duration")
+        await driver.text("45")
+        assert "Weekly through 2026-10-27 inclusive" in (
+            driver.session.last_message.text
+        )
         assert "2026-10-20 10:45 (UTC+00:00) – 2026-10-20 10:50 (UTC+00:00)" in (
             driver.session.last_message.text
         )
@@ -235,6 +337,16 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         assert series[0].interval_end == datetime(2026, 10, 28)
         assert "Personal lesson" in driver.session.last_message.text
         assert "Tuesday, October 20, 2026" in driver.session.last_message.text
+        create_request = next(
+            request
+            for request in requests
+            if request.method == "POST"
+            and request.url.path == "/api/v1/recurrent-lessons/"
+        )
+        body = json.loads(create_request.content)
+        assert datetime.fromisoformat(body["end"]) == datetime(
+            2026, 10, 20, 10, 45, tzinfo=UTC
+        )
     finally:
         await _close_bot(driver, http)
 
@@ -252,9 +364,10 @@ async def test_lesson_date_cleanup_preserves_invalid_input_and_reports_failures(
     try:
         await driver.text("/start")
         await driver.click("Add lesson")
-        await driver.click("Personal lesson")
+        assert "personal lesson is assigned to you by default" in (
+            driver.session.last_message.text
+        )
         await driver.click("One time")
-        await driver.click("Use default (60 min)")
 
         screen_message_id = driver.session.last_message.message_id
         await driver.text("31/02/2026")
@@ -301,7 +414,20 @@ async def test_student_books_self_weekly_without_duration_or_subject_forgery(
     try:
         await driver.text("/start")
         await driver.click("Add lesson")
+        assert "Change assignee" not in [
+            button.text
+            for row in driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+        ]
         await driver.click("Weekly")
+        assert "Uses the default duration: 60 minutes." in (
+            driver.session.last_message.text
+        )
+        assert "Change duration" not in [
+            button.text
+            for row in driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+        ]
         await driver.text("20/10/2026")
         await driver.text("10:00")
         await driver.text("20/10/2026")
@@ -368,9 +494,9 @@ async def test_policy_rejection_keeps_review_editable(
     try:
         await driver.text("/start")
         await driver.click("Add lesson")
+        await driver.click("Change assignee")
         await driver.click("Alice Learner")
         await driver.click("One time")
-        await driver.click("Use default (60 min)")
         await driver.text("25/10/2026")
         await driver.text("10:00")
         await driver.click("Create lesson")
@@ -401,9 +527,9 @@ async def test_lost_create_response_requires_schedule_reload_without_retry(
     try:
         await driver.text("/start")
         await driver.click("Add lesson")
+        await driver.click("Change assignee")
         await driver.click("Alice Learner")
         await driver.click("One time")
-        await driver.click("Use default (60 min)")
         await driver.text("20/10/2026")
         await driver.text("12:00")
         await driver.click("Create lesson")
@@ -443,9 +569,9 @@ async def test_concurrent_schedule_change_shows_error_and_requires_reload(
     try:
         await driver.text("/start")
         await driver.click("Add lesson")
+        await driver.click("Change assignee")
         await driver.click("Alice Learner")
         await driver.click("One time")
-        await driver.click("Use default (60 min)")
         await driver.text("20/10/2026")
         await driver.text("12:00")
         await driver.click("Create lesson")
@@ -490,9 +616,9 @@ async def test_automatic_break_conflict_is_actionable_in_booking_review(
     try:
         await driver.text("/start")
         await driver.click("Add lesson")
+        await driver.click("Change assignee")
         await driver.click("Alice Learner")
         await driver.click("One time")
-        await driver.click("Use default (60 min)")
         await driver.text("20/10/2026")
         await driver.text("11:02")
         await driver.click("Create lesson")
@@ -530,9 +656,9 @@ async def test_new_automatic_break_conflict_is_not_misreported_as_existing_break
     try:
         await driver.text("/start")
         await driver.click("Add lesson")
+        await driver.click("Change assignee")
         await driver.click("Alice Learner")
         await driver.click("One time")
-        await driver.click("Use default (60 min)")
         await driver.text("20/10/2026")
         await driver.text("10:00")
         await driver.click("Create lesson")

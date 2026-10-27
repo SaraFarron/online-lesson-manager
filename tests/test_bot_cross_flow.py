@@ -114,9 +114,9 @@ async def _seed_accounts(
 
 async def _book_one_time(driver: BotDriver, student: str, start_time: str) -> None:
     await driver.click("Add lesson")
+    await driver.click("Change assignee")
     await driver.click(student)
     await driver.click("One time")
-    await driver.click("Use default (60 min)")
     await driver.text(_LOCAL_DATE)
     await driver.text(start_time)
     await driver.click("Create lesson")
@@ -251,9 +251,9 @@ async def test_teacher_two_students_and_unrelated_teacher_cross_flow(
             ]
 
             await teacher_bot.click("Add lesson")
+            await teacher_bot.click("Change assignee")
             await teacher_bot.click("Alice Learner")
             await teacher_bot.click("One time")
-            await teacher_bot.click("Use default (60 min)")
             await teacher_bot.text(_LOCAL_DATE)
             await teacher_bot.text("12:00")
             await teacher_bot.click("Create lesson")
