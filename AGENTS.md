@@ -107,12 +107,12 @@ a README-described feature.
 | Teacher/student registration (`/auth/register`, `/auth/login`) | **Done** | Password auth retained; trusted Telegram API and private-chat `/start` teacher/student wizards implemented. Teacher invitations use short `t_[A-Z0-9]{6}` codes in `/start` payloads; existing codes can be replaced with the explicit rotation command. No account merging/password addition for Telegram-only users. |
 | Teacher settings (work hours, lesson length, break, max/day) | **Done** | Validated work hours, JSON ISO weekdays, lesson length, break, max/day and max consecutive preferences are persisted with README defaults and editable in Telegram Settings. Workdays/hours, lesson duration, daily/consecutive limits, and snapshotted automatic post-lesson breaks are enforced. |
 | Student settings (notifications) | **Partial** | Validated digest minutes-of-local-day, lesson reminder minutes (1–600), homework days; null disables. Safe partial updates and Telegram Settings editing are implemented. Notification delivery is not implemented. |
-| Lessons / breaks / vacations CRUD (one-off + recurring) | **Done** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, confirmed manual-break displacement, teacher-local workday/hour checks, lesson duration defaults/authorization, daily/consecutive limits, database-backed per-teacher mutation serialization, and derived automatic post-lesson reservations are implemented. Lesson snapshots default to zero for existing rows; preference changes apply only to future writes. |
-| Schedule viewing (day/week, timeline, teacher sees student names) | **Partial** | Authenticated viewer-local day/week endpoints and live Telegram Today/This week screens are implemented, including role-scoped results, previous/next-week navigation, compact weekday/date labels, human snapshot time, one timezone footer, DST fold labels, explicit cross-midnight dates, and overflow-only pagination without page counters or a Refresh control. HTMX/arbitrary-date UI and offline cache are not implemented. |
+| Lessons / breaks / vacations CRUD (one-off + recurring) | **Done** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, confirmed manual-break displacement, teacher-local workday/hour checks, lesson duration defaults/authorization, daily/consecutive limits, database-backed per-teacher mutation serialization, and derived automatic post-lesson reservations are implemented. Weekly lessons alone may have a null `interval_end` for a genuinely open-ended series; open-ended writes validate one recurrence-timezone calendar year, not an infinite conflict horizon. Breaks and vacations remain finite; finite recurrences retain the ten-year limit. Lesson snapshots default to zero for existing rows; preference changes apply only to future writes. |
+| Schedule viewing (day/week, timeline, teacher sees student names) | **Partial** | Authenticated viewer-local day/week endpoints and live Telegram Today/This week screens are implemented, including role-scoped results, previous/next-week navigation, capitalized compact weekday/date labels, `⏳` for upcoming rows, unchanged past/ongoing markers, shorter derived-break labels, human snapshot time, one timezone footer, DST fold labels, explicit cross-midnight dates, and overflow-only pagination without page counters or a Refresh control. HTMX/arbitrary-date UI and offline cache are not implemented. |
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
 | Homework (assign/submit/mark done) | **Done** | Approved contract, metadata, authenticated private attachment staging/download, teacher assignment creation, active-link-scoped paginated assignment/material reads, versioned student text/file submissions, teacher submission review, idempotent manual completion, and recoverable deletion exist in the backend. Telegram supports teacher assignment creation with exact upcoming lesson links, student paginated browsing/downloads and explicit versioned submissions, plus teacher filtering/review of current and prior solutions, separate streamed downloads, manual completion, and confirmed deletion with unknown-outcome reconciliation. Dispatcher cross-flow/restart/storage recovery, ownership, file persistence, migrations, and deployment configuration are verified. Notification delivery remains unimplemented. |
 | Student profile view for teacher (history, delete w/ confirm) | **Not started** | No action-log table or endpoint. |
-| Telegram bot | **Partial** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, editable post-onboarding settings, lesson/event management with automatic-break previews, manual breaks, vacations, retry/recovery and edit-in-place screens. Live schedule viewing uses compact dates, overflow-only page controls, and recovery by returning home/reopening or switching period/week; typed homework APIs and teacher assignment/review/management plus student browse/download/submission dialogs are implemented and cross-flow/restart/storage recovery is verified. Notification delivery and offline schedule cache remain unimplemented. |
+| Telegram bot | **Partial** | Separate polling client, teacher/student wizards, invitation/code entry, role homes, editable post-onboarding settings, lesson/event management with automatic-break previews, manual breaks, vacations, retry/recovery and edit-in-place screens. Weekly lesson creation defaults to no end, with optional inclusive end-date editing; accepted lesson-time messages are cleaned up after successful resolution. Date prompts omit timezone hints but still parse in the saved viewer timezone. Live Today/week schedules use capitalized dates, `⏳` upcoming markers, and concise automatic-break labels; overflow-only page controls and recovery by returning home/reopening or switching period/week remain. Typed homework APIs and teacher assignment/review/management plus student browse/download/submission dialogs are implemented and cross-flow/restart/storage recovery is verified. Notification delivery and offline schedule cache remain unimplemented. |
 | HTMX frontend | **Scaffold only** | `templates/` has base/index/login/register pages and one HTMX fragment (`/htmx/server-time`); no real page is wired to the API yet. |
 
 ## Scheduling and Telegram handoff
@@ -123,6 +123,9 @@ tracked in [telegram-scheduling-and-settings-ui](docs/plans/telegram-scheduling-
 records the current day-first input and compact schedule presentation contract.
 It supersedes only the README's older month-first/UTC-offset/Refresh presentation,
 not API timestamp formats, scheduling rules, or authorization.
+The [Telegram UI refinements plan](docs/plans/telegram-ui-refinements.md)
+records the nullable weekly-lesson cutoff contract, one-year validation limit,
+date/time prompt behavior, schedule labels, and this release's verification.
 [Automatic between-lesson breaks](docs/plans/automatic-between-lesson-breaks.md)
 are implemented and verified; [homework](docs/plans/homework-backend-and-telegram-ui.md)
 teacher and student Telegram actions are implemented, with Task 11
@@ -142,10 +145,22 @@ not implemented.
   before returning another student's event details.
 - Authenticated `/api/v1/schedule/day` and `/api/v1/schedule/week` endpoints
   and live Telegram Today/This week screens are implemented, including
-  previous/next-week navigation. The bot reads current data from the backend;
+  previous/next-week navigation. Upcoming rows display `⏳`; past and ongoing
+  status markers remain unchanged. Automatic-break rows omit `(read-only)` in
+  their label but remain derived and non-editable. Date prompts omit timezone
+  labels while continuing to parse in the saved viewer timezone. The bot reads
+  current data from the backend;
   offline caching and an HTMX/arbitrary-date schedule UI remain unimplemented.
   Apply viewer authorization before shaping or caching results; never return
   teacher-wide raw event details to a student.
+- A null `interval_end` represents only an open-ended weekly lesson. Open-ended
+  writes validate one calendar year from series start in recurrence timezone;
+  this is a validation bound, never a stored cutoff or an infinite-conflict
+  guarantee. Finite series retain their ten-year limit, and recurring
+  breaks/vacations stay finite. Apply
+  `2026-10-27_open_ended_weekly_lessons.py` before backend/bot rollout; its
+  downgrade refuses before mutation while any null cutoff remains. See the
+  README scheduling handoff and linked UI refinements plan for details.
 - Workday/hour and duration enforcement, daily/consecutive limits, and
   database-backed mutation serialization are implemented. Automatic breaks
   are derived from each lesson's snapshotted duration; existing lessons and

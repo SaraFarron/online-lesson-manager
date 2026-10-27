@@ -168,6 +168,12 @@ preferences do not imply delivery. Authenticated day/week schedule reads are
 available through the backend and Telegram bot as described below. Shared
 temporal conflict checks and vacation/break policies are implemented as
 described in the scheduling handoff below.
+Telegram date-entry prompts omit timezone labels, but entered dates still use
+the viewer's saved IANA timezone; reviews and schedule views retain timezone
+context. Schedule weekday abbreviations are capitalized, upcoming rows use
+`⏳`, and automatic-break row labels omit `(read-only)` while the derived
+reservations remain non-editable. These display changes do not enable
+notifications or change schedule status values.
 
 Verification: `uv run pytest -q tests` covers simulated Telegram updates with
 recorded Bot API calls, the real ASGI backend, and an isolated SQLite database,
@@ -492,6 +498,38 @@ There is no offline schedule cache.
   identifies one exact generated occurrence by its UTC start and end; it is
   not a partial blackout interval.
 
+#### Open-ended weekly lessons and deployment
+
+- `recurrent_event.interval_end IS NULL` means there is no fixed recurrence
+  end. It is allowed only for a weekly lesson (`event_type=LESSON`,
+  `interval=7`); one-off events and recurring breaks/vacations remain distinct
+  and finite. The value is not a hidden date or a limit on bounded reads.
+- Finite `interval_end` remains an exclusive occurrence-start cutoff. In
+  Telegram, the teacher's inclusive last lesson date is resolved as the
+  following local midnight; clearing the choice stores null. Recurring breaks
+  continue to require a finite cutoff.
+- Open-ended lesson writes validate generated occurrences only up to the
+  exclusive one-calendar-year anniversary of the series start in its
+  recurrence timezone. A February 29 anniversary clamps to February 28. This
+  validation bound is calculated for the write and is never stored as
+  `interval_end`; it does not promise conflict-free scheduling forever. An
+  edit to an old series start can therefore validate a wholly historical
+  year, and conflicts beyond a new series' validation year are not guaranteed
+  to have been discovered. Existing open-ended series are still expanded
+  against the bounded ranges requested by later event writes and reads.
+- Finite new or updated recurrences retain the existing ten-calendar-year
+  maximum. Occurrence queries remain explicitly bounded and subject to their
+  occurrence budget; open-ended recurrence does not authorize an unbounded
+  scan.
+- Deploy in order: apply `uv run alembic upgrade head` (including
+  `2026-10-27_open_ended_weekly_lessons.py`), deploy the backend with nullable
+  schema/service support, then deploy the compatible Telegram client and
+  enable open-ended lesson flows. Older clients may reject null cutoff
+  responses. The migration downgrade refuses before changing schema or data
+  while any null cutoff exists; assign explicit finite cutoffs through an
+  approved data change before retrying. It never invents cutoffs or deletes
+  open-ended rows.
+
 #### Internal service handoff
 
 Use the shared `backend/events/` services rather than reimplementing
@@ -536,8 +574,10 @@ deleted, recurring lessons receive exact cancellation rows, and deleting the
 break does not restore either.
 
 The schedule-range service accepts finite half-open ranges of at most 31 days.
-Occurrence expansion is capped at 10,000 per query, and new/updated recurrences
-are limited to ten calendar years so conflict validation can be complete.
+Occurrence expansion is capped at 10,000 per query. Finite new or updated
+recurrences are limited to ten calendar years. Open-ended weekly lessons use
+the one-calendar-year, start-based write-validation bound described above;
+this does not establish conflict-free scheduling beyond that bound.
 Unsupported ranges, invalid recurrence/cancellation data, and budget exhaustion
 fail explicitly; callers must not convert these failures into an empty or
 partial schedule.

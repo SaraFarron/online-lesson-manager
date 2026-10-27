@@ -242,7 +242,7 @@ async def test_recurrent_api_snapshots_teacher_timezone_and_normalizes_cancels(
     assert cancel.end == datetime(2026, 10, 20, 10)
 
 
-async def test_open_ended_lesson_write_waits_for_service_support(
+async def test_open_ended_lesson_write_persists_null_after_service_support(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     teacher_id, token = await _register_teacher(client)
@@ -258,6 +258,8 @@ async def test_open_ended_lesson_write_waits_for_service_support(
         },
     )
 
-    assert response.status_code == 422
-    assert "not supported by this backend release" in response.text
-    assert await db_session.scalar(select(RecurrentEvent.id)) is None
+    assert response.status_code == 201, response.text
+    assert response.json()["interval_end"] is None
+    series = await db_session.scalar(select(RecurrentEvent))
+    assert series is not None
+    assert series.interval_end is None
