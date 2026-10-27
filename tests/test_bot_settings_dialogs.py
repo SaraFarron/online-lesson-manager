@@ -332,7 +332,14 @@ async def test_settings_write_with_lost_response_is_not_replayed(
         await driver.click("Lesson length")
         await driver.text("50")
         await driver.click("Save teacher settings")
-        assert "outcome is unknown" in driver.session.last_message.text
+        unknown = (
+            "The save outcome is unknown. Reload the latest settings before "
+            "trying again; the write will not be repeated."
+        )
+        assert driver.session.last_message.text.startswith(
+            f"<b>⚠️ Attention</b>\n{unknown}\n\n"
+        )
+        assert driver.session.last_message.text.count(unknown) == 1
         assert (
             sum(
                 request.method == "PUT"
@@ -377,6 +384,13 @@ async def test_profile_save_does_not_claim_refresh_succeeded_after_partial_failu
         await driver.click("Lesson length")
         await driver.text("55")
         await driver.click("Save teacher settings")
+        assert driver.session.last_message.text.startswith(
+            "<b>❌ Error</b>\nBackend unavailable. Please retry shortly; "
+            "no offline login is possible.\n\n"
+        )
+        assert driver.session.last_message.text.index("❌ Error") < (
+            driver.session.last_message.text.index("⚠️ Attention")
+        )
         assert "Teacher settings saved." in driver.session.last_message.text
         assert "could not be reloaded" in driver.session.last_message.text
         assert (

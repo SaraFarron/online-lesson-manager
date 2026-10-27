@@ -11,6 +11,7 @@ from aiogram_dialog.widgets.text import Const, Format
 from telegram.api import SessionView
 from telegram.break_dialogs import open_break_management
 from telegram.event_management_dialogs import open_event_management
+from telegram.feedback import feedback_block
 from telegram.homework_student_dialogs import open_student_homework
 from telegram.homework_teacher_dialogs import open_homework_creation
 from telegram.homework_teacher_management_dialogs import (
@@ -36,6 +37,10 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     raw_view = dialog_manager.dialog_data.get("view")
     view = SessionView.model_validate(raw_view) if raw_view is not None else None
     home = ""
+    warnings = []
+    warning = str(dialog_manager.dialog_data.get("warning", ""))
+    if warning:
+        warnings.append(warning)
     if view is not None:
         account = view.account
         home = (
@@ -57,7 +62,7 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
                 f"Consecutive/daily limits: {profile.max_consecutive_lessons}/{profile.max_lessons_per_day}\n"
             )
         elif account.role == "TEACHER":
-            home += "Teacher profile unavailable.\n"
+            warnings.append("Teacher profile unavailable.")
         if view.student is not None:
             lesson = (
                 "off"
@@ -71,7 +76,7 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             )
             home += f"Lesson reminder: {lesson}\nHomework reminder: {homework}\n"
         elif account.role == "STUDENT":
-            home += "Student profile unavailable.\n"
+            warnings.append("Student profile unavailable.")
         if account.role == "STUDENT":
             home += (
                 "Preferences saved. Lesson booking and schedule viewing are available. "
@@ -87,7 +92,10 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             home += f"\nStudent invitation: {invitation}"
     return {
         "timezone": escape(dialog_manager.dialog_data.get("timezone", "not confirmed")),
-        "error": escape(dialog_manager.dialog_data.get("error", "")),
+        "feedback": feedback_block(
+            error=str(dialog_manager.dialog_data.get("error", "")),
+            warning="\n".join(warnings),
+        ),
         "home": escape(home),
         "proof": "backend_client" not in dialog_manager.middleware_data,
         "can_view_schedule": view is not None
@@ -159,7 +167,7 @@ def build_dialog() -> Dialog:
             state=Screens.details,
         ),
         Window(
-            Format("Enter an IANA timezone, for example Asia/Bangkok.\n{error}"),
+            Format("{feedback}Enter an IANA timezone, for example Asia/Bangkok."),
             TextInput(
                 "timezone_input",
                 type_factory=parse_timezone,
@@ -171,7 +179,7 @@ def build_dialog() -> Dialog:
             state=Screens.timezone,
         ),
         Window(
-            Format("{home}"),
+            Format("{feedback}{home}"),
             Button(
                 Const("Add lesson"),
                 id="add_lesson",
@@ -237,7 +245,7 @@ def build_dialog() -> Dialog:
             state=Screens.home,
         ),
         Window(
-            Format("{error}\nSend /start to retry. No offline account is created."),
+            Format("{feedback}Send /start to retry. No offline account is created."),
             state=Screens.unavailable,
         ),
         getter=screen_data,

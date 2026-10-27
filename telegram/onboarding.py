@@ -12,6 +12,7 @@ from aiogram_dialog.widgets.kbd.select import ManagedMultiselect
 from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import BackendClient, BackendError, BackendUnavailable, Registration
+from telegram.feedback import feedback_block
 from telegram.inputs import (
     DAY_NAMES,
     digest_clock,
@@ -137,7 +138,9 @@ async def wizard_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             else ""
         ),
         "value": escape(setting_value(step.key, value)),
-        "error": escape(dialog_manager.dialog_data.get("error", "")),
+        "feedback": feedback_block(
+            error=str(dialog_manager.dialog_data.get("error", ""))
+        ),
         "summary": escape(summary),
         "can_disable": step.key.startswith("notification_"),
         "days": [(name, index + 1) for index, name in enumerate(DAY_NAMES)],
@@ -461,13 +464,13 @@ def build_wizard() -> Dialog:
 
     return Dialog(
         Window(
-            Format("Enter your teacher's invitation code.\n{error}"),
+            Format("{feedback}Enter your teacher's invitation code."),
             TextInput("teacher_code", on_success=code_input),
             Button(Const("Cancel"), id="cancel", on_click=cancel),
             state=Wizard.code,
         ),
         Window(
-            Format("Register as a student of {teacher_name}?\n{error}"),
+            Format("{feedback}Register as a student of {teacher_name}?"),
             Button(
                 Const("Confirm teacher"), id="confirm_teacher", on_click=confirm_teacher
             ),
@@ -476,7 +479,7 @@ def build_wizard() -> Dialog:
             state=Wizard.teacher,
         ),
         Window(
-            Format("{title}\n{hint}\nCurrent/default: {value}\n{error}"),
+            Format("{feedback}{title}\n{hint}\nCurrent/default: {value}"),
             TextInput("value", on_success=value_input),
             Button(Const("Use current/default"), id="default", on_click=use_default),
             Button(
@@ -486,7 +489,7 @@ def build_wizard() -> Dialog:
             state=Wizard.input,
         ),
         Window(
-            Format("Working days\n{error}"),
+            Format("{feedback}Working days"),
             Multiselect(
                 Format("✓ {item[0]}"),
                 Format("{item[0]}"),
@@ -501,7 +504,8 @@ def build_wizard() -> Dialog:
         ),
         Window(
             Format(
-                "Lesson reminder\nCurrent/default: {value}\nChoose an input unit or confirm the displayed minute value.\n{error}"
+                "{feedback}Lesson reminder\nCurrent/default: {value}\n"
+                "Choose an input unit or confirm the displayed minute value."
             ),
             Row(
                 Button(Const("Minutes"), id="minutes", on_click=select_unit),
@@ -518,7 +522,9 @@ def build_wizard() -> Dialog:
         ),
         Window(
             Format(
-                "Review\n{summary}\nSelect a setting to edit.\n{error}\nPreferences are saved only. Notifications and schedule enforcement are not active."
+                "{feedback}Review\n{summary}\nSelect a setting to edit.\n"
+                "Preferences are saved only. Notifications and schedule "
+                "enforcement are not active."
             ),
             Column(
                 Select(

@@ -5,7 +5,7 @@
 Make errors immediately noticeable on every bot screen without losing the
 current draft, obscuring recovery instructions, or sending extra chat messages.
 
-**Status:** In progress; Task 1 complete, Tasks 2–6 pending.
+**Status:** In progress; Tasks 1–4 complete, Tasks 5–6 pending.
 
 ## Scope (README.md sections covered)
 
@@ -244,13 +244,13 @@ existing error clearing, and runtime `/start` recovery.
 
 ### Acceptance Criteria
 
-- [ ] Invalid invitation/timezone/registration input and rejected settings
+- [x] Invalid invitation/timezone/registration input and rejected settings
   saves appear first; drafts, Back/Cancel, and field choices are preserved.
-- [ ] Backend login/settings outages and reload failures remain explicit;
+- [x] Backend login/settings outages and reload failures remain explicit;
   successful-save/failed-reload states do not look like an unsaved rejection.
-- [ ] Home errors are visible; missing-profile warnings use attention.
+- [x] Home errors are visible; missing-profile warnings use attention.
   Healthy home gains no warning or success banner.
-- [ ] Success notices, invitations, notification-preference semantics, and
+- [x] Success notices, invitations, notification-preference semantics, and
   expired-screen callback alerts retain their existing behavior.
 
 ### Out of scope / Suitable for

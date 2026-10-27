@@ -20,6 +20,7 @@ from telegram.api import (
     StudentProfileUpdate,
     TeacherProfileUpdate,
 )
+from telegram.feedback import feedback_block
 from telegram.inputs import (
     DAY_NAMES,
     digest_clock,
@@ -65,6 +66,13 @@ def _backend(manager: DialogManager) -> BackendClient:
     return client
 
 
+def _feedback(data: dict[str, Any]) -> str:
+    return feedback_block(
+        error=str(data.get("error", "")),
+        warning=str(data.get("warning", "")),
+    )
+
+
 def _settings_data(view: SessionView) -> dict[str, Any]:
     if view.account.role not in {"TEACHER", "STUDENT"}:
         raise ValueError("This account cannot edit Telegram settings")
@@ -85,6 +93,7 @@ def _settings_data(view: SessionView) -> dict[str, Any]:
         "field_key": None,
         "reminder_unit": None,
         "error": "",
+        "warning": "",
         "notice": "",
         "needs_reload": False,
         "saving": False,
@@ -138,6 +147,7 @@ async def open_settings(
     except (BackendError, BackendUnavailable, ValueError) as exc:
         data = {
             "error": str(exc),
+            "warning": "",
             "notice": "",
             "needs_reload": True,
             "saving": False,
@@ -365,7 +375,7 @@ async def field_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
         "timezone": escape(
             str(data.get("view", {}).get("account", {}).get("timezone", ""))
         ),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": _feedback(data),
         "notice": escape(str(data.get("notice", ""))),
         "can_save": not data.get("needs_reload") and not data.get("saving"),
     }
@@ -490,8 +500,9 @@ async def _complete_save(
         data.update(
             saving=False,
             needs_reload=True,
-            notice=f"{success_message} Current settings could not be reloaded.",
             error=str(exc),
+            warning=f"{success_message} Current settings could not be reloaded.",
+            notice="",
         )
         await manager.switch_to(SettingsScreens.menu, show_mode=ShowMode.EDIT)
         return
@@ -502,6 +513,7 @@ async def _complete_save(
         needs_reload=False,
         notice=f"{success_message} Current settings were reloaded.",
         error="",
+        warning="",
     )
     await manager.switch_to(SettingsScreens.menu, show_mode=ShowMode.EDIT)
 
@@ -514,11 +526,12 @@ async def _write_failed(
     if isinstance(error, BackendOutcomeUnknown):
         data.update(
             needs_reload=True,
-            notice=(
+            warning=(
                 "The save outcome is unknown. Reload the latest settings before "
                 "trying again; the write will not be repeated."
             ),
             error="",
+            notice="",
         )
         await manager.switch_to(SettingsScreens.menu, show_mode=ShowMode.EDIT)
         return
@@ -672,7 +685,7 @@ async def menu_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     return {
         "role": escape(str(role or "")),
         "notice": escape(str(data.get("notice", ""))),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": _feedback(data),
         "can_open": not data.get("needs_reload") and view is not None,
         "is_teacher": role == "TEACHER",
         "is_student": role == "STUDENT",
@@ -688,7 +701,7 @@ async def account_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any
         "timezone": escape(str(draft["timezone"])),
         "digest": escape(digest_clock(draft["notification_lessons_today"])),
         "notice": escape(str(data.get("notice", ""))),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": _feedback(data),
         "can_save": bool(
             _changed(data["account_original"], draft)
             and not data.get("needs_reload")
@@ -719,7 +732,7 @@ async def teacher_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any
     return {
         "profile": escape("\n".join(lines)),
         "notice": escape(str(data.get("notice", ""))),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": _feedback(data),
         "can_save": bool(
             _changed(data["teacher_original"], draft)
             and not data.get("needs_reload")
@@ -744,7 +757,7 @@ async def student_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any
             )
         ),
         "notice": escape(str(data.get("notice", ""))),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": _feedback(data),
         "can_save": bool(
             _changed(data["student_original"], draft)
             and not data.get("needs_reload")
@@ -767,7 +780,7 @@ async def student_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any
 async def days_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     return {
         "days": [(name, index + 1) for index, name in enumerate(DAY_NAMES)],
-        "error": escape(str(dialog_manager.dialog_data.get("error", ""))),
+        "feedback": _feedback(dialog_manager.dialog_data),
         "can_apply": not dialog_manager.dialog_data.get("needs_reload")
         and not dialog_manager.dialog_data.get("saving"),
     }
@@ -778,23 +791,23 @@ async def reminder_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
     value = data["student_draft"]["notification_lesson"]
     return {
         "current": escape(_format_field_value("notification_lesson", value, None)),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": _feedback(data),
         "can_edit": not data.get("needs_reload") and not data.get("saving"),
     }
 
 
 async def unavailable_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
-    return {"error": escape(str(dialog_manager.dialog_data.get("error", "")))}
+    return {"feedback": _feedback(dialog_manager.dialog_data)}
 
 
 def build_settings_dialog() -> Dialog:
     return Dialog(
         Window(
             Format(
-                "{role} settings\n"
+                "{feedback}{role} settings\n"
                 "Account and role preferences save separately. Notifications are "
                 "preferences only; delivery is not active.\n"
-                "{notice}\n{error}"
+                "{notice}"
             ),
             Button(
                 Const("Account settings"),
@@ -837,9 +850,9 @@ def build_settings_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Account preferences\nTimezone: {timezone}\n"
+                "{feedback}Account preferences\nTimezone: {timezone}\n"
                 "Daily digest (local): {digest}\n"
-                "Timezone changes do not move stored event instants.\n{notice}\n{error}"
+                "Timezone changes do not move stored event instants.\n{notice}"
             ),
             Button(
                 Const("Change timezone"),
@@ -872,10 +885,10 @@ def build_settings_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Teacher preferences\n{profile}\n"
+                "{feedback}Teacher preferences\n{profile}\n"
                 "Break changes apply to new lessons only; existing lessons and "
                 "series keep their saved break duration.\n"
-                "{notice}\n{error}"
+                "{notice}"
             ),
             Button(
                 Const("Work starts"),
@@ -932,10 +945,10 @@ def build_settings_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Student notifications\nLesson reminder: {reminder}\n"
+                "{feedback}Student notifications\nLesson reminder: {reminder}\n"
                 "Homework reminder: {homework}\n"
                 "These preferences do not mean notifications are being delivered.\n"
-                "{notice}\n{error}"
+                "{notice}"
             ),
             Button(
                 Const("Change lesson reminder"),
@@ -974,8 +987,8 @@ def build_settings_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{title}\n{hint}\nCurrent value: {value}\n"
-                "Timezone: {timezone}\n{notice}\n{error}"
+                "{feedback}{title}\n{hint}\nCurrent value: {value}\n"
+                "Timezone: {timezone}\n{notice}"
             ),
             TextInput("value", on_success=field_input, on_error=field_input_error),
             Button(Const("Back"), id="back", on_click=back_to_section),
@@ -983,7 +996,7 @@ def build_settings_dialog() -> Dialog:
             getter=field_data,
         ),
         Window(
-            Format("Working days\nSelect at least one weekday.\n{error}"),
+            Format("{feedback}Working days\nSelect at least one weekday."),
             Multiselect(
                 Format("✓ {item[0]}"),
                 Format("{item[0]}"),
@@ -1004,7 +1017,8 @@ def build_settings_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Lesson reminder: {current}\nChoose the input unit explicitly.\n{error}"
+                "{feedback}Lesson reminder: {current}\n"
+                "Choose the input unit explicitly."
             ),
             Row(
                 Button(
@@ -1026,7 +1040,7 @@ def build_settings_dialog() -> Dialog:
             getter=reminder_data,
         ),
         Window(
-            Format("{error}\nRetry loading settings from the backend."),
+            Format("{feedback}Retry loading settings from the backend."),
             Button(Const("Reload settings"), id="retry", on_click=retry_settings),
             Button(Const("Back to home"), id="home", on_click=return_home),
             state=SettingsScreens.unavailable,

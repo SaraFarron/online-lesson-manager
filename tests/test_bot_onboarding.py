@@ -205,6 +205,7 @@ async def test_student_manual_code_disabled_and_minute_bounds(
         await driver.text("/start")
         await driver.click("Register as student")
         await driver.text("unknown")
+        assert driver.session.last_message.text.startswith("<b>❌ Error</b>\n")
         assert "not found" in driver.session.last_message.text
         await driver.text(teacher.teacher.code)
         await driver.click("Confirm teacher")
@@ -212,6 +213,7 @@ async def test_student_manual_code_disabled_and_minute_bounds(
         await driver.click("Disable")
         await driver.click("Minutes")
         await driver.text("601")
+        assert driver.session.last_message.text.startswith("<b>❌ Error</b>\n")
         assert "between 1 and 600" in driver.session.last_message.text
         await driver.text("600")
         await driver.text("3")
@@ -264,7 +266,11 @@ async def test_returning_teacher_gets_refreshed_short_invitation(
                 middleware_data={},
             )
         )
-        assert "Teacher profile unavailable." in home["home"]
+        assert home["feedback"].startswith(
+            "<b>⚠️ Attention</b>\nTeacher profile unavailable.\n\n"
+        )
+        assert "Timezone:" in home["home"]
+        assert "Teacher profile unavailable." not in home["home"]
         assert "Preferences saved." not in home["home"]
     finally:
         await driver.close()
