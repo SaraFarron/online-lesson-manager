@@ -272,17 +272,12 @@ async def event_list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
     ]
     skip = int(data.get("skip", 0))
     total = int(data.get("total", 0))
-    page = (
-        f"Showing {skip + 1}–{min(skip + len(items), total)} of {total}"
-        if items
-        else f"No lessons on this page ({total} total)"
-    )
     return {
         "title": "One-time lessons" if data.get("kind") == "once" else "Weekly lessons",
         "events": [
             (_list_label(item, data["viewer_timezone"]), str(item.id)) for item in items
         ],
-        "page": page,
+        "empty_state": "No lessons." if total == 0 else "",
         "timezone": escape(data["viewer_timezone"]),
         "error": escape(str(data.get("error", ""))),
         "notice": escape(str(data.get("notice", ""))),
@@ -395,13 +390,6 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "has_previous_cancellations": cancel_skip > 0,
         "has_next_cancellations": cancel_skip + len(cancellation_items)
         < len(detail.cancels),
-        "cancellation_page": (
-            f"Cancelled occurrences {cancel_skip + 1}–"
-            f"{min(cancel_skip + len(cancellation_items), len(detail.cancels))} "
-            f"of {len(detail.cancels)}"
-            if detail.cancels
-            else ""
-        ),
     }
 
 
@@ -1202,7 +1190,7 @@ def build_event_management_dialog() -> Dialog:
             state=LessonManagementScreens.menu,
         ),
         Window(
-            Format("{title}\n{page}\n{notice}\n{error}\nTimezone: {timezone}"),
+            Format("{title}\n{empty_state}\n{notice}\n{error}\nTimezone: {timezone}"),
             Select(
                 Format("{item[0]}"),
                 id="managed_lesson",
@@ -1243,7 +1231,7 @@ def build_event_management_dialog() -> Dialog:
             state=LessonManagementScreens.events,
         ),
         Window(
-            Format("{detail_text}\n{cancellation_page}\n{notice}\n{error}"),
+            Format("{detail_text}\n{notice}\n{error}"),
             Button(
                 Const("Edit lesson or series"),
                 id="edit",

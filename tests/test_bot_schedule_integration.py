@@ -303,12 +303,12 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             try:
                 await teacher_bot.click("Today")
                 teacher_today = teacher_bot.session.last_message.text
-                assert "Monday, October 19, 2026" in teacher_today
+                assert "mon, Oct 19" in teacher_today
                 assert "NOW" in teacher_today
                 assert "Alice Learner" in teacher_today
                 assert "Bob Learner" in teacher_today
                 assert "Unrelated" not in teacher_today
-                assert teacher_today.count("23:30–01:30 (+1 day)") == 1
+                assert teacher_today.count("mon, Oct 19 23:30–tue, Oct 20 1:30") == 1
                 day_select_count = sum(
                     statement.lstrip().upper().startswith("SELECT")
                     for statement in statements
@@ -338,7 +338,7 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             assert "Bob Learner" in teacher_week_text
             assert "Unrelated Teacher" not in teacher_week_text
             assert "Unrelated Student" not in teacher_week_text
-            assert teacher_week_text.count("23:30–01:30 (+1 day)") == 1
+            assert teacher_week_text.count("mon, Oct 19 23:30–tue, Oct 20 1:30") == 1
             assert teacher_week_text.index("NOW") < teacher_week_text.index(
                 "[UPCOMING]"
             )
@@ -436,9 +436,9 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             await alice_bot.click("Today")
             alice_text = alice_bot.session.last_message.text
             assert requests == [("GET", "/api/v1/schedule/day")]
-            assert "Sunday, October 18, 2026" in alice_text
+            assert "sun, Oct 18" in alice_text
             assert "19:00–20:00" in alice_text
-            assert "23:00–00:00 (+1 day)" in alice_text
+            assert "sun, Oct 18 23:00–mon, Oct 19 0:00" in alice_text
             assert "Alice Learner" not in alice_text
             assert "Bob Learner" not in alice_text
             assert "Teacher Owner" not in alice_text
@@ -448,7 +448,7 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             await bob_bot.click("Today")
             bob_text = bob_bot.session.last_message.text
             assert requests == [("GET", "/api/v1/schedule/day")]
-            assert "Sunday, October 18, 2026" in bob_text
+            assert "sun, Oct 18" in bob_text
             assert "20:00–21:00" in bob_text
             assert "Alice Learner" not in bob_text
             assert "Unrelated Student" not in bob_text
@@ -665,14 +665,16 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
             assert sum(page.count("[PAST]") for page in visible_pages) == 1
             assert visible_pages[0].index("[PAST]") < visible_pages[0].index("NOW")
             assert visible_pages[0].index("NOW") < visible_pages[0].index("[UPCOMING]")
-            assert "01:30 EDT (UTC-04:00)" in visible_pages[0]
-            assert "01:30 EST (UTC-05:00)" in visible_pages[0]
+            assert "1:30 (first occurrence)" in visible_pages[0]
+            assert "1:30 (second occurrence)" in visible_pages[0]
             assert all(
                 len(page.encode("utf-16-le")) // 2 <= MAX_MESSAGE_UTF16_UNITS
                 for page in visible_pages
             )
-            for index, page in enumerate(visible_pages, start=1):
-                assert f"Page {index}/{len(visible_pages)}" in page
+            assert all(
+                page.endswith("Timezone: America/New_York") for page in visible_pages
+            )
+            assert all("Page " not in page for page in visible_pages)
 
             row = next(
                 line
@@ -715,8 +717,10 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
                 len(page.encode("utf-16-le")) // 2 <= MAX_MESSAGE_UTF16_UNITS
                 for page in week_text
             )
-            for index, page in enumerate(week_text, start=1):
-                assert f"Page {index}/{len(week_text)}" in page
+            assert all(
+                page.endswith("Timezone: America/New_York") for page in week_text
+            )
+            assert all("Page " not in page for page in week_text)
 
             sends = [
                 call

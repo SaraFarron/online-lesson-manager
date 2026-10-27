@@ -42,7 +42,7 @@ async def test_registered_teacher_can_navigate_and_refresh_in_place(
         assert "Notifications are not active yet" in driver.session.last_message.text
 
         await driver.click("Today")
-        assert "Monday, October 19, 2026" in driver.session.last_message.text
+        assert "mon, Oct 19" in driver.session.last_message.text
         assert "No events" in driver.session.last_message.text
         assert driver.session.last_message.message_id == message_id
 
@@ -64,8 +64,8 @@ async def test_registered_teacher_can_navigate_and_refresh_in_place(
         await db_session.commit()
         now[0] = datetime(2026, 10, 20, 0, 1, tzinfo=UTC)
         await driver.click("Refresh")
-        assert "Tuesday, October 20, 2026" in driver.session.last_message.text
-        assert "Updated at 2026-10-20 00:01 (UTC)" in driver.session.last_message.text
+        assert "tue, Oct 20" in driver.session.last_message.text
+        assert "Updated tue, Oct 20 at 0:01" in driver.session.last_message.text
         assert "Personal lesson" in driver.session.last_message.text
         assert "10:00–10:05  Automatic break (read-only)  [UPCOMING]" in (
             driver.session.last_message.text
@@ -268,18 +268,18 @@ async def test_teacher_and_student_can_navigate_and_refresh_selected_week(
             for index, driver in enumerate((teacher, student)):
                 message_id = driver.session.last_message.message_id
                 await driver.click("This week")
-                assert "Monday, October 19, 2026" in (driver.session.last_message.text)
+                assert "mon, Oct 19" in (driver.session.last_message.text)
                 assert driver.callback_data("◀ Previous week")
                 assert driver.callback_data("Next week ▶")
 
                 await driver.click("◀ Previous week")
-                assert "Monday, October 12, 2026" in driver.session.last_message.text
+                assert "mon, Oct 12" in driver.session.last_message.text
                 if index == 0:
                     assert "No events" in driver.session.last_message.text
                 await driver.click("Next week ▶")
-                assert "Monday, October 19, 2026" in driver.session.last_message.text
+                assert "mon, Oct 19" in driver.session.last_message.text
                 await driver.click("◀ Previous week")
-                assert "Monday, October 12, 2026" in driver.session.last_message.text
+                assert "mon, Oct 12" in driver.session.last_message.text
                 if index == 0:
                     db_session.add(
                         Event(
@@ -292,8 +292,8 @@ async def test_teacher_and_student_can_navigate_and_refresh_selected_week(
                     )
                     await db_session.commit()
                 await driver.click("Refresh")
-                assert "Monday, October 12, 2026" in driver.session.last_message.text
-                assert "09:00–10:00" in driver.session.last_message.text
+                assert "mon, Oct 12" in driver.session.last_message.text
+                assert "9:00–10:00" in driver.session.last_message.text
                 assert driver.session.last_message.message_id == message_id
 
             assert requests == [
@@ -425,7 +425,7 @@ async def test_page_navigation_and_refresh_shrinks_page_controls(
                 requested_date or (date(2026, 10, 19) if period == "week" else None)
             ),
             pages=[
-                f"Page {index}/{page_count[0]}" for index in range(1, page_count[0] + 1)
+                f"Schedule section {index}" for index in range(1, page_count[0] + 1)
             ],
         )
 
@@ -434,19 +434,19 @@ async def test_page_navigation_and_refresh_shrinks_page_controls(
         await _register_teacher(driver, api)
         message_id = driver.session.last_message.message_id
         await driver.click("This week")
-        assert "Page 1/3" in driver.session.last_message.text
+        assert "Schedule section 1" in driver.session.last_message.text
         next_callback = driver.callback_data("Next ▶")
         await asyncio.gather(
             driver.click(data=next_callback), driver.click(data=next_callback)
         )
-        assert "Page 3/3" in driver.session.last_message.text
+        assert "Schedule section 3" in driver.session.last_message.text
         await driver.click("◀ Previous")
-        assert "Page 2/3" in driver.session.last_message.text
+        assert "Schedule section 2" in driver.session.last_message.text
 
         stale_next = driver.callback_data("Next ▶")
         page_count[0] = 1
         await driver.click("Refresh")
-        assert "Page 1/1" in driver.session.last_message.text
+        assert "Schedule section 1" in driver.session.last_message.text
         try:
             driver.callback_data("Next ▶")
         except AssertionError:

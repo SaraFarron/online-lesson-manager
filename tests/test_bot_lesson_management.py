@@ -151,6 +151,7 @@ async def _open_list(driver: BotDriver, *, weekly: bool = False) -> None:
     await driver.text("/start")
     await driver.click("Manage events")
     await driver.click("Weekly lessons" if weekly else "One-time lessons")
+    assert "Showing " not in driver.session.last_message.text
 
 
 def _freeze_schedule_clock(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -509,10 +510,14 @@ async def test_cancelled_occurrence_selector_is_paged(
     try:
         await _open_list(driver, weekly=True)
         await driver.click(_event_button(driver))
-        assert "Cancelled occurrences 1–10 of 11" in driver.session.last_message.text
+        assert (
+            "Cancelled occurrences 1–10 of 11" not in driver.session.last_message.text
+        )
         assert driver.callback_data("More cancellations ▶")
         await driver.click("More cancellations ▶")
-        assert "Cancelled occurrences 11–11 of 11" in driver.session.last_message.text
+        assert (
+            "Cancelled occurrences 11–11 of 11" not in driver.session.last_message.text
+        )
         last_cancelled = next(
             button.text
             for row in driver.session.last_message.reply_markup.inline_keyboard
@@ -521,6 +526,7 @@ async def test_cancelled_occurrence_selector_is_paged(
         )
         await driver.click(last_cancelled)
         assert "January 18" in driver.session.last_message.text
+        assert "Cancelled occurrences: 11" in driver.session.last_message.text
         assert "(cancelled)" in driver.session.last_message.text
     finally:
         await _close_bot(driver, http)

@@ -250,6 +250,7 @@ async def test_teacher_creates_edits_and_deletes_student_vacation(
         await _open_vacations(driver)
         await driver.click("Vacation list")
         assert "No vacations." in driver.session.last_message.text
+        assert "Vacations " not in driver.session.last_message.text
         await _create_vacation(
             driver,
             subject="Alice Learner",
@@ -258,6 +259,7 @@ async def test_teacher_creates_edits_and_deletes_student_vacation(
             end_date="04/11/2030",
         )
         assert "Vacation created." in driver.session.last_message.text
+        assert "Vacations " not in driver.session.last_message.text
         assert "Alice Learner" in _vacation_button(driver, "Alice Learner")
         vacation = (
             await db_session.execute(

@@ -175,6 +175,7 @@ async def _open_break_list(driver: BotDriver, *, weekly: bool = False) -> None:
     await driver.text("/start")
     await driver.click("Breaks")
     await driver.click("Recurring breaks" if weekly else "One-time breaks")
+    assert "Showing " not in driver.session.last_message.text
 
 
 async def _enter_break(
@@ -522,11 +523,10 @@ async def test_displacement_preview_is_paged_and_revalidated_before_second_confi
             cutoff_date="14/01/2031",
         )
         await driver.click("Save break")
-        assert "Showing affected lessons 1–10 of 11" in driver.session.last_message.text
+        assert "Affected lessons: 11" in driver.session.last_message.text
+        assert "Showing" not in driver.session.last_message.text
         await driver.click("Next ▶")
-        assert (
-            "Showing affected lessons 11–11 of 11" in driver.session.last_message.text
-        )
+        assert "Affected lessons: 11" in driver.session.last_message.text
         assert driver.session.last_message.text.count("One-time lesson") == 1
         await driver.click("Confirm and displace lessons")
         assert "Break created." in driver.session.last_message.text

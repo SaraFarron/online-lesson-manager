@@ -832,9 +832,7 @@ async def list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
             (_vacation_label(item, data["viewer_timezone"]), str(item.id))
             for item in items
         ],
-        "page": f"Vacations {skip + 1}–{min(skip + len(items), total)} of {total}"
-        if total
-        else "No vacations.",
+        "empty_state": "No vacations." if total == 0 else "",
         "timezone": escape(data["viewer_timezone"]),
         "error": escape(str(data.get("error", ""))),
         "notice": escape(str(data.get("notice", ""))),
@@ -974,7 +972,7 @@ def build_vacation_dialog() -> Dialog:
             getter=subject_data,
         ),
         Window(
-            Format("{page}\n{notice}\n{error}\nTimezone: {timezone}"),
+            Format("{empty_state}\n{notice}\n{error}\nTimezone: {timezone}"),
             Select(
                 Format("{item[0]}"),
                 id="vacation",

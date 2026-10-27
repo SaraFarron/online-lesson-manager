@@ -766,10 +766,7 @@ async def displacement_data(dialog_manager: DialogManager, **_: Any) -> dict[str
         "affected": "\n".join(
             escape(_occurrence_label(item, data["viewer_timezone"])) for item in items
         ),
-        "page": (
-            f"Showing affected lessons {skip + 1}–{min(skip + len(items), total)} "
-            f"of {total}"
-        ),
+        "affected_count": f"Affected lessons: {total}",
         "timezone": escape(data["viewer_timezone"]),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
@@ -1059,11 +1056,7 @@ async def list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
             (_break_label(item, data["viewer_timezone"]), str(item.id))
             for item in items
         ],
-        "page": (
-            f"Showing {skip + 1}–{min(skip + len(items), total)} of {total}"
-            if items
-            else f"No breaks on this page ({total} total)"
-        ),
+        "empty_state": "No breaks." if total == 0 else "",
         "error": escape(str(data.get("error", ""))),
         "notice": escape(str(data.get("notice", ""))),
         "has_previous": skip > 0,
@@ -1113,7 +1106,7 @@ def build_break_dialog() -> Dialog:
             state=BreakScreens.menu,
         ),
         Window(
-            Format("{title}\n{page}\n{notice}\n{error}\nTimezone: {timezone}"),
+            Format("{title}\n{empty_state}\n{notice}\n{error}\nTimezone: {timezone}"),
             Select(
                 Format("{item[0]}"),
                 id="break",
@@ -1282,7 +1275,7 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "This break overlaps the following lessons:\n{affected}\n{page}\n{warning}\n{error}\nTimezone: {timezone}"
+                "This break overlaps the following lessons:\n{affected}\n{affected_count}\n{warning}\n{error}\nTimezone: {timezone}"
             ),
             Row(
                 Button(

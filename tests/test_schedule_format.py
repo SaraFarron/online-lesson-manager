@@ -97,12 +97,14 @@ def test_week_includes_all_empty_days_and_snapshot_context() -> None:
     assert len(pages) == 1
     plain = _visible_text(pages[0])
     assert "This week's schedule" in plain
-    assert "Updated at 2026-10-19 12:00 (UTC)" in plain
+    assert "Updated mon, Oct 19 at 12:00" in plain
     assert plain.count("No events") == 7
     assert all(
-        datetime(2026, 10, day).strftime("%A, %B %d, %Y") in plain
+        f"{datetime(2026, 10, day):%a}".lower() + f", Oct {day}" in plain
         for day in range(19, 26)
     )
+    assert plain.endswith("Timezone: UTC")
+    assert "Page " not in plain
 
 
 def test_automatic_break_schedule_items_require_parent_reference() -> None:
@@ -175,7 +177,7 @@ def test_automatic_and_manual_breaks_have_distinct_read_only_labels() -> None:
     teacher_text = _visible_text(format_schedule_pages(response, "TEACHER")[0])
     student_text = _visible_text(format_schedule_pages(response, "STUDENT")[0])
 
-    assert "09:00–10:00  Lesson — Student  [PAST]" in teacher_text
+    assert "9:00–10:00  Lesson — Student  [PAST]" in teacher_text
     assert "10:00–10:05  Automatic break (read-only)  [UPCOMING]" in teacher_text
     assert "10:05–11:05  Break  [UPCOMING]" in teacher_text
     assert "10:00–10:05  Teacher's automatic break (read-only)  [UPCOMING]" in (
@@ -211,8 +213,8 @@ def test_automatic_break_local_times_disambiguate_dst_fold() -> None:
 
     text = _visible_text(format_schedule_pages(response, "TEACHER")[0])
 
-    assert "01:30 EDT (UTC-04:00)" in text
-    assert "01:30 EST (UTC-05:00)" in text
+    assert "1:30 (first occurrence)" in text
+    assert "1:30 (second occurrence)" in text
     assert text.count("Automatic break (read-only)") == 2
 
 
@@ -243,9 +245,10 @@ def test_automatic_breaks_paginate_without_omitting_rows() -> None:
 
     assert len(pages) > 1
     assert all(_utf16_length(page) <= MAX_MESSAGE_UTF16_UNITS for page in visible_pages)
+    assert all(page.endswith("Timezone: UTC") for page in visible_pages)
     assert all_text.count("Teacher's automatic break (read-only)") == 160
     assert all_text.count("[UPCOMING]") == 160
-    assert all(f"{item.start:%H:%M}–{item.end:%H:%M}" in all_text for item in items)
+    assert "Page " not in all_text
 
 
 def test_teacher_names_are_html_escaped_but_student_labels_are_suppressed() -> None:
@@ -323,7 +326,7 @@ def test_now_divider_is_only_on_current_date_and_between_status_groups() -> None
     )
 
 
-def test_current_empty_day_keeps_empty_state_and_now_divider() -> None:
+def test_current_empty_day_omits_now_and_timezone_footer() -> None:
     response = _response(
         [ScheduleDay(date=date(2026, 10, 19), items=[])],
         generated_at="2026-10-19T12:00:00+00:00",
@@ -332,10 +335,13 @@ def test_current_empty_day_keeps_empty_state_and_now_divider() -> None:
     text = _visible_text(format_schedule_pages(response, "STUDENT")[0])
 
     assert "No events" in text
-    assert "NOW" in text
+    assert "Today's schedule" in text
+    assert "mon, Oct 19" in text
+    assert "NOW" not in text
+    assert "Timezone:" not in text
 
 
-def test_repeated_hour_times_include_distinguishing_zone_and_offset() -> None:
+def test_repeated_hour_times_include_fold_label_without_zone_offset() -> None:
     response = _response(
         [
             ScheduleDay(
@@ -362,8 +368,10 @@ def test_repeated_hour_times_include_distinguishing_zone_and_offset() -> None:
 
     text = _visible_text(format_schedule_pages(response, "STUDENT")[0])
 
-    assert "01:30 EDT (UTC-04:00)" in text
-    assert "01:30 EST (UTC-05:00)" in text
+    assert "1:30 (first occurrence)" in text
+    assert "1:30 (second occurrence)" in text
+    assert "UTC-04:00" not in text
+    assert "UTC-05:00" not in text
 
 
 def test_cross_midnight_item_is_rendered_on_start_date_with_full_interval() -> None:
@@ -390,8 +398,31 @@ def test_cross_midnight_item_is_rendered_on_start_date_with_full_interval() -> N
 
     text = _visible_text("\n".join(format_schedule_pages(response, "STUDENT")))
 
-    assert "23:30–01:30 (+1 day)" in text
-    assert text.count("23:30–01:30 (+1 day)") == 1
+    assert "mon, Oct 19 23:30–tue, Oct 20 1:30" in text
+    assert text.count("mon, Oct 19 23:30–tue, Oct 20 1:30") == 1
+
+
+def test_cross_midnight_interval_includes_year_at_year_boundary() -> None:
+    response = _response(
+        [
+            ScheduleDay(
+                date=date(2026, 12, 31),
+                items=[
+                    _item(
+                        1,
+                        "2026-12-31T23:00:00+00:00",
+                        "2027-01-01T01:00:00+00:00",
+                        subject_label=None,
+                    )
+                ],
+            )
+        ],
+        generated_at="2026-12-31T12:00:00+00:00",
+    )
+
+    text = _visible_text(format_schedule_pages(response, "STUDENT")[0])
+
+    assert "thu, Dec 31 23:00–fri, Jan 1 (2027) 1:00" in text
 
 
 def test_oversized_week_paginates_complete_rows_with_safe_labels_and_budget() -> None:
@@ -417,15 +448,9 @@ def test_oversized_week_paginates_complete_rows_with_safe_labels_and_budget() ->
     visible_pages = [_visible_text(page) for page in pages]
 
     assert len(pages) > 1
-    assert all(
-        "Page " + str(index) + "/" + str(len(pages)) in page
-        for index, page in enumerate(visible_pages, start=1)
-    )
     assert all(_utf16_length(page) <= MAX_MESSAGE_UTF16_UNITS for page in visible_pages)
-    assert all(
-        f"Page {index}/{len(pages)}" in page
-        for index, page in enumerate(visible_pages, start=1)
-    )
+    assert all(page.endswith("Timezone: UTC") for page in visible_pages)
+    assert all("Page " not in page for page in visible_pages)
     assert sum(page.count("[UPCOMING]") for page in visible_pages) == 160
     assert all(
         f"Student {index:03d}" in "\n".join(visible_pages) for index in range(160)

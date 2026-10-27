@@ -1,17 +1,17 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date
 from html import escape
 from typing import Literal
 from unicodedata import category
 from zoneinfo import ZoneInfo
 
 from telegram.api import ScheduleDay, ScheduleItem, ScheduleResponse
+from telegram.inputs import format_compact_schedule_date, format_human_time
 
 ViewerRole = Literal["TEACHER", "STUDENT"]
 MAX_MESSAGE_UTF16_UNITS = 3500
 MAX_LABEL_CODEPOINTS = 80
-PAGE_INDICATOR_RESERVE_UNITS = 32
 
 _EVENT_LABELS = {
     "LESSON": "Lesson",
@@ -41,36 +41,56 @@ def format_schedule_pages(
     header_lines = (
         _TextLine(f"<b>{title}</b>", title),
         _TextLine(
-            f"Timezone: {escape(response.timezone)}",
-            f"Timezone: {response.timezone}",
-        ),
-        _TextLine(
-            f"Updated at {updated_at:%Y-%m-%d %H:%M} ({escape(response.timezone)})",
-            f"Updated at {updated_at:%Y-%m-%d %H:%M} ({response.timezone})",
+            f"Updated {escape(format_compact_schedule_date(current_date, reference_date=current_date))} "
+            f"at {escape(format_human_time(updated_at))}",
+            f"Updated {format_compact_schedule_date(current_date, reference_date=current_date)} "
+            f"at {format_human_time(updated_at)}",
         ),
     )
     header_markup = "\n".join(line.markup for line in header_lines)
     header_plain = "\n".join(line.plain for line in header_lines)
+    empty_today = response.period == "day" and not any(
+        day.items for day in response.days
+    )
+    timezone_footer = (
+        None
+        if empty_today
+        else _TextLine(
+            f"Timezone: {escape(response.timezone)}",
+            f"Timezone: {response.timezone}",
+        )
+    )
+    footer_length = _utf16_length(timezone_footer.plain) if timezone_footer else 0
+    footer_separator = 1 if timezone_footer else 0
     body_limit = (
         MAX_MESSAGE_UTF16_UNITS
         - _utf16_length(header_plain)
-        - PAGE_INDICATOR_RESERVE_UNITS
-        - 2
+        - 1
+        - footer_separator
+        - footer_length
     )
     if body_limit <= 0:
         raise ValueError("Schedule header exceeds the Telegram message budget")
 
     chunks: list[tuple[_TextLine, ...]] = []
     for day in response.days:
-        chunks.extend(_day_chunks(day, role, zone, current_date, body_limit))
+        chunks.extend(
+            _day_chunks(
+                day,
+                role,
+                zone,
+                current_date,
+                body_limit,
+                suppress_empty_today_now=empty_today,
+            )
+        )
     if not chunks:
         raise ValueError("Schedule response must include at least one day")
 
     pages = _pack_chunks(chunks, body_limit)
-    total_pages = len(pages)
     return tuple(
-        _render_page(header_markup, header_plain, page, index, total_pages)
-        for index, page in enumerate(pages, start=1)
+        _render_page(header_markup, header_plain, page, timezone_footer)
+        for page in pages
     )
 
 
@@ -80,23 +100,27 @@ def _day_chunks(
     zone: ZoneInfo,
     current_date: date,
     body_limit: int,
+    *,
+    suppress_empty_today_now: bool,
 ) -> list[tuple[_TextLine, ...]]:
-    heading = day.date.strftime("%A, %B %d, %Y")
+    heading = format_compact_schedule_date(day.date, reference_date=current_date)
     heading_line = _TextLine(f"<b>{heading}</b>", heading)
     is_current_day = day.date == current_date
 
     if not day.items:
         content = [_TextLine("No events", "No events")]
-        if is_current_day:
+        if is_current_day and not suppress_empty_today_now:
             content.append(_now_divider())
     elif is_current_day:
         ended = [item for item in day.items if item.status == "past"]
         not_ended = [item for item in day.items if item.status != "past"]
-        content = [_render_item(item, role, zone) for item in ended]
+        content = [_render_item(item, role, zone, current_date) for item in ended]
         content.append(_now_divider())
-        content.extend(_render_item(item, role, zone) for item in not_ended)
+        content.extend(
+            _render_item(item, role, zone, current_date) for item in not_ended
+        )
     else:
-        content = [_render_item(item, role, zone) for item in day.items]
+        content = [_render_item(item, role, zone, current_date) for item in day.items]
 
     chunks: list[tuple[_TextLine, ...]] = []
     current = [heading_line]
@@ -116,14 +140,26 @@ def _day_chunks(
     return chunks
 
 
-def _render_item(item: ScheduleItem, role: ViewerRole, zone: ZoneInfo) -> _TextLine:
+def _render_item(
+    item: ScheduleItem,
+    role: ViewerRole,
+    zone: ZoneInfo,
+    reference_date: date,
+) -> _TextLine:
     start = item.start.astimezone(zone)
     end = item.end.astimezone(zone)
-    interval = f"{_format_time(start, zone)}–{_format_time(end, zone)}"
-    days_later = (end.date() - start.date()).days
-    if days_later > 0:
-        unit = "day" if days_later == 1 else "days"
-        interval += f" (+{days_later} {unit})"
+    start_clock = format_human_time(start)
+    end_clock = format_human_time(end)
+    if start.date() == end.date():
+        interval = f"{start_clock}–{end_clock}"
+    else:
+        start_date = format_compact_schedule_date(
+            start.date(), reference_date=reference_date
+        )
+        end_date = format_compact_schedule_date(
+            end.date(), reference_date=reference_date
+        )
+        interval = f"{start_date} {start_clock}–{end_date} {end_clock}"
 
     event_label = (
         _AUTOMATIC_BREAK_LABELS[role]
@@ -149,27 +185,6 @@ def _render_item(item: ScheduleItem, role: ViewerRole, zone: ZoneInfo) -> _TextL
 
 def _now_divider() -> _TextLine:
     return _TextLine("── <b>NOW</b> ──", "── NOW ──")
-
-
-def _format_time(value: datetime, zone: ZoneInfo) -> str:
-    local = value.astimezone(zone)
-    clock = local.strftime("%H:%M")
-    naive = local.replace(tzinfo=None)
-    early_offset = naive.replace(tzinfo=zone, fold=0).utcoffset()
-    late_offset = naive.replace(tzinfo=zone, fold=1).utcoffset()
-    if early_offset == late_offset:
-        return clock
-    abbreviation = local.tzname() or "local"
-    return f"{clock} {abbreviation} (UTC{_format_offset(local.utcoffset())})"
-
-
-def _format_offset(offset: timedelta | None) -> str:
-    if offset is None:
-        return "+00:00"
-    total_minutes = int(offset.total_seconds() // 60)
-    sign = "+" if total_minutes >= 0 else "-"
-    hours, minutes = divmod(abs(total_minutes), 60)
-    return f"{sign}{hours:02d}:{minutes:02d}"
 
 
 def _safe_label(value: str) -> str:
@@ -205,14 +220,15 @@ def _render_page(
     header_markup: str,
     header_plain: str,
     chunks: tuple[tuple[_TextLine, ...], ...],
-    page_number: int,
-    total_pages: int,
+    footer: _TextLine | None,
 ) -> str:
     body_markup = "\n\n".join(_lines_markup(chunk) for chunk in chunks)
     body_plain = "\n\n".join(_lines_plain(chunk) for chunk in chunks)
-    footer = f"Page {page_number}/{total_pages}"
-    text = f"{header_markup}\n{body_markup}\n{footer}"
-    visible_text = f"{header_plain}\n{body_plain}\n{footer}"
+    text = f"{header_markup}\n{body_markup}"
+    visible_text = f"{header_plain}\n{body_plain}"
+    if footer is not None:
+        text += f"\n{footer.markup}"
+        visible_text += f"\n{footer.plain}"
     if _utf16_length(visible_text) > MAX_MESSAGE_UTF16_UNITS:
         raise ValueError("Formatted schedule exceeds the Telegram message budget")
     return text

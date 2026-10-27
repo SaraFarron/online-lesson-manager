@@ -98,8 +98,12 @@ def format_human_datetime(value: datetime, *, reference_date: date) -> str:
     year = f" ({value.year})" if value.year != reference_date.year else ""
     return (
         f"{_MONTH_NAMES[value.month - 1]} {value.day} "
-        f"at {_format_clock(value)}{_format_fold(value)}{year}"
+        f"at {format_human_time(value)}{year}"
     )
+
+
+def format_human_time(value: datetime) -> str:
+    return f"{_format_clock(value)}{_format_fold(value)}"
 
 
 def format_compact_schedule_date(value: date, *, reference_date: date) -> str:
