@@ -22,6 +22,14 @@ from tests.bot_support import BotDriver
 _TELEGRAM_IDS = count(5_200_000_000, 2)
 
 
+def _assert_no_schedule_refresh(driver: BotDriver) -> None:
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    assert all(
+        button.text != "Refresh" for row in markup.inline_keyboard for button in row
+    )
+
+
 async def _seed_accounts(
     session: AsyncSession,
 ) -> tuple[User, User]:
@@ -216,7 +224,7 @@ async def test_teacher_books_student_and_omits_default_duration(
         assert "end" not in body
         assert body["user_id"] == str(student.id)
         assert "Alice Learner" in driver.session.last_message.text
-        assert "Tuesday, October 20, 2026" in driver.session.last_message.text
+        assert "tue, Oct 20" in driver.session.last_message.text
         assert "Automatic break (read-only)" in driver.session.last_message.text
     finally:
         await _close_bot(driver, http)
@@ -330,7 +338,7 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         assert (series[0].end - series[0].start).total_seconds() == 45 * 60
         assert series[0].interval_end == datetime(2026, 10, 28)
         assert "Personal lesson" in driver.session.last_message.text
-        assert "Tuesday, October 20, 2026" in driver.session.last_message.text
+        assert "tue, Oct 20" in driver.session.last_message.text
         create_request = next(
             request
             for request in requests
@@ -539,7 +547,8 @@ async def test_lost_create_response_requires_schedule_reload_without_retry(
         ]
         assert len(create_requests) == 1
         assert "Alice Learner" in driver.session.last_message.text
-        assert "Tuesday, October 20, 2026" in driver.session.last_message.text
+        assert "tue, Oct 20" in driver.session.last_message.text
+        _assert_no_schedule_refresh(driver)
     finally:
         await _close_bot(driver, http)
 
@@ -581,6 +590,7 @@ async def test_concurrent_schedule_change_shows_error_and_requires_reload(
         )
         await driver.click("Reload schedule")
         assert "This week's schedule" in driver.session.last_message.text
+        _assert_no_schedule_refresh(driver)
     finally:
         await _close_bot(driver, http)
 

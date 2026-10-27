@@ -98,13 +98,6 @@ async def switch_to_week(
     await _refresh(callback, manager, "week")
 
 
-async def refresh_schedule(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    state = _state(manager)
-    await _refresh(callback, manager, state.period, state.requested_date)
-
-
 async def previous_week(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
@@ -174,10 +167,16 @@ async def back_to_home(
 
 async def schedule_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     state = _state(dialog_manager)
+    if state.pages:
+        schedule_text = state.pages[state.page]
+    else:
+        schedule_text = (
+            f"{escape(state.error)}\n"
+            "Use the available schedule-view buttons to switch views, "
+            "or return home and reopen the schedule."
+        )
     return {
-        "schedule_text": (
-            state.pages[state.page] if state.pages else escape(state.error)
-        ),
+        "schedule_text": schedule_text,
         "has_previous": state.page > 0,
         "has_next": state.page + 1 < len(state.pages),
         "show_today": state.period != "day",
@@ -228,14 +227,14 @@ async def _load_schedule(
             period=period,
             role=role,
             requested_date=requested_date if period == "week" else None,
-            error="Schedule is unavailable right now. Please try again shortly.",
+            error="Schedule is unavailable right now.",
         )
     except ValidationError, ValueError:
         return ScheduleDialogState(
             period=period,
             role=role,
             requested_date=requested_date if period == "week" else None,
-            error="The schedule response could not be displayed. Refresh or return home.",
+            error="The schedule response could not be displayed.",
         )
     return ScheduleDialogState(
         period=period,
@@ -278,7 +277,6 @@ def build_schedule_dialog() -> Dialog:
                 ),
             ),
             Row(
-                Button(Const("Refresh"), id="refresh", on_click=refresh_schedule),
                 Button(
                     Const("Today"),
                     id="today",

@@ -25,7 +25,15 @@ async def _register_teacher(driver: BotDriver, api: BackendClient) -> None:
     assert await api.view(driver.user_id, driver.user_id)
 
 
-async def test_registered_teacher_can_navigate_and_refresh_in_place(
+def _assert_no_refresh(driver: BotDriver) -> None:
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    assert all(
+        button.text != "Refresh" for row in markup.inline_keyboard for button in row
+    )
+
+
+async def test_registered_teacher_can_navigate_and_reopen_in_place(
     client, db_session, bot_service_key, monkeypatch
 ) -> None:
     api = BackendClient(client, bot_service_key)
@@ -42,11 +50,13 @@ async def test_registered_teacher_can_navigate_and_refresh_in_place(
         assert "Notifications are not active yet" in driver.session.last_message.text
 
         await driver.click("Today")
+        _assert_no_refresh(driver)
         assert "mon, Oct 19" in driver.session.last_message.text
         assert "No events" in driver.session.last_message.text
         assert driver.session.last_message.message_id == message_id
 
         await driver.click("This week")
+        _assert_no_refresh(driver)
         assert "This week's schedule" in driver.session.last_message.text
         assert driver.session.last_message.text.count("No events") == 7
         assert driver.callback_data("Today")
@@ -63,25 +73,38 @@ async def test_registered_teacher_can_navigate_and_refresh_in_place(
         )
         await db_session.commit()
         now[0] = datetime(2026, 10, 20, 0, 1, tzinfo=UTC)
-        await driver.click("Refresh")
+        await driver.click("Today")
+        _assert_no_refresh(driver)
         assert "tue, Oct 20" in driver.session.last_message.text
         assert "Updated tue, Oct 20 at 0:01" in driver.session.last_message.text
         assert "Personal lesson" in driver.session.last_message.text
         assert "10:00–10:05  Automatic break (read-only)  [UPCOMING]" in (
             driver.session.last_message.text
         )
-        assert driver.session.last_message.text.count("No events") == 6
+        assert "No events" not in driver.session.last_message.text
 
-        await driver.click("Today")
-        assert "Today's schedule" in driver.session.last_message.text
-        assert "Personal lesson" in driver.session.last_message.text
-        assert "Automatic break (read-only)" in driver.session.last_message.text
+        db_session.add(
+            Event(
+                teacher_id=view.account.id,
+                user_id=view.account.id,
+                event_type="LESSON",
+                start=datetime(2026, 10, 20, 11),
+                end=datetime(2026, 10, 20, 12),
+            )
+        )
+        await db_session.commit()
         await driver.click("Back to home")
         assert "TEACHER:" in driver.session.last_message.text
         assert "Lesson booking and schedule viewing are available" in (
             driver.session.last_message.text
         )
         assert driver.session.last_message.message_id == message_id
+        await driver.click("Today")
+        assert "Today's schedule" in driver.session.last_message.text
+        assert "Personal lesson" in driver.session.last_message.text
+        assert "Automatic break (read-only)" in driver.session.last_message.text
+        assert "11:00–12:00" in driver.session.last_message.text
+        _assert_no_refresh(driver)
 
         sent = [
             call
@@ -105,7 +128,7 @@ async def test_registered_teacher_can_navigate_and_refresh_in_place(
         await driver.close()
 
 
-async def test_schedule_outage_shows_retry_and_recovers_without_stale_rows(
+async def test_schedule_outage_offers_navigation_recovery_without_stale_rows(
     client, bot_service_key
 ) -> None:
     offline = [False]
@@ -122,30 +145,37 @@ async def test_schedule_outage_shows_retry_and_recovers_without_stale_rows(
         driver = BotDriver(build_dispatcher(api))
         try:
             await _register_teacher(driver, api)
-            offline[0] = True
             await driver.click("Today")
+            assert "No events" in driver.session.last_message.text
+            _assert_no_refresh(driver)
+            offline[0] = True
+            await driver.click("This week")
             error_text = driver.session.last_message.text
             assert "Schedule is unavailable" in error_text
             assert "No events" not in error_text
-            assert driver.callback_data("Refresh")
+            assert "return home and reopen" in error_text
+            _assert_no_refresh(driver)
             assert driver.callback_data("Back to home")
 
             offline[0] = False
-            await driver.click("Refresh")
+            await driver.click("Back to home")
+            await driver.click("Today")
             assert "Today's schedule" in driver.session.last_message.text
             assert "No events" in driver.session.last_message.text
 
             await driver.click("This week")
+            _assert_no_refresh(driver)
             offline[0] = True
             await driver.click("◀ Previous week")
             error_text = driver.session.last_message.text
             assert "Schedule is unavailable" in error_text
             assert "No events" not in error_text
-            assert driver.callback_data("Refresh")
+            assert "return home and reopen" in error_text
+            _assert_no_refresh(driver)
             assert driver.callback_data("Back to home")
 
             offline[0] = False
-            await driver.click("Refresh")
+            await driver.click("Next week ▶")
             assert "This week's schedule" in driver.session.last_message.text
             assert driver.session.last_message.text.count("No events") == 7
             await driver.click("Back to home")
@@ -163,8 +193,8 @@ async def test_expired_token_recovers_and_inactive_account_gets_schedule_error(
         await _register_teacher(driver, api)
         await driver.click("Today")
         api.tokens[driver.user_id] = "expired-test-token"
-        await driver.click("Refresh")
-        assert "Today's schedule" in driver.session.last_message.text
+        await driver.click("This week")
+        assert "This week's schedule" in driver.session.last_message.text
 
         account = await db_session.scalar(
             select(User).where(User.telegram_user_id == driver.user_id)
@@ -172,12 +202,13 @@ async def test_expired_token_recovers_and_inactive_account_gets_schedule_error(
         assert account is not None
         account.is_active = False
         await db_session.commit()
-        await driver.click("Refresh")
+        await driver.click("Today")
 
         error_text = driver.session.last_message.text
         assert "cannot view a schedule" in error_text
         assert "No events" not in error_text
-        assert driver.callback_data("Refresh")
+        assert "return home and reopen" in error_text
+        _assert_no_refresh(driver)
         assert driver.callback_data("Back to home")
     finally:
         await driver.close()
@@ -209,6 +240,8 @@ async def test_registered_student_can_open_week_and_return_home(
         assert "Lesson booking and schedule viewing are available" in (
             student.session.last_message.text
         )
+        await student.click("Today")
+        _assert_no_refresh(student)
         await student.click("This week")
         assert "This week's schedule" in student.session.last_message.text
         assert student.session.last_message.text.count("No events") == 7
@@ -224,7 +257,7 @@ async def test_registered_student_can_open_week_and_return_home(
         await student.close()
 
 
-async def test_teacher_and_student_can_navigate_and_refresh_selected_week(
+async def test_teacher_and_student_can_navigate_selected_week_with_fresh_data(
     client, db_session, bot_service_key, monkeypatch
 ) -> None:
     requests: list[str | None] = []
@@ -268,6 +301,7 @@ async def test_teacher_and_student_can_navigate_and_refresh_selected_week(
             for index, driver in enumerate((teacher, student)):
                 message_id = driver.session.last_message.message_id
                 await driver.click("This week")
+                _assert_no_refresh(driver)
                 assert "mon, Oct 19" in (driver.session.last_message.text)
                 assert driver.callback_data("◀ Previous week")
                 assert driver.callback_data("Next week ▶")
@@ -291,7 +325,9 @@ async def test_teacher_and_student_can_navigate_and_refresh_selected_week(
                         )
                     )
                     await db_session.commit()
-                await driver.click("Refresh")
+                await driver.click("Next week ▶")
+                await driver.click("◀ Previous week")
+                _assert_no_refresh(driver)
                 assert "mon, Oct 12" in driver.session.last_message.text
                 assert "9:00–10:00" in driver.session.last_message.text
                 assert driver.session.last_message.message_id == message_id
@@ -301,11 +337,13 @@ async def test_teacher_and_student_can_navigate_and_refresh_selected_week(
                 "2026-10-12",
                 "2026-10-19",
                 "2026-10-12",
+                "2026-10-19",
                 "2026-10-12",
                 None,
                 "2026-10-12",
                 "2026-10-19",
                 "2026-10-12",
+                "2026-10-19",
                 "2026-10-12",
             ]
         finally:
@@ -313,7 +351,7 @@ async def test_teacher_and_student_can_navigate_and_refresh_selected_week(
             await student.close()
 
 
-async def test_refresh_applies_timezone_name_cancellation_and_vacation_changes(
+async def test_period_switch_and_home_reopen_apply_live_schedule_changes(
     client, db_session, bot_service_key, monkeypatch
 ) -> None:
     api = BackendClient(client, bot_service_key)
@@ -382,7 +420,9 @@ async def test_refresh_applies_timezone_name_cancellation_and_vacation_changes(
             )
         )
         await db_session.commit()
-        await teacher.click("Refresh")
+        await teacher.click("This week")
+        await teacher.click("Today")
+        _assert_no_refresh(teacher)
         updated_text = teacher.session.last_message.text
         assert "Updated Student" in updated_text
         assert "Timezone: Asia/Bangkok" in updated_text
@@ -399,7 +439,9 @@ async def test_refresh_applies_timezone_name_cancellation_and_vacation_changes(
             )
         )
         await db_session.commit()
-        await teacher.click("Refresh")
+        await teacher.click("This week")
+        await teacher.click("Today")
+        _assert_no_refresh(teacher)
         hidden_text = teacher.session.last_message.text
         assert "No events" in hidden_text
         assert "Updated Student" not in hidden_text
@@ -408,7 +450,7 @@ async def test_refresh_applies_timezone_name_cancellation_and_vacation_changes(
         await student.close()
 
 
-async def test_page_navigation_and_refresh_shrinks_page_controls(
+async def test_page_navigation_and_period_switch_shrinks_page_controls(
     client, bot_service_key, monkeypatch
 ) -> None:
     import telegram.schedule_dialogs as schedule_dialogs
@@ -445,7 +487,8 @@ async def test_page_navigation_and_refresh_shrinks_page_controls(
 
         stale_next = driver.callback_data("Next ▶")
         page_count[0] = 1
-        await driver.click("Refresh")
+        await driver.click("Today")
+        _assert_no_refresh(driver)
         assert "Schedule section 1" in driver.session.last_message.text
         try:
             driver.callback_data("Next ▶")
@@ -466,7 +509,7 @@ async def test_page_navigation_and_refresh_shrinks_page_controls(
         await driver.close()
 
 
-async def test_invalid_schedule_output_keeps_recovery_controls(
+async def test_invalid_schedule_output_has_home_and_period_recovery(
     client, bot_service_key, monkeypatch
 ) -> None:
     import telegram.schedule_dialogs as schedule_dialogs
@@ -474,18 +517,32 @@ async def test_invalid_schedule_output_keeps_recovery_controls(
     api = BackendClient(client, bot_service_key)
     driver = BotDriver(build_dispatcher(api))
 
-    def invalid_formatter(*_args):
-        raise ValueError("malformed")
+    invalid = [True]
+    original_formatter = schedule_dialogs.format_schedule_pages
 
-    monkeypatch.setattr(schedule_dialogs, "format_schedule_pages", invalid_formatter)
+    def maybe_invalid_formatter(*args):
+        if invalid[0]:
+            raise ValueError("malformed")
+        return original_formatter(*args)
+
+    monkeypatch.setattr(
+        schedule_dialogs, "format_schedule_pages", maybe_invalid_formatter
+    )
     try:
         await _register_teacher(driver, api)
         await driver.click("Today")
         assert "schedule response could not be displayed" in (
             driver.session.last_message.text
         )
-        assert driver.callback_data("Refresh")
+        assert "return home and reopen" in driver.session.last_message.text
+        _assert_no_refresh(driver)
+        assert driver.callback_data("This week")
         assert driver.callback_data("Back to home")
         assert "No events" not in driver.session.last_message.text
+        invalid[0] = False
+        await driver.click("Back to home")
+        await driver.click("Today")
+        assert "Today's schedule" in driver.session.last_message.text
+        assert "No events" in driver.session.last_message.text
     finally:
         await driver.close()
