@@ -306,6 +306,11 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         await driver.text("20/10/2026")
         assert driver.deleted_message_ids()[-1] == start_message_id
         await driver.text("10:00")
+        assert "Weekly recurrence with No end" in driver.session.last_message.text
+        await driver.click("Change series end")
+        await driver.click("Back")
+        assert "Weekly recurrence with No end" in driver.session.last_message.text
+        await driver.click("Change series end")
         rejected_cutoff_id = driver.update_id + 1
         await driver.text("19/10/2026")
         assert "cannot be before its first lesson" in driver.session.last_message.text
@@ -314,6 +319,15 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         await driver.text("27/10/2026")
         assert driver.deleted_message_ids()[-1] == cutoff_message_id
         assert "Weekly through October 27" in (driver.session.last_message.text)
+        await driver.click("Change series end")
+        await driver.click("Back")
+        assert "Weekly through October 27" in driver.session.last_message.text
+        await driver.click("Change series end")
+        await driver.click("No end")
+        assert "Weekly recurrence with No end" in driver.session.last_message.text
+        await driver.click("Change series end")
+        await driver.text("27/10/2026")
+        assert "Weekly through October 27" in driver.session.last_message.text
         assert "Custom duration applies only to this lesson or series" in (
             driver.session.last_message.text
         )
@@ -329,16 +343,26 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         assert "Weekly through October 27" in (driver.session.last_message.text)
         assert "New lesson at October 20" in driver.session.last_message.text
         assert "10:00 - 10:45" in driver.session.last_message.text
+
+        await driver.click("Change date")
+        await driver.text("29/10/2026")
+        await driver.text("10:00")
+        assert "does not include the new first lesson" in (
+            driver.session.last_message.text
+        )
+        await driver.text("05/11/2026")
+        assert "Weekly through November 5" in driver.session.last_message.text
         await driver.click("Create lesson")
 
         series = list((await db_session.scalars(select(RecurrentEvent))).all())
         assert len(series) == 1
         assert series[0].user_id == teacher.id
         assert series[0].interval == 7
+        assert series[0].start == datetime(2026, 10, 29, 10)
         assert (series[0].end - series[0].start).total_seconds() == 45 * 60
-        assert series[0].interval_end == datetime(2026, 10, 28)
+        assert series[0].interval_end == datetime(2026, 11, 6)
         assert "Personal lesson" in driver.session.last_message.text
-        assert "tue, Oct 20" in driver.session.last_message.text
+        assert "thu, Oct 29" in driver.session.last_message.text
         create_request = next(
             request
             for request in requests
@@ -347,8 +371,45 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         )
         body = json.loads(create_request.content)
         assert datetime.fromisoformat(body["end"]) == datetime(
-            2026, 10, 20, 10, 45, tzinfo=UTC
+            2026, 10, 29, 10, 45, tzinfo=UTC
         )
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_teacher_books_student_weekly_with_no_end_by_default(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
+    )
+    _, driver, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        await driver.click("Change assignee")
+        await driver.click("Alice Learner")
+        await driver.click("Weekly")
+        await driver.text("20/10/2026")
+        await driver.text("10:00")
+        assert "Weekly recurrence with No end" in driver.session.last_message.text
+        await driver.click("Create lesson")
+
+        series = (await db_session.scalars(select(RecurrentEvent))).one()
+        assert series.user_id == student.id
+        assert series.interval_end is None
+        create_request = next(
+            request
+            for request in requests
+            if request.method == "POST"
+            and request.url.path == "/api/v1/recurrent-lessons/"
+        )
+        assert json.loads(create_request.content)["interval_end"] is None
     finally:
         await _close_bot(driver, http)
 
@@ -432,7 +493,13 @@ async def test_student_books_self_weekly_without_duration_or_subject_forgery(
         ]
         await driver.text("20/10/2026")
         await driver.text("10:00")
-        await driver.text("20/10/2026")
+        assert "Weekly recurrence with No end" in driver.session.last_message.text
+        await driver.click("Change series end")
+        await driver.text("25/10/2026")
+        assert "Weekly through October 25" in driver.session.last_message.text
+        await driver.click("Change series end")
+        await driver.click("No end")
+        assert "Weekly recurrence with No end" in driver.session.last_message.text
         assert "Autobreak after each lesson: 5 minutes" in (
             driver.session.last_message.text
         )
@@ -445,7 +512,7 @@ async def test_student_books_self_weekly_without_duration_or_subject_forgery(
         assert series[0].teacher_id == teacher.id
         assert series[0].user_id == student.id
         assert (series[0].end - series[0].start).total_seconds() == 3600
-        assert series[0].interval_end == datetime(2026, 10, 21, 7)
+        assert series[0].interval_end is None
         create_requests = [
             request
             for request in requests
@@ -457,6 +524,7 @@ async def test_student_books_self_weekly_without_duration_or_subject_forgery(
         assert "end" not in body
         assert body["user_id"] == str(student.id)
         assert body["interval"] == 7
+        assert body["interval_end"] is None
         assert "duration" not in body
         assert "10:00" in driver.session.last_message.text
 

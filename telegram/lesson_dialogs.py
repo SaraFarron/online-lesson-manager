@@ -167,17 +167,30 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         except OverflowError:
             review = "The lesson interval is invalid. Edit the duration or start time."
 
-    if data.get("kind") == "weekly" and data.get("cutoff_date"):
+    if data.get("kind") == "weekly":
         teacher_timezone_note = (
             f"; weekly starts use {data['teacher_timezone']}"
             if data["teacher_timezone"] != data["viewer_timezone"]
             else ""
         )
-        review += (
-            f"\nWeekly through "
-            f"{format_human_date(date.fromisoformat(data['cutoff_date']), reference_date=reference_date)} "
-            f"inclusive{teacher_timezone_note}."
-        )
+        cutoff_data = data.get("interval_end")
+        if cutoff_data is None:
+            review += f"\nWeekly recurrence with No end{teacher_timezone_note}."
+        else:
+            inclusive_end_date = date.fromisoformat(
+                data.get("cutoff_date")
+                or (
+                    datetime.fromisoformat(cutoff_data)
+                    .astimezone(ZoneInfo(data["viewer_timezone"]))
+                    .date()
+                    - timedelta(days=1)
+                ).isoformat()
+            )
+            review += (
+                f"\nWeekly through "
+                f"{format_human_date(inclusive_end_date, reference_date=reference_date)} "
+                f"inclusive{teacher_timezone_note}."
+            )
     if data.get("custom_duration"):
         review += (
             "\nCustom duration applies only to this lesson or series; it does not "
@@ -261,6 +274,7 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             not data.get("submitted")
             and not data.get("submitting")
             and not data.get("needs_schedule_reload")
+            and not data.get("cutoff_invalid")
         ),
         "can_edit": (
             not data.get("submitted")
@@ -519,12 +533,22 @@ async def start_time_input(
         resolution=resolution.model_dump(mode="json"),
         error="",
     )
-    state = (
-        LessonScreens.cutoff_date
-        if manager.dialog_data["kind"] == "weekly"
-        else LessonScreens.review
-    )
-    await manager.switch_to(state, show_mode=ShowMode.EDIT)
+    cutoff_data = manager.dialog_data.get("interval_end")
+    if manager.dialog_data["kind"] == "weekly" and cutoff_data is not None:
+        cutoff = datetime.fromisoformat(cutoff_data)
+        if cutoff <= resolution.start.utc:
+            _begin_cutoff_edit(manager)
+            manager.dialog_data.update(
+                cutoff_invalid=True,
+                error=(
+                    "The selected series end does not include the new first lesson. "
+                    "Choose a later end date or change the start."
+                ),
+            )
+            await manager.switch_to(LessonScreens.cutoff_date, show_mode=ShowMode.EDIT)
+            return
+    manager.dialog_data["cutoff_invalid"] = False
+    await manager.switch_to(LessonScreens.review, show_mode=ShowMode.EDIT)
 
 
 async def cutoff_date_input(
@@ -592,7 +616,12 @@ async def _resolve_cutoff_date(
         await manager.show(show_mode=ShowMode.EDIT)
         return
 
-    manager.dialog_data.update(interval_end=cutoff.isoformat(), error="")
+    manager.dialog_data.update(
+        interval_end=cutoff.isoformat(),
+        cutoff_invalid=False,
+        error="",
+    )
+    _finish_cutoff_edit(manager)
     await manager.switch_to(LessonScreens.review, show_mode=ShowMode.EDIT)
 
 
@@ -602,8 +631,6 @@ async def edit_start_date(
     manager.dialog_data.update(
         start_date=None,
         resolution=None,
-        cutoff_date=None,
-        interval_end=None,
         error="",
     )
     await manager.switch_to(LessonScreens.start_date, show_mode=ShowMode.EDIT)
@@ -650,6 +677,8 @@ async def _open_subject_picker(
 async def edit_start_time(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    if manager.dialog_data.get("cutoff_editor_open"):
+        _restore_cutoff_edit(manager)
     manager.dialog_data.update(resolution=None, error="")
     await manager.switch_to(LessonScreens.start_time, show_mode=ShowMode.EDIT)
 
@@ -676,8 +705,75 @@ async def _begin_duration_edit(manager: DialogManager, return_to: str) -> None:
 async def edit_cutoff_date(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data.update(cutoff_date=None, interval_end=None, error="")
+    _begin_cutoff_edit(manager)
     await manager.switch_to(LessonScreens.cutoff_date, show_mode=ShowMode.EDIT)
+
+
+def _begin_cutoff_edit(manager: DialogManager) -> None:
+    data = manager.dialog_data
+    data.update(
+        cutoff_edit_original_date=data.get("cutoff_date"),
+        cutoff_edit_original_interval_end=data.get("interval_end"),
+        cutoff_editor_open=True,
+        error="",
+    )
+    interval_end = data.get("interval_end")
+    if interval_end is not None and data.get("cutoff_date") is None:
+        data["cutoff_date"] = (
+            datetime.fromisoformat(interval_end)
+            .astimezone(ZoneInfo(data["viewer_timezone"]))
+            .date()
+            - timedelta(days=1)
+        ).isoformat()
+
+
+def _restore_cutoff_edit(manager: DialogManager) -> None:
+    data = manager.dialog_data
+    if "cutoff_edit_original_date" in data:
+        data["cutoff_date"] = data.pop("cutoff_edit_original_date")
+    if "cutoff_edit_original_interval_end" in data:
+        data["interval_end"] = data.pop("cutoff_edit_original_interval_end")
+    data["cutoff_editor_open"] = False
+
+
+def _finish_cutoff_edit(manager: DialogManager) -> None:
+    data = manager.dialog_data
+    data.pop("cutoff_edit_original_date", None)
+    data.pop("cutoff_edit_original_interval_end", None)
+    data["cutoff_editor_open"] = False
+
+
+async def change_cutoff_date(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await manager.switch_to(LessonScreens.cutoff_date, show_mode=ShowMode.EDIT)
+
+
+async def cancel_cutoff_edit(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    was_invalid = manager.dialog_data.get("cutoff_invalid", False)
+    _restore_cutoff_edit(manager)
+    manager.dialog_data["error"] = (
+        "The chosen series end still does not include the new first lesson."
+        if was_invalid
+        else ""
+    )
+    await manager.switch_to(LessonScreens.review, show_mode=ShowMode.EDIT)
+
+
+async def choose_no_end(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data.update(
+        interval_end=None,
+        cutoff_date=None,
+        cutoff_invalid=False,
+        error="",
+    )
+    _finish_cutoff_edit(manager)
+    await manager.switch_to(LessonScreens.review, show_mode=ShowMode.EDIT)
 
 
 async def submit_lesson(
@@ -698,6 +794,11 @@ async def submit_lesson(
         end = _lesson_end(start, duration) if data["custom_duration"] else None
         client = backend(manager)
         if data["kind"] == "weekly":
+            interval_end = (
+                datetime.fromisoformat(data["interval_end"])
+                if data.get("interval_end") is not None
+                else None
+            )
             if end is None:
                 payload: EventCreatePayload | RecurrentEventCreatePayload = (
                     RecurrentEventCreatePayload(
@@ -705,7 +806,7 @@ async def submit_lesson(
                         user_id=subject_id,
                         event_type="LESSON",
                         interval=7,
-                        interval_end=datetime.fromisoformat(data["interval_end"]),
+                        interval_end=interval_end,
                     )
                 )
             else:
@@ -715,7 +816,7 @@ async def submit_lesson(
                     user_id=subject_id,
                     event_type="LESSON",
                     interval=7,
-                    interval_end=datetime.fromisoformat(data["interval_end"]),
+                    interval_end=interval_end,
                 )
             await client.write_management_event(
                 "POST",
@@ -940,6 +1041,8 @@ def build_lesson_dialog() -> Dialog:
             Button(
                 Const("Change start time"), id="change_start", on_click=edit_start_time
             ),
+            Button(Const("No end"), id="no_end", on_click=choose_no_end),
+            Button(Const("Back"), id="back", on_click=cancel_cutoff_edit),
             Button(Const("Cancel"), id="cancel", on_click=return_home),
             state=LessonScreens.cutoff_date,
         ),
@@ -948,7 +1051,9 @@ def build_lesson_dialog() -> Dialog:
                 "{cutoff_date_confirmation}\nConfirm the inferred end date. The series cutoff is the following local midnight.\n{error}"
             ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_cutoff_date),
-            Button(Const("Change date"), id="change", on_click=edit_cutoff_date),
+            Button(Const("Change date"), id="change", on_click=change_cutoff_date),
+            Button(Const("No end"), id="no_end", on_click=choose_no_end),
+            Button(Const("Back"), id="back", on_click=cancel_cutoff_edit),
             state=LessonScreens.confirm_cutoff_date,
         ),
         Window(
