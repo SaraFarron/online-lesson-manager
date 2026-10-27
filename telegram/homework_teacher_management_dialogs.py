@@ -20,6 +20,11 @@ from telegram.api import (
     SessionView,
     StudentPickerPage,
 )
+from telegram.feedback import feedback_block
+from telegram.homework_text import (
+    change_homework_text_page,
+    homework_text_page,
+)
 from telegram.homework_transfer import HomeworkDownloadFile
 from telegram.onboarding import backend
 
@@ -64,7 +69,10 @@ async def open_teacher_homework_management(
         "submitting": False,
         "outcome_unknown": False,
         "error": "",
+        "warning": "",
         "notice": "",
+        "assignment_text_page": 0,
+        "submission_text_page": 0,
     }
     try:
         page = await backend(manager).read_student_picker(
@@ -88,6 +96,30 @@ async def open_teacher_homework_management(
 async def teacher_homework_started(start_data: Any, manager: DialogManager) -> None:
     manager.dialog_data.clear()
     manager.dialog_data.update(start_data)
+
+
+async def previous_assignment_text_page(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await change_homework_text_page(manager, "assignment_text_page", -1)
+
+
+async def next_assignment_text_page(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await change_homework_text_page(manager, "assignment_text_page", 1)
+
+
+async def previous_submission_text_page(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await change_homework_text_page(manager, "submission_text_page", -1)
+
+
+async def next_submission_text_page(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await change_homework_text_page(manager, "submission_text_page", 1)
 
 
 def _store_student_page(
@@ -199,6 +231,20 @@ async def teacher_homework_data(
                     ),
                 }
             )
+    assignment_text_page = homework_text_page(
+        str(assignment.get("text") or "") if assignment else None,
+        int(data.get("assignment_text_page", 0)),
+        label="Assignment text",
+    )
+    submission_text_page = homework_text_page(
+        (
+            str(selected_submission.get("text") or "(file-only solution)")
+            if selected_submission
+            else "(no submissions)"
+        ),
+        int(data.get("submission_text_page", 0)),
+        label="Submission text",
+    )
     return {
         "students": students,
         "student_page": (
@@ -218,9 +264,10 @@ async def teacher_homework_data(
         "has_previous_assignments": assignment_skip > 0,
         "has_next_assignments": assignment_skip + len(assignments) < assignment_total,
         "status_filter": data.get("status_filter") or "ALL",
-        "assignment_text": (
-            escape(str(assignment.get("text") or "(no text)")) if assignment else ""
-        ),
+        "assignment_text": assignment_text_page.content,
+        "assignment_text_heading": assignment_text_page.heading,
+        "has_previous_assignment_text_page": assignment_text_page.has_previous,
+        "has_next_assignment_text_page": assignment_text_page.has_next,
         "detail_student_label": escape(
             str((assignment.get("student") or {}).get("full_name") or "Student")
         )
@@ -228,11 +275,10 @@ async def teacher_homework_data(
         else "",
         "assignment_status": status,
         "completion_label": completion_label,
-        "submission_text": (
-            escape(str(selected_submission.get("text") or "(file-only solution)"))
-            if selected_submission
-            else "(no submissions)"
-        ),
+        "submission_text": submission_text_page.content,
+        "submission_text_heading": submission_text_page.heading,
+        "has_previous_submission_text_page": submission_text_page.has_previous,
+        "has_next_submission_text_page": submission_text_page.has_next,
         "submission_version": (
             f"Version {selected_submission['version']}"
             f"{' (current)' if selected_submission['is_current'] else ''}"
@@ -262,11 +308,14 @@ async def teacher_homework_data(
         and not data.get("outcome_unknown"),
         "can_check_delete": bool(data.get("outcome_unknown")) and not busy,
         "student_count": student_total,
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error=str(data.get("error", "")) or None,
+            warning=str(data.get("warning", "")) or None,
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "delete_warning": (
-            f"Delete '{escape(str(assignment.get('text') or '(no text)'))}' "
-            "and permanently remove its submissions and private files?"
+            "Delete this assignment and permanently remove its submissions "
+            "and private files?"
             if assignment
             else "This assignment is no longer available."
         ),
@@ -545,6 +594,8 @@ async def _load_detail(
     data.update(
         assignment=detail.model_dump(mode="json"),
         materials=[material.model_dump(mode="json") for material in detail.materials],
+        assignment_text_page=0,
+        submission_text_page=0,
         error="",
         detail_missing=False,
         submission_skip=0,
@@ -571,6 +622,7 @@ async def _load_detail(
         submission_total=page.total,
         submission_skip=0,
         selected_submission_id=str(page.items[0].id) if page.items else None,
+        submission_text_page=0,
         error="",
     )
     return True
@@ -625,7 +677,9 @@ async def select_submission_version(
     if selected is None:
         manager.dialog_data["error"] = "That submission version is not on this page."
     else:
-        manager.dialog_data.update(selected_submission_id=item, error="")
+        manager.dialog_data.update(
+            selected_submission_id=item, submission_text_page=0, error=""
+        )
     await manager.show(show_mode=ShowMode.EDIT)
 
 
@@ -729,14 +783,14 @@ async def mark_complete(
     ):
         return
     assignment_id = UUID(assignment["id"])
-    data.update(submitting=True, error="", notice="")
+    data.update(submitting=True, error="", warning="", notice="")
     await manager.show(show_mode=ShowMode.EDIT)
     try:
         result: HomeworkCompletionResult = await backend(manager).complete_homework(
             callback.from_user.id, callback.message.chat.id, assignment_id
         )
     except HomeworkOutcomeUnknown as exc:
-        data.update(submitting=False, outcome_unknown=True, error=str(exc))
+        data.update(submitting=False, outcome_unknown=True, error="", warning=str(exc))
         loaded = await _load_detail(
             callback.from_user.id, callback.message.chat.id, manager, assignment_id
         )
@@ -748,11 +802,11 @@ async def mark_complete(
                 and current["completion_source"] == "TEACHER"
             ):
                 data.update(
-                    error="",
+                    warning="",
                     notice="Teacher completion was confirmed after reloading.",
                 )
             else:
-                data["error"] = (
+                data["warning"] = (
                     "Completion was not confirmed. Review the current state before retrying."
                 )
         elif data.get("detail_missing"):
@@ -762,13 +816,14 @@ async def mark_complete(
                 manager,
                 int(data.get("assignment_skip", 0)),
             )
+            data["warning"] = ""
             data["notice"] = "This assignment is no longer available."
             await manager.switch_to(
                 TeacherHomeworkScreens.assignments, show_mode=ShowMode.EDIT
             )
             return
     except (BackendError, BackendUnavailable) as exc:
-        data.update(submitting=False, error=str(exc))
+        data.update(submitting=False, error=str(exc), warning="")
         loaded = await _load_detail(
             callback.from_user.id, callback.message.chat.id, manager, assignment_id
         )
@@ -787,7 +842,7 @@ async def mark_complete(
             )
             return
     else:
-        data.update(submitting=False, outcome_unknown=False)
+        data.update(submitting=False, outcome_unknown=False, warning="")
         assignment.update(
             status=result.status,
             completion_source=result.completion_source,
@@ -825,7 +880,7 @@ async def mark_complete(
 async def begin_delete(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data.update(error="", notice="", outcome_unknown=False)
+    manager.dialog_data.update(error="", warning="", notice="", outcome_unknown=False)
     await manager.switch_to(
         TeacherHomeworkScreens.confirm_delete, show_mode=ShowMode.EDIT
     )
@@ -836,7 +891,7 @@ async def cancel_delete(
 ) -> None:
     if manager.dialog_data.get("outcome_unknown"):
         return
-    manager.dialog_data.update(error="", outcome_unknown=False)
+    manager.dialog_data.update(error="", warning="", outcome_unknown=False)
     await manager.switch_to(TeacherHomeworkScreens.detail, show_mode=ShowMode.EDIT)
 
 
@@ -857,7 +912,14 @@ async def _return_to_assignment_list(
             if item["id"] != assignment["id"]
         ]
         data["assignment_total"] = max(0, int(data.get("assignment_total", 0)) - 1)
-    data.update(assignment=None, materials=[], submissions=[], error="", notice=notice)
+    data.update(
+        assignment=None,
+        materials=[],
+        submissions=[],
+        error="",
+        warning="",
+        notice=notice,
+    )
     await _load_assignment_page(
         callback.from_user.id,
         callback.message.chat.id,
@@ -903,13 +965,15 @@ async def _check_delete_outcome(
         data.update(
             submitting=False,
             outcome_unknown=True,
-            error=f"{exc} Check the assignment status before retrying deletion.",
+            error="",
+            warning=f"{exc} Check the assignment status before retrying deletion.",
         )
     except BackendUnavailable as exc:
         data.update(
             submitting=False,
             outcome_unknown=True,
-            error=f"{exc} Check the assignment status before retrying deletion.",
+            error="",
+            warning=f"{exc} Check the assignment status before retrying deletion.",
         )
     else:
         data.update(
@@ -917,7 +981,8 @@ async def _check_delete_outcome(
             materials=[item.model_dump(mode="json") for item in detail.materials],
             submitting=False,
             outcome_unknown=False,
-            error=(
+            error="",
+            warning=(
                 "The assignment still exists. Review its current state before "
                 "confirming deletion again."
             ),
@@ -939,14 +1004,14 @@ async def confirm_delete(
     ):
         return
     assignment_id = UUID(assignment["id"])
-    data.update(submitting=True, error="", notice="")
+    data.update(submitting=True, error="", warning="", notice="")
     await manager.show(show_mode=ShowMode.EDIT)
     try:
         await backend(manager).delete_homework_assignment(
             callback.from_user.id, callback.message.chat.id, assignment_id
         )
     except HomeworkOutcomeUnknown as exc:
-        data.update(submitting=False, outcome_unknown=True, error=str(exc))
+        data.update(submitting=False, outcome_unknown=True, error="", warning=str(exc))
         await _check_delete_outcome(callback, manager, assignment_id)
         return
     except BackendError as exc:
@@ -1006,8 +1071,8 @@ def build_homework_teacher_management_dialog() -> Dialog:
     return Dialog(
         Window(
             Format(
-                "Choose a student to manage homework, or view all students.\n"
-                "{student_page}\n{error}"
+                "{feedback}Choose a student to manage homework, or view all students.\n"
+                "{student_page}"
             ),
             Select(
                 Format("{item[label]}"),
@@ -1040,8 +1105,8 @@ def build_homework_teacher_management_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Homework for {student_label} — {status_filter}\n"
-                "{assignment_page}\n{notice}\n{error}"
+                "{feedback}Homework for {student_label} — {status_filter}\n"
+                "{assignment_page}\n{notice}"
             ),
             Select(
                 Format("{item[label]}"),
@@ -1086,10 +1151,39 @@ def build_homework_teacher_management_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{detail_student_label}\n{assignment_text}\nStatus: {assignment_status}\n"
-                "{completion_label}\n"
-                "Submission: {submission_version}\n{submission_text}\n"
-                "{notice}\n{error}"
+                "{feedback}{detail_student_label}\n"
+                "{assignment_text_heading}{assignment_text}\n"
+                "Status: {assignment_status}\n{completion_label}\n"
+                "Submission: {submission_version}\n"
+                "{submission_text_heading}{submission_text}\n{notice}"
+            ),
+            Row(
+                Button(
+                    Const("Previous assignment text"),
+                    id="previous_assignment_text",
+                    on_click=previous_assignment_text_page,
+                    when="has_previous_assignment_text_page",
+                ),
+                Button(
+                    Const("Next assignment text"),
+                    id="next_assignment_text",
+                    on_click=next_assignment_text_page,
+                    when="has_next_assignment_text_page",
+                ),
+            ),
+            Row(
+                Button(
+                    Const("Previous submission text"),
+                    id="previous_submission_text",
+                    on_click=previous_submission_text_page,
+                    when="has_previous_submission_text_page",
+                ),
+                Button(
+                    Const("Next submission text"),
+                    id="next_submission_text",
+                    on_click=next_submission_text_page,
+                    when="has_next_submission_text_page",
+                ),
             ),
             Select(
                 Format("{item[label]}"),
@@ -1148,7 +1242,23 @@ def build_homework_teacher_management_dialog() -> Dialog:
             state=TeacherHomeworkScreens.detail,
         ),
         Window(
-            Format("{delete_warning}\n{error}"),
+            Format(
+                "{feedback}{assignment_text_heading}{assignment_text}\n{delete_warning}"
+            ),
+            Row(
+                Button(
+                    Const("Previous assignment text"),
+                    id="previous_assignment_text",
+                    on_click=previous_assignment_text_page,
+                    when="has_previous_assignment_text_page",
+                ),
+                Button(
+                    Const("Next assignment text"),
+                    id="next_assignment_text",
+                    on_click=next_assignment_text_page,
+                    when="has_next_assignment_text_page",
+                ),
+            ),
             Button(
                 Const("Confirm delete"),
                 id="confirm",
@@ -1170,7 +1280,7 @@ def build_homework_teacher_management_dialog() -> Dialog:
             state=TeacherHomeworkScreens.confirm_delete,
         ),
         Window(
-            Format("{error}\nRetry when the backend is available."),
+            Format("{feedback}Retry when the backend is available."),
             Button(Const("Retry"), id="retry", on_click=retry_management),
             Button(Const("Close"), id="close", on_click=close_management),
             state=TeacherHomeworkScreens.unavailable,

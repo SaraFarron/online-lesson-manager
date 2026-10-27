@@ -14,7 +14,7 @@ from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmis
 from backend.main import app
 from telegram.api import BackendClient
 from telegram.runtime import build_dispatcher
-from tests.bot_support import BotDriver
+from tests.bot_support import BotDriver, rendered_utf16_length
 
 TEACHER_TELEGRAM_ID = 5_720_000_001
 STUDENT_TELEGRAM_ID = TEACHER_TELEGRAM_ID + 1
@@ -336,6 +336,160 @@ async def test_teacher_reviews_versions_downloads_completes_and_deletes(
     finally:
         await _close(driver, http)
         app.dependency_overrides.pop(get_homework_settings, None)
+
+
+async def test_long_management_text_paginates_with_download_error_and_delete_controls(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+    homework_storage: Path,
+) -> None:
+    teacher, student, _second, _outsider_teacher, _outsider_student = await _seed(
+        db_session
+    )
+    assignment_text = "Read 🚀 " * 1200
+    submission_text = "Answer 🚀 " * 1200
+    assignment_id = await _create_assignment(
+        client,
+        teacher,
+        student,
+        text=assignment_text,
+        material=("worksheet.pdf", b"private worksheet"),
+    )
+    await _submit(
+        client,
+        assignment_id,
+        student,
+        text=submission_text,
+        material=("solution.pdf", b"private solution"),
+    )
+    assert homework_storage.is_dir()
+
+    async def unavailable_download(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and "/attachments/" in request.url.path:
+            return httpx.Response(
+                503, json={"detail": "storage temporarily unavailable"}
+            )
+        return await client.send(request)
+
+    driver, http = await _make_driver(
+        client, bot_service_key, forward=unavailable_download
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Manage homework")
+        await driver.click("Alice Learner")
+        await driver.click(_button_with_prefix(driver, "Read 🚀"))
+        assert "Assignment text (page 1 of" in driver.session.last_message.text
+        assert "Submission text (page 1 of" in driver.session.last_message.text
+        message_id = driver.session.last_message.message_id
+
+        await driver.click(_button_with_prefix(driver, "Assignment: worksheet.pdf"))
+
+        visible = driver.session.last_message.text
+        assert visible.startswith("<b>❌ Error</b>\n")
+        assert "Assignment text (page 1 of" in visible
+        assert "Submission text (page 1 of" in visible
+        assert rendered_utf16_length(visible) <= 4096
+        send_count = sum(
+            call.__api_method__ == "sendMessage" for call in driver.session.calls
+        )
+
+        await driver.click("Next assignment text")
+        visible = driver.session.last_message.text
+        assert visible.startswith("<b>❌ Error</b>\n")
+        assert "Assignment text (page 2 of" in visible
+        assert "Submission text (page 1 of" in visible
+        assert rendered_utf16_length(visible) <= 4096
+        await driver.click("Next submission text")
+        visible = driver.session.last_message.text
+        assert "Submission text (page 2 of" in visible
+        assert rendered_utf16_length(visible) <= 4096
+        assert driver.session.last_message.message_id == message_id
+        assert (
+            sum(call.__api_method__ == "sendMessage" for call in driver.session.calls)
+            == send_count
+        )
+        driver.callback_data(_button_with_prefix(driver, "Assignment: worksheet.pdf"))
+
+        await driver.click("Delete assignment")
+        visible = driver.session.last_message.text
+        assert "Delete this assignment" in visible
+        assert "Assignment text (page 2 of" in visible
+        driver.callback_data("Confirm delete")
+        assert rendered_utf16_length(visible) <= 4096
+    finally:
+        await _close(driver, http)
+
+
+async def test_unknown_delete_outcome_uses_attention_until_status_is_confirmed(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    teacher, student, _second, _outsider_teacher, _outsider_student = await _seed(
+        db_session
+    )
+    assignment_id = await _create_assignment(
+        client, teacher, student, text="Delete status recovery"
+    )
+    lose_delete_response = True
+    fail_status_check = True
+    delete_requests = 0
+
+    async def lose_delete_result(request: httpx.Request) -> httpx.Response:
+        nonlocal lose_delete_response, fail_status_check, delete_requests
+        if request.method == "DELETE" and request.url.path.endswith(
+            f"/{assignment_id}"
+        ):
+            delete_requests += 1
+            response = await client.send(request)
+            if lose_delete_response:
+                lose_delete_response = False
+                return httpx.Response(503, json={"detail": "delete response lost"})
+            return response
+        if (
+            request.method == "GET"
+            and request.url.path.endswith(f"/{assignment_id}")
+            and not lose_delete_response
+            and fail_status_check
+        ):
+            fail_status_check = False
+            return httpx.Response(503, json={"detail": "status check unavailable"})
+        return await client.send(request)
+
+    driver, http = await _make_driver(
+        client, bot_service_key, forward=lose_delete_result
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Manage homework")
+        await driver.click("Alice Learner")
+        await driver.click(_button_with_prefix(driver, "Delete status recovery"))
+        await driver.click("Delete assignment")
+        await driver.click("Confirm delete")
+
+        visible = driver.session.last_message.text
+        assert visible.startswith("<b>⚠️ Attention</b>\n")
+        assert "Check the assignment status" in visible
+        assert "❌ Error" not in visible
+        driver.callback_data("Check status")
+        assert delete_requests == 2
+
+        await driver.click("Check status")
+        assert (
+            await db_session.scalar(
+                select(Homework.id).where(Homework.id == assignment_id)
+            )
+            is None
+        )
+        assert "Deletion was confirmed after refreshing" in (
+            driver.session.last_message.text
+        )
+        assert "⚠️ Attention" not in driver.session.last_message.text
+        assert delete_requests == 2
+    finally:
+        await _close(driver, http)
 
 
 async def test_teacher_reconciles_ambiguous_completion_and_delete(
@@ -671,7 +825,7 @@ async def test_teacher_upload_recovers_from_interrupted_and_unavailable_storage(
         await driver.click("Homework")
         await driver.click("Alice Learner")
         await driver.document("unavailable.pdf", b"must not persist")
-        assert "Retry upload" in driver.session.last_message.text
+        driver.callback_data("Retry upload: unavailable.pdf")
         assert await db_session.scalar(select(func.count()).select_from(Homework)) == 1
         assert (
             await db_session.scalar(

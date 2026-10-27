@@ -272,6 +272,11 @@ and [teacher review/management](../../telegram/homework_teacher_management_dialo
 Include picker, text/file input, review, detail, delete confirmation, and
 unavailable screens.
 
+Owner-approved implementation adjustment: use inline pagination within the
+existing edit-in-place screens for long assignment/solution text. Preserve all
+text and keep feedback and recovery controls visible; do not truncate or send
+additional messages.
+
 ### Reuse
 
 Existing getters, typed homework errors, pending-upload state, streamed
@@ -279,15 +284,15 @@ downloads, versioned submission guards, and unknown-outcome reconciliation.
 
 ### Acceptance Criteria
 
-- [ ] Validation, upload/download, authorization, stale-version, and backend
+- [x] Validation, upload/download, authorization, stale-version, and backend
   failures are prominent and escaped; existing correction actions remain.
-- [ ] Unknown publish/submit/delete/upload outcomes use attention and retain
+- [x] Unknown publish/submit/delete/upload outcomes use attention and retain
   safe retry/reconciliation behavior without duplicate files or assignments.
-- [ ] Error blocks do not conceal submission version, attachment retry
+- [x] Error blocks do not conceal submission version, attachment retry
   controls, or deletion confirmations.
-- [ ] Long existing text/attachment views plus feedback fit the message
+- [x] Long existing text/attachment views plus feedback fit the message
   limit; no silent truncation or new document/message sends for errors.
-- [ ] Successful flows clear resolved errors and preserve routine notices.
+- [x] Successful flows clear resolved errors and preserve routine notices.
 
 ### Out of scope / Suitable for
 

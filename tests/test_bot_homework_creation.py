@@ -24,7 +24,7 @@ from telegram.api import (
     HomeworkAssignment,
 )
 from telegram.runtime import build_dispatcher
-from tests.bot_support import BotDriver
+from tests.bot_support import BotDriver, rendered_utf16_length
 
 TEACHER_TELEGRAM_ID = 5_700_000_001
 STUDENT_TELEGRAM_ID = TEACHER_TELEGRAM_ID + 1
@@ -613,10 +613,12 @@ async def test_unknown_upload_and_publish_retry_reuses_operation_keys(
         await driver.text("/start")
         await _open_assignment(driver, "Alice Learner")
         await driver.document("retry.pdf", b"same bytes")
-        assert "Retry upload" in driver.session.last_message.text
+        assert driver.session.last_message.text.startswith("<b>⚠️ Attention</b>\n")
+        driver.callback_data("Retry upload: retry.pdf")
         await driver.click("Retry upload: retry.pdf")
         await driver.click("Review")
         await driver.click("Publish assignment")
+        assert driver.session.last_message.text.startswith("<b>⚠️ Attention</b>\n")
         driver.callback_data("Retry publish (same operation)")
         await driver.click("Retry publish (same operation)")
 
@@ -634,3 +636,51 @@ async def test_unknown_upload_and_publish_retry_reuses_operation_keys(
     finally:
         await _close_driver(driver, http)
         app.dependency_overrides.pop(get_homework_settings, None)
+
+
+async def test_long_assignment_text_paginates_with_feedback_and_edit_in_place(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    _teacher, _students = await _seed(db_session)
+    driver, http, _api, _requests = await _make_driver(client, bot_service_key)
+    try:
+        await driver.text("/start")
+        await _open_assignment(driver, "Alice Learner")
+        source = "🚀" * 3000
+        await driver.text(source)
+        message_id = driver.session.last_message.message_id
+        send_count = sum(
+            call.__api_method__ == "sendMessage" for call in driver.session.calls
+        )
+
+        await driver.text("   ")
+
+        visible = driver.session.last_message.text
+        assert visible.startswith("<b>❌ Error</b>\n")
+        assert visible.count("Assignment text cannot be blank.") == 1
+        assert "Text (page 1 of 5):" in visible
+        assert rendered_utf16_length(visible) <= 4096
+        assert driver.session.last_message.message_id == message_id
+        assert (
+            sum(call.__api_method__ == "sendMessage" for call in driver.session.calls)
+            == send_count
+        )
+        driver.callback_data("Next text")
+
+        await driver.click("Next text")
+        visible = driver.session.last_message.text
+        assert visible.startswith("<b>❌ Error</b>\n")
+        assert "Text (page 2 of 5):" in visible
+        assert rendered_utf16_length(visible) <= 4096
+        assert driver.session.last_message.message_id == message_id
+
+        await driver.click("Review")
+        visible = driver.session.last_message.text
+        assert "Review assignment" in visible
+        assert "Text (page 2 of 5):" in visible
+        assert "❌ Error" not in visible
+        assert rendered_utf16_length(visible) <= 4096
+    finally:
+        await _close_driver(driver, http)

@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from typing import Any
 
 from aiogram import Bot, Dispatcher
@@ -8,6 +9,21 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import TelegramMethod
 from aiogram.methods.base import TelegramType
 from aiogram.types import Chat, File, InputFile, Message, Update, User
+
+
+class _VisibleTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def rendered_utf16_length(text: str) -> int:
+    parser = _VisibleTextParser()
+    parser.feed(text)
+    return len("".join(parser.parts).encode("utf-16-le")) // 2
 
 
 class RecordingSession(BaseSession):

@@ -33,6 +33,11 @@ from telegram.api import (
     StagedHomeworkAttachment,
     StudentPickerPage,
 )
+from telegram.feedback import feedback_block
+from telegram.homework_text import (
+    change_homework_text_page,
+    homework_text_page,
+)
 from telegram.inputs import format_compact_schedule_date
 from telegram.onboarding import backend
 
@@ -79,6 +84,8 @@ async def open_homework_creation(
         "submitting": False,
         "outcome_unknown": False,
         "error": "",
+        "warning": "",
+        "text_page": 0,
     }
     try:
         page = await backend(manager).read_student_picker(
@@ -115,6 +122,18 @@ async def homework_started(start_data: Any, manager: DialogManager) -> None:
     manager.dialog_data.update(start_data)
 
 
+async def previous_text_page(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await change_homework_text_page(manager, "text_page", -1)
+
+
+async def next_text_page(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await change_homework_text_page(manager, "text_page", 1)
+
+
 async def homework_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     data = dialog_manager.dialog_data
     students = [
@@ -138,6 +157,7 @@ async def homework_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
         for item in attachments
     ]
     text = str(data.get("text") or "")
+    text_page = homework_text_page(text, int(data.get("text_page", 0)), label="Text")
     pending_upload = data.get("pending_upload")
     active = bool(data.get("submitting") or data.get("uploading"))
     lesson_occurrence = data.get("lesson_occurrence")
@@ -157,18 +177,29 @@ async def homework_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
         upload_status = f"Uploading {escape(pending_file_name)} to private storage."
     elif data.get("upload_outcome_unknown"):
         upload_status = "Upload result unknown; retry the same file to reconcile it."
+    errors = [
+        str(value)
+        for value in (data.get("error", ""), data.get("lesson_error", ""))
+        if value
+    ]
     return {
         "students": students,
         "picker_page": f"Page {page_number} of {page_count} ({total} students)",
         "has_previous_students": skip > 0,
         "has_next_students": skip + len(students) < total,
         "student_label": escape(str(data.get("student_label", ""))),
-        "text": escape(text) if text else "(no text)",
+        "text": text_page.content,
+        "text_heading": text_page.heading,
         "attachments": attachment_choices,
         "attachment_summary": (
             "\n".join(attachment_lines) if attachment_lines else "(no files)"
         ),
-        "error": escape(str(data.get("error", ""))),
+        "feedback": feedback_block(
+            error="\n".join(errors) or None,
+            warning=str(data.get("warning", "")) or None,
+        ),
+        "has_previous_text_page": text_page.has_previous,
+        "has_next_text_page": text_page.has_next,
         "upload_status": upload_status,
         "can_review": bool(text.strip() or attachments)
         and not pending_upload
@@ -229,11 +260,13 @@ async def select_student(
         student_id=item,
         student_label=selected["display_label"],
         text=None,
+        text_page=0,
         attachments=[],
         lesson_occurrence=None,
         pending_upload=None,
         operation_key=None,
         error="",
+        warning="",
     )
     await manager.switch_to(HomeworkScreens.compose, show_mode=ShowMode.EDIT)
 
@@ -501,7 +534,9 @@ async def set_assignment_text(
     if not text:
         manager.dialog_data["error"] = "Assignment text cannot be blank."
     else:
-        manager.dialog_data.update(text=text, error="", operation_key=None)
+        manager.dialog_data.update(
+            text=text, text_page=0, error="", warning="", operation_key=None
+        )
     await manager.show(show_mode=ShowMode.EDIT)
 
 
@@ -510,7 +545,9 @@ async def clear_assignment_text(
 ) -> None:
     if manager.dialog_data.get("outcome_unknown"):
         return
-    manager.dialog_data.update(text=None, error="", operation_key=None)
+    manager.dialog_data.update(
+        text=None, text_page=0, error="", warning="", operation_key=None
+    )
     await manager.show(show_mode=ShowMode.EDIT)
 
 
@@ -560,6 +597,7 @@ async def receive_document(
         },
         upload_outcome_unknown=False,
         error="",
+        warning="",
     )
     await _upload_pending(message.from_user.id, message.chat.id, manager)
 
@@ -615,7 +653,8 @@ async def _upload_pending(sender_id: int, chat_id: int, manager: DialogManager) 
         data.update(
             uploading=False,
             upload_outcome_unknown=True,
-            error=f"{exc} Use Retry upload to reconcile this same file.",
+            error="",
+            warning=str(exc),
         )
     except (BackendError, BackendUnavailable, HomeworkAttachmentTooLarge) as exc:
         data.update(
@@ -623,6 +662,7 @@ async def _upload_pending(sender_id: int, chat_id: int, manager: DialogManager) 
             uploading=False,
             upload_outcome_unknown=False,
             error=str(exc),
+            warning="",
         )
     except TelegramAPIError:
         data.update(
@@ -630,6 +670,7 @@ async def _upload_pending(sender_id: int, chat_id: int, manager: DialogManager) 
             uploading=False,
             upload_outcome_unknown=False,
             error="Telegram could not retrieve this file. Please send it again.",
+            warning="",
         )
     else:
         attachments = data.get("attachments", [])
@@ -640,6 +681,7 @@ async def _upload_pending(sender_id: int, chat_id: int, manager: DialogManager) 
             uploading=False,
             upload_outcome_unknown=False,
             error="",
+            warning="",
             operation_key=None,
         )
         total_size = sum(int(item["byte_size"]) for item in attachments)
@@ -676,12 +718,18 @@ async def remove_attachment(
             manager.dialog_data["error"] = str(exc)
             await manager.show(show_mode=ShowMode.EDIT)
             return
-    except (BackendUnavailable, HomeworkOutcomeUnknown) as exc:
+    except HomeworkOutcomeUnknown as exc:
+        manager.dialog_data.update(error="", warning=str(exc))
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    except BackendUnavailable as exc:
         manager.dialog_data["error"] = str(exc)
         await manager.show(show_mode=ShowMode.EDIT)
         return
     attachments.remove(selected)
-    manager.dialog_data.update(attachments=attachments, error="", operation_key=None)
+    manager.dialog_data.update(
+        attachments=attachments, error="", warning="", operation_key=None
+    )
     await manager.show(show_mode=ShowMode.EDIT)
 
 
@@ -771,6 +819,7 @@ async def publish_assignment(
         publish_payload=payload.model_dump(mode="json"),
         submitting=True,
         error="",
+        warning="",
     )
     await manager.show(show_mode=ShowMode.EDIT)
     try:
@@ -784,10 +833,11 @@ async def publish_assignment(
         data.update(
             submitting=False,
             outcome_unknown=True,
-            error=str(exc),
+            error="",
+            warning=str(exc),
         )
     except (BackendError, BackendUnavailable) as exc:
-        data.update(submitting=False, error=str(exc), operation_key=None)
+        data.update(submitting=False, error=str(exc), warning="", operation_key=None)
     else:
         await manager.done(
             result={"homework_notice": "Homework assignment published."},
@@ -807,6 +857,7 @@ async def cancel_assignment(
         return
     client = backend(manager)
     failed: list[str] = []
+    unknown: list[str] = []
     retained: list[dict[str, Any]] = []
     for attachment in data.get("attachments", []):
         try:
@@ -820,13 +871,26 @@ async def cancel_assignment(
                 continue
             failed.append(str(exc))
             retained.append(attachment)
-        except (BackendUnavailable, HomeworkOutcomeUnknown) as exc:
+        except HomeworkOutcomeUnknown as exc:
+            unknown.append(str(exc))
+            retained.append(attachment)
+        except BackendUnavailable as exc:
             failed.append(str(exc))
             retained.append(attachment)
-    if failed:
+    if failed or unknown:
         data.update(
             attachments=retained,
-            error=f"Draft cleanup failed: {'; '.join(failed)} Retry Cancel.",
+            error=(
+                f"Draft cleanup failed: {'; '.join(failed)} Retry Cancel."
+                if failed
+                else ""
+            ),
+            warning=(
+                f"Draft cleanup outcome is unknown: {'; '.join(unknown)} "
+                "Retry Cancel to reconcile retained files."
+                if unknown
+                else ""
+            ),
         )
         await manager.show(show_mode=ShowMode.EDIT)
         return
@@ -842,7 +906,7 @@ async def back_to_home(
 def build_homework_teacher_dialog() -> Dialog:
     return Dialog(
         Window(
-            Format("Choose a student for the assignment.\n{picker_page}\n{error}"),
+            Format("{feedback}Choose a student for the assignment.\n{picker_page}"),
             Select(
                 Format("{item[0]}"),
                 id="student",
@@ -869,13 +933,12 @@ def build_homework_teacher_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Assignment for {student_label}\n"
+                "{feedback}Assignment for {student_label}\n"
                 "Send a text message for the assignment text, or send documents "
                 "to add files. You can use either or both.\n"
-                "Text: {text}\nFiles:\n{attachment_summary}\n"
+                "{text_heading}{text}\nFiles:\n{attachment_summary}\n"
                 "Lesson: {lesson_label}\n"
-                "{upload_status}\n"
-                "{error}"
+                "{upload_status}"
             ),
             TextInput("assignment_text", on_success=set_assignment_text),
             MessageInput(
@@ -883,6 +946,20 @@ def build_homework_teacher_dialog() -> Dialog:
                 content_types=[ContentType.DOCUMENT],
             ),
             Column(
+                Row(
+                    Button(
+                        Const("Previous text"),
+                        id="previous_text",
+                        on_click=previous_text_page,
+                        when="has_previous_text_page",
+                    ),
+                    Button(
+                        Const("Next text"),
+                        id="next_text",
+                        on_click=next_text_page,
+                        when="has_next_text_page",
+                    ),
+                ),
                 Select(
                     Format("{item[label]}"),
                     id="remove_attachment",
@@ -934,8 +1011,8 @@ def build_homework_teacher_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Select an upcoming lesson for {student_label}.\n"
-                "Week: {lesson_week_label}\n{lesson_page}\n{lesson_error}\n"
+                "{feedback}Select an upcoming lesson for {student_label}.\n"
+                "Week: {lesson_week_label}\n{lesson_page}\n"
                 "Timezone: {lesson_timezone}"
             ),
             Select(
@@ -987,9 +1064,23 @@ def build_homework_teacher_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Review assignment for {student_label}\n"
-                "Text: {text}\nFiles:\n{attachment_summary}\n"
-                "Lesson: {lesson_label}\n{error}"
+                "{feedback}Review assignment for {student_label}\n"
+                "{text_heading}{text}\nFiles:\n{attachment_summary}\n"
+                "Lesson: {lesson_label}"
+            ),
+            Row(
+                Button(
+                    Const("Previous text"),
+                    id="previous_text",
+                    on_click=previous_text_page,
+                    when="has_previous_text_page",
+                ),
+                Button(
+                    Const("Next text"),
+                    id="next_text",
+                    on_click=next_text_page,
+                    when="has_next_text_page",
+                ),
             ),
             Button(
                 Format("{submit_label}"),
@@ -1012,7 +1103,7 @@ def build_homework_teacher_dialog() -> Dialog:
             state=HomeworkScreens.review,
         ),
         Window(
-            Format("{error}\nReturn home and retry when the backend is available."),
+            Format("{feedback}Return home and retry when the backend is available."),
             Button(Const("Back to home"), id="home", on_click=back_to_home),
             state=HomeworkScreens.unavailable,
         ),

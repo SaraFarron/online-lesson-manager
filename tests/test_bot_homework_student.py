@@ -13,7 +13,7 @@ from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmis
 from backend.main import app
 from telegram.api import MAX_HOMEWORK_ATTACHMENT_BYTES, BackendClient
 from telegram.runtime import build_dispatcher
-from tests.bot_support import BotDriver
+from tests.bot_support import BotDriver, rendered_utf16_length
 
 TEACHER_TELEGRAM_ID = 5_710_000_001
 STUDENT_TELEGRAM_ID = TEACHER_TELEGRAM_ID + 1
@@ -237,6 +237,152 @@ async def test_student_downloads_material_and_finishes_then_resubmits(
         app.dependency_overrides.pop(get_homework_settings, None)
 
 
+async def test_long_assignment_and_solution_text_paginate_with_feedback(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+    tmp_path: Path,
+) -> None:
+    app.dependency_overrides[get_homework_settings] = lambda: HomeworkConfig(
+        STORAGE_PATH=tmp_path
+    )
+    teacher, student = await _seed_pair(db_session)
+    assignment_text = "Read: " + "🚀" * 3000
+    await _create_assignment(
+        client,
+        teacher,
+        student,
+        text=assignment_text,
+        material=("worksheet.pdf", b"private worksheet"),
+    )
+
+    async def unavailable_download(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and "/attachments/" in request.url.path:
+            return httpx.Response(
+                503, json={"detail": "storage temporarily unavailable"}
+            )
+        return await client.send(request)
+
+    driver, http, _api, _requests = await _make_student_driver(
+        client, bot_service_key, forward=unavailable_download
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Homework")
+        await driver.click(_button_with_prefix(driver, "Read: "))
+        assert "Assignment text (page 1 of 8):" in driver.session.last_message.text
+        message_id = driver.session.last_message.message_id
+
+        await driver.click(_button_with_prefix(driver, "Download worksheet.pdf"))
+
+        visible = driver.session.last_message.text
+        assert visible.startswith("<b>❌ Error</b>\n")
+        assert "Assignment text (page 1 of 8):" in visible
+        assert rendered_utf16_length(visible) <= 4096
+        driver.callback_data(_button_with_prefix(driver, "Download worksheet.pdf"))
+        send_count = sum(
+            call.__api_method__ == "sendMessage" for call in driver.session.calls
+        )
+        await driver.click("Next assignment text")
+        visible = driver.session.last_message.text
+        assert visible.startswith("<b>❌ Error</b>\n")
+        assert "Assignment text (page 2 of 8):" in visible
+        assert rendered_utf16_length(visible) <= 4096
+        assert driver.session.last_message.message_id == message_id
+        assert (
+            sum(call.__api_method__ == "sendMessage" for call in driver.session.calls)
+            == send_count
+        )
+        assert driver.session.sent_documents == []
+
+        await driver.click("Submit solution")
+        await driver.text("🚀" * 3000)
+        for index in range(5):
+            await driver.document(f"{'🚀' * 120}-{index}.pdf", b"tiny file")
+        await driver.text(" ")
+        visible = driver.session.last_message.text
+        assert visible.startswith("<b>❌ Error</b>\n")
+        assert "Text (page 1 of 8):" in visible
+        assert rendered_utf16_length(visible) <= 4096
+        await driver.click("Next text")
+        assert "Text (page 2 of 8):" in driver.session.last_message.text
+        await driver.click("Review")
+        visible = driver.session.last_message.text
+        assert "Review solution for this assignment" in visible
+        assert "Assignment text (page 2 of 8):" in visible
+        assert "Text (page 2 of 8):" in visible
+        assert "❌ Error" not in visible
+        assert rendered_utf16_length(visible) <= 4096
+    finally:
+        await _close_driver(driver, http)
+        app.dependency_overrides.pop(get_homework_settings, None)
+
+
+async def test_unknown_student_upload_keeps_pending_file_for_same_operation_retry(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+    tmp_path: Path,
+) -> None:
+    app.dependency_overrides[get_homework_settings] = lambda: HomeworkConfig(
+        STORAGE_PATH=tmp_path
+    )
+    teacher, student = await _seed_pair(db_session)
+    await _create_assignment(client, teacher, student)
+    upload_keys: list[str] = []
+    lose_first_response = True
+
+    async def lose_upload_response(request: httpx.Request) -> httpx.Response:
+        nonlocal lose_first_response
+        if (
+            request.method == "POST"
+            and request.url.path == "/api/v1/homework/attachments"
+        ):
+            upload_keys.append(request.headers["Idempotency-Key"])
+            response = await client.send(request)
+            if lose_first_response:
+                lose_first_response = False
+                raise httpx.ReadTimeout("Upload response lost")
+            return response
+        return await client.send(request)
+
+    driver, http, _api, _requests = await _make_student_driver(
+        client, bot_service_key, forward=lose_upload_response
+    )
+    try:
+        await driver.text("/start")
+        await _open_assignment(driver, "Read chapter 3")
+        await driver.click("Submit solution")
+        await driver.document("retry.pdf", b"original bytes")
+        assert driver.session.last_message.text.startswith("<b>⚠️ Attention</b>\n")
+        driver.callback_data("Retry upload: retry.pdf")
+
+        await driver.document("replacement.pdf", b"must not replace pending file")
+
+        visible = driver.session.last_message.text
+        assert visible.startswith("<b>❌ Error</b>\n")
+        assert "⚠️ Attention" in visible
+        assert "replacement.pdf" not in visible
+        driver.callback_data("Retry upload: retry.pdf")
+        assert len(upload_keys) == 1
+
+        await driver.click("Retry upload: retry.pdf")
+        assert upload_keys[0] == upload_keys[1]
+        assert "retry.pdf" in driver.session.last_message.text
+        assert "⚠️ Attention" not in driver.session.last_message.text
+        assert (
+            await db_session.scalar(
+                select(func.count())
+                .select_from(HomeworkAttachment)
+                .where(HomeworkAttachment.file_name == "retry.pdf")
+            )
+            == 1
+        )
+    finally:
+        await _close_driver(driver, http)
+        app.dependency_overrides.pop(get_homework_settings, None)
+
+
 async def test_unknown_submission_retries_same_operation_without_duplicate_version(
     client: httpx.AsyncClient,
     db_session: AsyncSession,
@@ -267,10 +413,13 @@ async def test_unknown_submission_retries_same_operation_without_duplicate_versi
         await driver.text("My answer")
         await driver.click("Review")
         await driver.click("Finish submission")
+        assert driver.session.last_message.text.startswith("<b>⚠️ Attention</b>\n")
         assert "outcome is unknown" in driver.session.last_message.text.lower()
+        assert "❌ Error" not in driver.session.last_message.text
         assert "Retry Finish" in _button_with_prefix(driver, "Retry Finish")
         await driver.click("Retry Finish (same operation)")
         assert "version 1" in driver.session.last_message.text
+        assert "⚠️ Attention" not in driver.session.last_message.text
         assert len(submission_requests) == 2
         assert submission_requests[0] == submission_requests[1]
         assert (
