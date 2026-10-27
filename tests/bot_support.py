@@ -18,6 +18,7 @@ class RecordingSession(BaseSession):
         self.next_id = 100
         self.edit_failure: str | None = None
         self.document_failure: str | None = None
+        self.delete_failure: str | None = None
         self.files: dict[str, tuple[str, bytes, int]] = {}
         self.sent_documents: list[tuple[int, str, bytes]] = []
 
@@ -96,6 +97,11 @@ class RecordingSession(BaseSession):
                 from_user=User(id=bot.id, is_bot=True, first_name="Test"),
                 caption=method.caption,
             ).as_(bot)
+        elif name == "deleteMessage":
+            if self.delete_failure:
+                failure, self.delete_failure = self.delete_failure, None
+                raise TelegramBadRequest(method=method, message=failure)
+            result = True
         else:
             result = True
         return result
@@ -124,6 +130,13 @@ class BotDriver:
         self.dispatcher = dispatcher
         self.user_id = user_id
         self.update_id = 0
+
+    def deleted_message_ids(self) -> list[int]:
+        return [
+            int(call.model_dump()["message_id"])
+            for call in self.session.calls
+            if call.__api_method__ == "deleteMessage"
+        ]
 
     async def text(self, value: str, chat_type: str = "private") -> None:
         self.update_id += 1

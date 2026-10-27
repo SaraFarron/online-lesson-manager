@@ -186,11 +186,17 @@ async def _enter_break(
     cutoff_date: str | None = None,
 ) -> None:
     await driver.click("Add break")
+    screen_message_id = driver.session.last_message.message_id
+    start_message_id = driver.update_id + 1
     await driver.text(start_date)
+    assert driver.deleted_message_ids()[-1] == start_message_id
+    assert driver.session.last_message.message_id == screen_message_id
     await driver.text(start_time)
     await driver.text(end_time)
     if cutoff_date is not None:
+        cutoff_message_id = driver.update_id + 1
         await driver.text(cutoff_date)
+        assert driver.deleted_message_ids()[-1] == cutoff_message_id
 
 
 def _event_button(driver: BotDriver) -> str:

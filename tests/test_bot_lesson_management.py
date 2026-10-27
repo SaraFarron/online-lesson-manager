@@ -173,7 +173,11 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         await driver.click(_event_button(driver))
         assert "Alice Learner" in driver.session.last_message.text
         await driver.click("Edit lesson or series")
+        date_message_id = driver.update_id + 1
+        screen_message_id = driver.session.last_message.message_id
         await driver.text("03/11/2026")
+        assert driver.deleted_message_ids()[-1] == date_message_id
+        assert driver.session.last_message.message_id == screen_message_id
         await driver.text("11:00")
         assert "Start: Tue, 2026-11-03 11:00" in driver.session.last_message.text
         assert "Automatic break after this lesson (5 min)" in (

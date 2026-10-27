@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from aiogram.exceptions import TelegramBadRequest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -144,8 +145,14 @@ async def test_teacher_books_student_and_omits_default_duration(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.click("Use default (60 min)")
+        date_message_id = driver.update_id + 1
+        screen_message_id = driver.session.last_message.message_id
         await driver.text("20 10 2026")
+        assert driver.deleted_message_ids() == [date_message_id]
+        assert driver.session.last_message.message_id == screen_message_id
+        deleted_count = len(driver.deleted_message_ids())
         await driver.text("25:00")
+        assert len(driver.deleted_message_ids()) == deleted_count
         assert "Hour must be 0–23" in driver.session.last_message.text
         await driver.text("10:00")
         assert "Timezone: UTC" in driver.session.last_message.text
@@ -195,9 +202,17 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         await driver.click("Weekly")
         await driver.click("Custom duration")
         await driver.text("45")
+        start_message_id = driver.update_id + 1
         await driver.text("20/10/2026")
+        assert driver.deleted_message_ids()[-1] == start_message_id
         await driver.text("10:00")
+        rejected_cutoff_id = driver.update_id + 1
+        await driver.text("19/10/2026")
+        assert "cannot be before its first lesson" in driver.session.last_message.text
+        assert rejected_cutoff_id not in driver.deleted_message_ids()
+        cutoff_message_id = driver.update_id + 1
         await driver.text("27/10/2026")
+        assert driver.deleted_message_ids()[-1] == cutoff_message_id
         assert "Weekly through 2026-10-27 inclusive" in (
             driver.session.last_message.text
         )
@@ -220,6 +235,53 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         assert series[0].interval_end == datetime(2026, 10, 28)
         assert "Personal lesson" in driver.session.last_message.text
         assert "Tuesday, October 20, 2026" in driver.session.last_message.text
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_lesson_date_cleanup_preserves_invalid_input_and_reports_failures(
+    client, db_session, bot_service_key, monkeypatch, caplog
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_schedule_clock,
+        lambda: datetime(2026, 10, 20, 8, tzinfo=UTC),
+    )
+    _, driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        await driver.click("Personal lesson")
+        await driver.click("One time")
+        await driver.click("Use default (60 min)")
+
+        screen_message_id = driver.session.last_message.message_id
+        await driver.text("31/02/2026")
+        assert "valid calendar date" in driver.session.last_message.text
+        assert driver.deleted_message_ids() == []
+        assert driver.session.last_message.message_id == screen_message_id
+
+        expected_message_id = driver.update_id + 1
+        driver.session.delete_failure = "Bad Request: message to delete not found"
+        await driver.text("19/10")
+        assert driver.deleted_message_ids() == [expected_message_id]
+        assert "Date accepted, but Telegram could not remove your message." in (
+            driver.session.last_message.text
+        )
+        assert "next year" in driver.session.last_message.text
+        assert "Could not delete accepted date input" in caplog.text
+
+        await driver.click("Confirm date")
+        await driver.click("Change date")
+        unexpected_message_id = driver.update_id + 1
+        driver.session.delete_failure = "Bad Request: can't parse entities"
+        with pytest.raises(TelegramBadRequest):
+            await driver.text("20/10/2026")
+        assert driver.deleted_message_ids() == [
+            expected_message_id,
+            unexpected_message_id,
+        ]
     finally:
         await _close_bot(driver, http)
 

@@ -24,6 +24,7 @@ from telegram.api import (
     SessionView,
     StudentPickerPage,
 )
+from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
@@ -412,7 +413,7 @@ async def duration_input(
 
 
 async def start_date_input(
-    _message: Message,
+    message: Message,
     _widget: ManagedTextInput[str],
     manager: DialogManager,
     value: str,
@@ -427,6 +428,7 @@ async def start_date_input(
         start_date=parsed.value.isoformat(),
         error="",
     )
+    await delete_accepted_date_message(message, manager)
     state = (
         LessonScreens.confirm_start_date
         if parsed.requires_confirmation
@@ -509,6 +511,7 @@ async def cutoff_date_input(
         cutoff_date=parsed.value.isoformat(),
         error="",
     )
+    await delete_accepted_date_message(message, manager)
     if parsed.requires_confirmation:
         await manager.switch_to(
             LessonScreens.confirm_cutoff_date, show_mode=ShowMode.EDIT
@@ -835,7 +838,9 @@ def build_lesson_dialog() -> Dialog:
             state=LessonScreens.start_date,
         ),
         Window(
-            Format("{start_date_confirmation}\nConfirm this inferred next-year date."),
+            Format(
+                "{start_date_confirmation}\nConfirm this inferred next-year date.\n{error}"
+            ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_start_date),
             Button(Const("Change date"), id="change", on_click=edit_start_date),
             state=LessonScreens.confirm_start_date,

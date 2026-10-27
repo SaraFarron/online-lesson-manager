@@ -31,6 +31,7 @@ from telegram.api import (
     ResolvedLocalInstant,
     SessionView,
 )
+from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
@@ -281,7 +282,7 @@ async def begin_create(
 
 
 async def start_date_input(
-    _message: Message,
+    message: Message,
     _widget: ManagedTextInput[str],
     manager: DialogManager,
     value: str,
@@ -301,6 +302,7 @@ async def start_date_input(
         ),
         error="",
     )
+    await delete_accepted_date_message(message, manager)
     await manager.switch_to(
         BreakScreens.confirm_start_date
         if parsed.requires_confirmation
@@ -438,6 +440,7 @@ async def cutoff_date_input(
         ),
         error="",
     )
+    await delete_accepted_date_message(message, manager)
     if parsed.requires_confirmation:
         await manager.switch_to(
             BreakScreens.confirm_cutoff_date, show_mode=ShowMode.EDIT
@@ -1180,7 +1183,9 @@ def build_break_dialog() -> Dialog:
             state=BreakScreens.start_date,
         ),
         Window(
-            Format("{start_date_confirmation}\nConfirm this inferred next-year date."),
+            Format(
+                "{start_date_confirmation}\nConfirm this inferred next-year date.\n{error}"
+            ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_start_date),
             Button(Const("Change date"), id="change", on_click=change_start_date),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),

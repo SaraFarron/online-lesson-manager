@@ -23,6 +23,7 @@ from telegram.api import (
     EventWriteResult,
     SessionView,
 )
+from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
@@ -370,28 +371,46 @@ async def _begin_date_input(manager: DialogManager, field: str) -> None:
 
 
 async def start_date_input(
-    _message: Message,
+    message: Message,
     _widget: ManagedTextInput[str],
     manager: DialogManager,
     value: str,
 ) -> None:
     await _date_input(
-        manager, value, str(manager.dialog_data.get("date_field", "start_date"))
+        message,
+        manager,
+        value,
+        str(manager.dialog_data.get("date_field", "start_date")),
     )
 
 
 async def end_date_input(
-    _message: Message,
+    message: Message,
     _widget: ManagedTextInput[str],
     manager: DialogManager,
     value: str,
 ) -> None:
-    await _date_input(manager, value, "end_date")
+    await _date_input(message, manager, value, "end_date")
 
 
-async def _date_input(manager: DialogManager, value: str, field: str) -> None:
+async def _date_input(
+    message: Message, manager: DialogManager, value: str, field: str
+) -> None:
     try:
         parsed = _parse_local_date(manager, value)
+        other_date = manager.dialog_data.get(
+            "end_date" if field == "start_date" else "start_date"
+        )
+        if other_date is not None:
+            existing_date = date.fromisoformat(other_date)
+            if field == "start_date" and parsed.value > existing_date:
+                raise ValueError(
+                    "The vacation start date cannot be after its end date."
+                )
+            if field == "end_date" and parsed.value < existing_date:
+                raise ValueError(
+                    "The last vacation date cannot be before its start date."
+                )
     except ValueError as exc:
         manager.dialog_data["error"] = str(exc)
         manager.show_mode = ShowMode.EDIT
@@ -403,9 +422,10 @@ async def _date_input(manager: DialogManager, value: str, field: str) -> None:
         error="",
     )
     if parsed.requires_confirmation:
+        await delete_accepted_date_message(message, manager)
         await manager.switch_to(VacationScreens.confirm_date, show_mode=ShowMode.EDIT)
     else:
-        await _accept_date(manager)
+        await _accept_date(manager, message)
 
 
 async def date_input_error(
@@ -431,11 +451,13 @@ async def change_date(
     await _begin_date_input(manager, field)
 
 
-async def _accept_date(manager: DialogManager) -> None:
+async def _accept_date(manager: DialogManager, message: Message | None = None) -> None:
     field = manager.dialog_data["date_field"]
     manager.dialog_data.update(
         {field: manager.dialog_data["pending_date"], "error": ""}
     )
+    if message is not None:
+        await delete_accepted_date_message(message, manager)
     if field == "start_date" and manager.dialog_data.get("edit_flow") == "create":
         await manager.switch_to(VacationScreens.start_time, show_mode=ShowMode.EDIT)
     else:

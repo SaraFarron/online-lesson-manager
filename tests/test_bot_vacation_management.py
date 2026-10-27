@@ -150,9 +150,15 @@ async def _create_vacation(
     await driver.click("Add vacation")
     if subject is not None:
         await driver.click(subject)
+    screen_message_id = driver.session.last_message.message_id
+    start_message_id = driver.update_id + 1
     await driver.text(start_date)
+    assert driver.deleted_message_ids()[-1] == start_message_id
+    assert driver.session.last_message.message_id == screen_message_id
     await driver.text(start_time)
+    end_message_id = driver.update_id + 1
     await driver.text(end_date)
+    assert driver.deleted_message_ids()[-1] == end_message_id
     await driver.click("Save vacation")
 
 
@@ -169,6 +175,34 @@ def _vacation_button(driver: BotDriver, subject: str) -> str:
 
 def _schedule_items(schedule) -> list:
     return [item for day in schedule.days for item in day.items]
+
+
+async def test_vacation_rejects_end_date_before_start_without_deleting_it(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _student, _other_student = await _seed_accounts(db_session)
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_vacations(driver)
+        await driver.click("Add vacation")
+        await driver.click("Personal vacation")
+
+        screen_message_id = driver.session.last_message.message_id
+        start_message_id = driver.update_id + 1
+        await driver.text("05/11/2030")
+        assert driver.deleted_message_ids() == [start_message_id]
+        assert driver.session.last_message.message_id == screen_message_id
+        await driver.text("10:00")
+
+        rejected_message_id = driver.update_id + 1
+        await driver.text("04/11/2030")
+        assert "cannot be before its start date" in driver.session.last_message.text
+        assert driver.deleted_message_ids() == [start_message_id]
+        assert rejected_message_id not in driver.deleted_message_ids()
+    finally:
+        await _close_bot(driver, http)
 
 
 async def test_teacher_creates_edits_and_deletes_student_vacation(

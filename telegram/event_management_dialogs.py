@@ -27,6 +27,7 @@ from telegram.api import (
     RecurrentOccurrenceMovePayload,
     SessionView,
 )
+from telegram.date_cleanup import delete_accepted_date_message
 from telegram.inputs import (
     combine_schedule_date_time,
     format_schedule_date_confirmation,
@@ -488,6 +489,8 @@ async def date_input(
     manager: DialogManager,
     value: str,
 ) -> None:
+    if message.from_user is None:
+        raise ValueError("Event management requires a private chat")
     try:
         timezone = ZoneInfo(manager.dialog_data["viewer_timezone"])
         parsed = parse_schedule_date(value, datetime.now(timezone).date())
@@ -502,13 +505,14 @@ async def date_input(
         else ""
     )
     if parsed.requires_confirmation:
+        await delete_accepted_date_message(message, manager)
         await manager.switch_to(
             LessonManagementScreens.confirm_date, show_mode=ShowMode.EDIT
         )
         return
-    if message.from_user is None:
-        raise ValueError("Event management requires a private chat")
-    await _continue_date(message.from_user.id, message.chat.id, manager)
+    if await _continue_date(message.from_user.id, message.chat.id, manager):
+        if not await delete_accepted_date_message(message, manager):
+            await manager.show(show_mode=ShowMode.EDIT)
 
 
 async def confirm_date(
@@ -526,7 +530,7 @@ async def change_date(
     await manager.switch_to(LessonManagementScreens.date, show_mode=ShowMode.EDIT)
 
 
-async def _continue_date(sender_id: int, chat_id: int, manager: DialogManager) -> None:
+async def _continue_date(sender_id: int, chat_id: int, manager: DialogManager) -> bool:
     data = manager.dialog_data
     action: ManagementAction = data["date_action"]
     if action == "cutoff":
@@ -544,10 +548,10 @@ async def _continue_date(sender_id: int, chat_id: int, manager: DialogManager) -
         except (BackendError, BackendUnavailable, OverflowError, ValueError) as exc:
             data["error"] = str(exc)
             await manager.show(show_mode=ShowMode.EDIT)
-            return
+            return False
         data.update(interval_end=cutoff.isoformat(), error="")
         await manager.switch_to(LessonManagementScreens.review, show_mode=ShowMode.EDIT)
-        return
+        return True
 
     data["error"] = ""
     data["time_prompt"] = {
@@ -556,6 +560,7 @@ async def _continue_date(sender_id: int, chat_id: int, manager: DialogManager) -
         "move": "Enter the replacement start date's local time.",
     }[action]
     await manager.switch_to(LessonManagementScreens.time, show_mode=ShowMode.EDIT)
+    return True
 
 
 async def time_input(
