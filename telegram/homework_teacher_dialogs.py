@@ -33,6 +33,7 @@ from telegram.api import (
     StagedHomeworkAttachment,
     StudentPickerPage,
 )
+from telegram.inputs import format_compact_schedule_date
 from telegram.onboarding import backend
 
 STUDENT_PAGE_SIZE = 20
@@ -58,6 +59,7 @@ async def open_homework_creation(
 
     data: dict[str, Any] = {
         "view": view.model_dump(mode="json"),
+        "viewer_timezone": view.account.timezone,
         "picker_items": [],
         "picker_total": 0,
         "picker_skip": 0,
@@ -188,12 +190,11 @@ async def homework_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
         "lesson_label": lesson_label,
         "lesson_options": lesson_option_page,
         "lesson_week_label": escape(str(data.get("lesson_week_label", ""))),
+        "lesson_timezone": escape(str(data.get("viewer_timezone", "UTC"))),
         "lesson_error": escape(str(data.get("lesson_error", ""))),
         "lesson_page": (
-            f"Options {lesson_skip + 1}–"
-            f"{min(lesson_skip + LESSON_PAGE_SIZE, len(lesson_options))} "
-            f"of {len(lesson_options)}"
-            if lesson_options
+            ""
+            if lesson_options or data.get("lesson_error")
             else "No upcoming lessons for this student in this week."
         ),
         "has_previous_lesson_page": lesson_skip > 0,
@@ -329,6 +330,15 @@ async def _load_lesson_options(
 ) -> None:
     data = manager.dialog_data
     data.update(lesson_options=[], lesson_skip=0, lesson_error="")
+    view = SessionView.model_validate(data["view"])
+    viewer_timezone = ZoneInfo(view.account.timezone)
+    reference_date = datetime.now(viewer_timezone).date()
+    week_start = requested_date - timedelta(days=requested_date.weekday())
+    week_end = week_start + timedelta(days=6)
+    fallback_week_label = (
+        f"{format_compact_schedule_date(week_start, reference_date=reference_date)} "
+        f"– {format_compact_schedule_date(week_end, reference_date=reference_date)}"
+    )
     try:
         client = backend(manager)
         student_id = UUID(data["student_id"])
@@ -343,12 +353,10 @@ async def _load_lesson_options(
         )
     except (BackendError, BackendUnavailable) as exc:
         data["lesson_error"] = str(exc)
-        data["lesson_week_label"] = requested_date.isoformat()
+        data["lesson_week_label"] = fallback_week_label
         data["lesson_week"] = requested_date.isoformat()
         return
 
-    view = SessionView.model_validate(data["view"])
-    viewer_timezone = ZoneInfo(view.account.timezone)
     source_ids = {"event": one_off_ids, "recurrent_event": recurrent_ids}
     options: list[dict[str, str]] = []
     for day in schedule.days:
@@ -367,7 +375,8 @@ async def _load_lesson_options(
                     "source_id": str(item.source_id),
                     "starts_at": item.start.isoformat(),
                     "label": escape(
-                        f"{local_start.strftime('%a, %Y-%m-%d %H:%M %Z')} "
+                        f"{format_compact_schedule_date(local_start.date(), reference_date=reference_date)} "
+                        f"{local_start.hour}:{local_start.minute:02d} "
                         f"({kind.replace('_', ' ').lower()})"
                     ),
                 }
@@ -379,7 +388,10 @@ async def _load_lesson_options(
         ],
         lesson_skip=0,
         lesson_week=requested_date.isoformat(),
-        lesson_week_label=f"{schedule.days[0].date} – {schedule.days[-1].date}",
+        lesson_week_label=(
+            f"{format_compact_schedule_date(schedule.days[0].date, reference_date=reference_date)} "
+            f"– {format_compact_schedule_date(schedule.days[-1].date, reference_date=reference_date)}"
+        ),
         lesson_error="",
     )
 
@@ -923,7 +935,8 @@ def build_homework_teacher_dialog() -> Dialog:
         Window(
             Format(
                 "Select an upcoming lesson for {student_label}.\n"
-                "Week: {lesson_week_label}\n{lesson_page}\n{lesson_error}"
+                "Week: {lesson_week_label}\n{lesson_page}\n{lesson_error}\n"
+                "Timezone: {lesson_timezone}"
             ),
             Select(
                 Format("{item[label]}"),

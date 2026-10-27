@@ -1,5 +1,6 @@
+import json
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -19,6 +20,7 @@ from backend.schedule.router import get_schedule_clock
 from telegram.api import (
     MAX_HOMEWORK_ATTACHMENT_BYTES,
     BackendClient,
+    BackendUnavailable,
     HomeworkAssignment,
 )
 from telegram.runtime import build_dispatcher
@@ -266,20 +268,25 @@ async def test_assignment_can_link_exact_upcoming_lesson_occurrence(
 
     monkeypatch.setattr(homework_dialogs, "datetime", FixedDateTime)
     monkeypatch.setitem(app.dependency_overrides, get_schedule_clock, lambda: now)
-    driver, http, api, _requests = await _make_driver(client, bot_service_key)
+    driver, http, api, requests = await _make_driver(client, bot_service_key)
     try:
         await driver.text("/start")
         await _open_assignment(driver, "Alice Learner")
         await driver.text("Prepare for the lesson")
         await driver.click("Link or change lesson")
+        assert "Week: mon, Nov 4 – sun, Nov 10" in driver.session.last_message.text
+        assert "Timezone: UTC" in driver.session.last_message.text
+        assert "Options " not in driver.session.last_message.text
         lesson_choice = next(
             button.text
             for row in driver.session.last_message.reply_markup.inline_keyboard
             for button in row
-            if "2030-11-05 09:00" in button.text
+            if "tue, Nov 5 9:00 (event)" in button.text
         )
         await driver.click(lesson_choice)
-        assert "2030-11-05 09:00" in driver.session.last_message.text
+        assert "tue, Nov 5 9:00 (event)" in driver.session.last_message.text
+        assert "2030-11-05" not in driver.session.last_message.text
+        assert "(UTC" not in driver.session.last_message.text
         await driver.click("Review")
         await driver.click("Publish assignment")
 
@@ -296,6 +303,19 @@ async def test_assignment_can_link_exact_upcoming_lesson_occurrence(
             hour=occurrence_start.hour,
             minute=occurrence_start.minute,
         )
+        assignment_writes = [
+            request
+            for request in requests
+            if request.method == "POST"
+            and request.url.path == "/api/v1/homework/assignments"
+        ]
+        assert len(assignment_writes) == 1
+        one_off_payload = json.loads(assignment_writes[0].content)
+        assert one_off_payload["lesson_occurrence"]["kind"] == "EVENT"
+        assert one_off_payload["lesson_occurrence"]["source_id"] == str(lesson.id)
+        assert datetime.fromisoformat(
+            one_off_payload["lesson_occurrence"]["starts_at"]
+        ) == datetime(2030, 11, 5, 9, tzinfo=UTC)
 
         await _open_assignment(driver, "Alice Learner")
         await driver.text("Review this recurring lesson")
@@ -304,7 +324,7 @@ async def test_assignment_can_link_exact_upcoming_lesson_occurrence(
             button.text
             for row in driver.session.last_message.reply_markup.inline_keyboard
             for button in row
-            if "2030-11-05 11:00" in button.text
+            if "tue, Nov 5 11:00 (recurrent event)" in button.text
         )
         await driver.click(recurring_choice)
         await driver.click("Review")
@@ -319,6 +339,133 @@ async def test_assignment_can_link_exact_upcoming_lesson_occurrence(
         assert linked_occurrence.kind == "RECURRENT_EVENT"
         assert linked_occurrence.source_id == recurrent_lesson.id
         assert linked_occurrence.starts_at == datetime(2030, 11, 5, 11, tzinfo=UTC)
+        assignment_writes = [
+            request
+            for request in requests
+            if request.method == "POST"
+            and request.url.path == "/api/v1/homework/assignments"
+        ]
+        assert len(assignment_writes) == 2
+        recurring_payload = json.loads(assignment_writes[1].content)
+        assert recurring_payload["lesson_occurrence"]["kind"] == "RECURRENT_EVENT"
+        assert recurring_payload["lesson_occurrence"]["source_id"] == str(
+            recurrent_lesson.id
+        )
+        assert datetime.fromisoformat(
+            recurring_payload["lesson_occurrence"]["starts_at"]
+        ) == datetime(2030, 11, 5, 11, tzinfo=UTC)
+    finally:
+        await _close_driver(driver, http)
+
+
+async def test_lesson_picker_fallback_week_label_and_week_navigation(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+    monkeypatch,
+) -> None:
+    await _seed(db_session)
+    now = datetime(2030, 11, 4, 12, tzinfo=UTC)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.astimezone(tz) if tz is not None else now.replace(tzinfo=None)
+
+    async def unavailable_schedule_week(
+        _client: BackendClient, _sender_id: int, _chat_id: int, _requested_date=None
+    ) -> None:
+        raise BackendUnavailable()
+
+    monkeypatch.setattr(homework_dialogs, "datetime", FixedDateTime)
+    monkeypatch.setattr(BackendClient, "read_schedule_week", unavailable_schedule_week)
+    monkeypatch.setitem(app.dependency_overrides, get_schedule_clock, lambda: now)
+    driver, http, _api, _requests = await _make_driver(client, bot_service_key)
+    try:
+        await driver.text("/start")
+        await _open_assignment(driver, "Alice Learner")
+        await driver.click("Link or change lesson")
+        assert "Week: mon, Nov 4 – sun, Nov 10" in driver.session.last_message.text
+        assert "No upcoming lessons" not in driver.session.last_message.text
+        assert "2030-11-" not in driver.session.last_message.text
+        assert "Options " not in driver.session.last_message.text
+
+        await driver.click("Later week")
+        assert "Week: mon, Nov 11 – sun, Nov 17" in driver.session.last_message.text
+        await driver.click("Earlier week")
+        assert "Week: mon, Nov 4 – sun, Nov 10" in driver.session.last_message.text
+    finally:
+        await _close_driver(driver, http)
+
+
+async def test_lesson_picker_option_pagination_stays_bounded_without_page_count(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+    monkeypatch,
+) -> None:
+    teacher, students = await _seed(db_session)
+    student = students[0]
+    now = datetime(2030, 11, 4, 12, tzinfo=UTC)
+    starts = [datetime(2030, 11, 5, 8) + timedelta(hours=index) for index in range(11)]
+    db_session.add_all(
+        [
+            Event(
+                teacher_id=teacher.id,
+                user_id=student.id,
+                event_type=EventType.LESSON.value,
+                start=start,
+                end=start + timedelta(minutes=30),
+                post_break_minutes=0,
+            )
+            for start in starts
+        ]
+    )
+    await db_session.commit()
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.astimezone(tz) if tz is not None else now.replace(tzinfo=None)
+
+    monkeypatch.setattr(homework_dialogs, "datetime", FixedDateTime)
+    monkeypatch.setitem(app.dependency_overrides, get_schedule_clock, lambda: now)
+    driver, http, _api, _requests = await _make_driver(client, bot_service_key)
+    try:
+        await driver.text("/start")
+        await _open_assignment(driver, "Alice Learner")
+        await driver.click("Link or change lesson")
+        assert "Week: mon, Nov 4 – sun, Nov 10" in driver.session.last_message.text
+        assert "Options " not in driver.session.last_message.text
+        option_labels = [
+            button.text
+            for row in driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+            if button.text.endswith("(event)")
+        ]
+        assert len(option_labels) == 10
+        assert "tue, Nov 5 8:00 (event)" in option_labels
+
+        await driver.click("Next options")
+        next_page_labels = [
+            button.text
+            for row in driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+            if button.text.endswith("(event)")
+        ]
+        assert next_page_labels == ["tue, Nov 5 18:00 (event)"]
+        assert "Options " not in driver.session.last_message.text
+
+        await driver.click("Previous options")
+        first_page_labels = [
+            button.text
+            for row in driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+            if button.text.endswith("(event)")
+        ]
+        assert len(first_page_labels) == 10
+        await driver.click(first_page_labels[0])
+        assert "Lesson: tue, Nov 5 8:00 (event)" in driver.session.last_message.text
     finally:
         await _close_driver(driver, http)
 
