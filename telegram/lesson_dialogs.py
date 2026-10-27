@@ -146,12 +146,14 @@ async def lesson_started(start_data: Any, manager: DialogManager) -> None:
 
 async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     data = dialog_manager.dialog_data
+    reference_date = datetime.now(ZoneInfo(data["viewer_timezone"])).date()
     resolution_data = data.get("resolution")
     review = ""
     if resolution_data is not None:
         try:
             review = format_local_interval_review(
                 _resolution(resolution_data),
+                reference_date=reference_date,
                 duration_minutes=int(data["duration_minutes"]),
             )
         except KeyError, TypeError, ValueError:
@@ -229,14 +231,22 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         ),
         "start_date_confirmation": escape(
             format_schedule_date_confirmation(
-                ParsedScheduleDate(date.fromisoformat(start_date), inferred_year=True)
+                ParsedScheduleDate(
+                    date.fromisoformat(start_date),
+                    inferred_year=True,
+                    reference_date=reference_date,
+                )
             )
             if start_date
             else ""
         ),
         "cutoff_date_confirmation": escape(
             format_schedule_date_confirmation(
-                ParsedScheduleDate(date.fromisoformat(cutoff_date), inferred_year=True)
+                ParsedScheduleDate(
+                    date.fromisoformat(cutoff_date),
+                    inferred_year=True,
+                    reference_date=reference_date,
+                )
             )
             if cutoff_date
             else ""
@@ -453,6 +463,9 @@ async def start_time_input(
         )
         format_local_interval_review(
             resolution,
+            reference_date=datetime.now(
+                ZoneInfo(manager.dialog_data["viewer_timezone"])
+            ).date(),
             duration_minutes=int(manager.dialog_data["duration_minutes"]),
         )
     except (OverflowError, ValueError) as exc:

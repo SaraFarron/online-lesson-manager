@@ -1,11 +1,20 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import ValidationError
 
-from telegram.api import BackendClient, Registration
+from telegram.api import (
+    BackendClient,
+    LocalIntervalResolution,
+    Registration,
+    ResolvedLocalInstant,
+)
 from telegram.inputs import (
     combine_schedule_date_time,
+    format_compact_schedule_date,
+    format_human_datetime,
+    format_local_interval,
     format_local_interval_review,
     format_schedule_date_confirmation,
     parse_schedule_date,
@@ -36,7 +45,10 @@ def test_schedule_date_infers_next_year_and_requires_confirmation() -> None:
     assert parsed.value == date(2036, 1, 2)
     assert parsed.inferred_year
     assert parsed.requires_confirmation
-    assert "2036-01-02" in format_schedule_date_confirmation(parsed)
+    assert (
+        format_schedule_date_confirmation(parsed)
+        == "January 2 (2036) is in the next year. Confirm this date or go back."
+    )
 
 
 def test_explicit_past_date_is_preserved_and_leap_days_are_checked() -> None:
@@ -88,6 +100,109 @@ def test_combine_schedule_date_time_returns_naive_local_datetime() -> None:
 
     assert result == datetime(2035, 3, 4, 9, 30)
     assert result.tzinfo is None
+
+
+def test_human_datetime_helpers_keep_dates_compact_and_years_unambiguous() -> None:
+    reference_date = date(2026, 12, 31)
+
+    assert (
+        format_human_datetime(datetime(2026, 11, 5, 9), reference_date=reference_date)
+        == "November 5 at 9:00"
+    )
+    assert (
+        format_human_datetime(datetime(2027, 11, 5, 9), reference_date=reference_date)
+        == "November 5 at 9:00 (2027)"
+    )
+    assert (
+        format_local_interval(
+            datetime(2026, 11, 5, 15),
+            datetime(2026, 11, 5, 16),
+            reference_date=reference_date,
+        )
+        == "November 5 15:00 - 16:00"
+    )
+    assert (
+        format_local_interval(
+            datetime(2026, 12, 31, 23, 30),
+            datetime(2027, 1, 1, 0, 30),
+            reference_date=reference_date,
+        )
+        == "December 31 23:30 - January 1 (2027) 0:30"
+    )
+    assert (
+        format_compact_schedule_date(date(2026, 11, 5), reference_date=reference_date)
+        == "thu, Nov 5"
+    )
+    assert (
+        format_compact_schedule_date(date(2027, 11, 5), reference_date=reference_date)
+        == "fri, Nov 5 (2027)"
+    )
+
+
+def _resolved_interval(
+    timezone_name: str, start_utc: datetime, end_utc: datetime
+) -> LocalIntervalResolution:
+    zone = ZoneInfo(timezone_name)
+
+    def instant(value: datetime) -> ResolvedLocalInstant:
+        local = value.astimezone(zone)
+        offset = local.strftime("%z")
+        return ResolvedLocalInstant(
+            local=local,
+            utc=value,
+            utc_offset=f"{offset[:3]}:{offset[3:]}",
+        )
+
+    return LocalIntervalResolution(
+        timezone=timezone_name,
+        start=instant(start_utc),
+        end=instant(end_utc),
+    )
+
+
+def test_local_interval_review_uses_viewer_timezone_and_labels_dst_fold() -> None:
+    start = datetime(2024, 11, 3, 5, 30, tzinfo=UTC)
+    end = datetime(2024, 11, 3, 6, 30, tzinfo=UTC)
+    reference_date = date(2024, 1, 1)
+
+    new_york = format_local_interval_review(
+        _resolved_interval("America/New_York", start, end),
+        reference_date=reference_date,
+    )
+    london = format_local_interval_review(
+        _resolved_interval("Europe/London", start, end),
+        reference_date=reference_date,
+    )
+
+    assert (
+        new_york == "November 3 1:30 (first occurrence) - "
+        "1:30 (second occurrence)\nTimezone: America/New_York"
+    )
+    assert "November 3 5:30 - 6:30" in london
+    assert "UTC" not in new_york
+    assert "2024-11-03" not in new_york
+
+
+def test_local_interval_review_retains_duration_validation() -> None:
+    reference_date = date(2024, 1, 1)
+    interval = _resolved_interval(
+        "UTC",
+        datetime(2024, 1, 1, 10, tzinfo=UTC),
+        datetime(2024, 1, 1, 11, tzinfo=UTC),
+    )
+    with pytest.raises(ValueError, match="must be positive"):
+        format_local_interval_review(
+            interval, reference_date=reference_date, duration_minutes=0
+        )
+
+    start = datetime.max.replace(tzinfo=UTC) - timedelta(minutes=1)
+    overflow_interval = _resolved_interval(
+        "UTC", start, datetime.max.replace(tzinfo=UTC)
+    )
+    with pytest.raises(ValueError, match="outside the supported range"):
+        format_local_interval_review(
+            overflow_interval, reference_date=reference_date, duration_minutes=2
+        )
 
 
 async def test_backend_local_resolution_handles_dst_and_viewer_timezone(
@@ -146,15 +261,19 @@ async def test_backend_local_resolution_handles_dst_and_viewer_timezone(
     assert student_local.start.local.isoformat() == "2024-03-10T02:30:00+00:00"
     assert student_local.start.utc != gap.start.utc
 
-    review = format_local_interval_review(gap)
-    assert "Timezone: America/New_York" in review
-    assert "Start: 2024-03-10 03:30 (UTC-04:00)" in review
-    assert "UTC interval:" in review
+    review = format_local_interval_review(gap, reference_date=date(2024, 1, 1))
+    assert review == "March 10 3:30 - 4:00\nTimezone: America/New_York"
+    assert "UTC" not in review
+    assert "2024-03-10" not in review
 
-    lesson_review = format_local_interval_review(fold, duration_minutes=60)
-    assert "Start: 2024-11-03 01:30 (UTC-04:00)" in lesson_review
-    assert "End: 2024-11-03 01:30 (UTC-05:00)" in lesson_review
-    assert "2024-11-03T05:30:00+00:00 - 2024-11-03T06:30:00+00:00" in lesson_review
+    lesson_review = format_local_interval_review(
+        fold, reference_date=date(2024, 1, 1), duration_minutes=60
+    )
+    assert lesson_review == (
+        "November 3 1:30 (first occurrence) - "
+        "1:30 (second occurrence)\nTimezone: America/New_York"
+    )
+    assert "UTC" not in lesson_review
 
 
 async def test_local_resolution_rejects_aware_or_invalid_input_without_writing(

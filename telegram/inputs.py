@@ -5,6 +5,22 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from telegram.api import LocalIntervalResolution
 
+_MONTH_NAMES = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+_SHORT_MONTH_NAMES = tuple(month[:3] for month in _MONTH_NAMES)
+_SHORT_WEEKDAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _DATE_PATTERNS = (
     re.compile(
         r"(?P<month>[0-9]{1,2})\s+(?P<day>[0-9]{1,2})(?:\s+(?P<year>[0-9]{4}))?"
@@ -19,6 +35,7 @@ _SCHEDULE_CLOCK_PATTERN = re.compile(r"[0-9]{1,2}(?::| )[0-9]{1,2}")
 class ParsedScheduleDate:
     value: date
     inferred_year: bool
+    reference_date: date
 
     @property
     def requires_confirmation(self) -> bool:
@@ -41,7 +58,9 @@ def parse_schedule_date(value: str, today: date) -> ParsedScheduleDate:
     explicit_year = match["year"]
     if explicit_year is not None:
         return ParsedScheduleDate(
-            _calendar_date(int(explicit_year), month, day), inferred_year=False
+            _calendar_date(int(explicit_year), month, day),
+            inferred_year=False,
+            reference_date=today,
         )
 
     candidate = _calendar_date(today.year, month, day)
@@ -52,8 +71,8 @@ def parse_schedule_date(value: str, today: date) -> ParsedScheduleDate:
             raise ValueError(
                 "This date does not occur next year; enter an explicit year."
             ) from exc
-        return ParsedScheduleDate(candidate, inferred_year=True)
-    return ParsedScheduleDate(candidate, inferred_year=False)
+        return ParsedScheduleDate(candidate, inferred_year=True, reference_date=today)
+    return ParsedScheduleDate(candidate, inferred_year=False, reference_date=today)
 
 
 def _calendar_date(year: int, month: int, day: int) -> date:
@@ -64,12 +83,57 @@ def _calendar_date(year: int, month: int, day: int) -> date:
 
 
 def format_schedule_date_confirmation(parsed: ParsedScheduleDate) -> str:
+    human_date = format_human_date(parsed.value, reference_date=parsed.reference_date)
     if parsed.requires_confirmation:
-        return (
-            f"{parsed.value.isoformat()} is in the next year. "
-            "Confirm this date or go back."
-        )
-    return f"Date: {parsed.value.isoformat()}"
+        return f"{human_date} is in the next year. Confirm this date or go back."
+    return f"Date: {human_date}"
+
+
+def format_human_date(value: date, *, reference_date: date) -> str:
+    year = f" ({value.year})" if value.year != reference_date.year else ""
+    return f"{_MONTH_NAMES[value.month - 1]} {value.day}{year}"
+
+
+def format_human_datetime(value: datetime, *, reference_date: date) -> str:
+    year = f" ({value.year})" if value.year != reference_date.year else ""
+    return (
+        f"{_MONTH_NAMES[value.month - 1]} {value.day} "
+        f"at {_format_clock(value)}{_format_fold(value)}{year}"
+    )
+
+
+def format_compact_schedule_date(value: date, *, reference_date: date) -> str:
+    year = f" ({value.year})" if value.year != reference_date.year else ""
+    return (
+        f"{_SHORT_WEEKDAY_NAMES[value.weekday()]}, "
+        f"{_SHORT_MONTH_NAMES[value.month - 1]} {value.day}{year}"
+    )
+
+
+def format_local_interval(
+    start: datetime, end: datetime, *, reference_date: date
+) -> str:
+    start_date = format_human_date(start.date(), reference_date=reference_date)
+    start_clock = f"{_format_clock(start)}{_format_fold(start)}"
+    end_clock = f"{_format_clock(end)}{_format_fold(end)}"
+    if start.date() == end.date():
+        return f"{start_date} {start_clock} - {end_clock}"
+    end_date = format_human_date(end.date(), reference_date=reference_date)
+    return f"{start_date} {start_clock} - {end_date} {end_clock}"
+
+
+def _format_clock(value: datetime) -> str:
+    return f"{value.hour}:{value.minute:02d}"
+
+
+def _format_fold(value: datetime) -> str:
+    if value.tzinfo is None:
+        return ""
+    first = value.replace(fold=0).utcoffset()
+    second = value.replace(fold=1).utcoffset()
+    if first == second:
+        return ""
+    return " (first occurrence)" if value.fold == 0 else " (second occurrence)"
 
 
 def parse_schedule_time(value: str) -> str:
@@ -85,7 +149,10 @@ def combine_schedule_date_time(day: date, clock: str) -> datetime:
 
 
 def format_local_interval_review(
-    resolution: LocalIntervalResolution, *, duration_minutes: int | None = None
+    resolution: LocalIntervalResolution,
+    *,
+    reference_date: date,
+    duration_minutes: int | None = None,
 ) -> str:
     start = resolution.start
     end = resolution.end
@@ -99,22 +166,14 @@ def format_local_interval_review(
         zone = ZoneInfo(resolution.timezone)
         start_local = start.utc.astimezone(zone)
         end_local = end_utc.astimezone(zone)
-        start_offset = start_local.strftime("%z")
-        end_offset = end_local.strftime("%z")
-        return (
-            f"Timezone: {resolution.timezone}\n"
-            f"Start: {start_local:%Y-%m-%d %H:%M} "
-            f"(UTC{start_offset[:3]}:{start_offset[3:]})\n"
-            f"End: {end_local:%Y-%m-%d %H:%M} "
-            f"(UTC{end_offset[:3]}:{end_offset[3:]})\n"
-            f"UTC interval: {start.utc.isoformat()} - {end_utc.isoformat()}"
-        )
-    return (
-        f"Timezone: {resolution.timezone}\n"
-        f"Start: {start.local:%Y-%m-%d %H:%M} (UTC{start.utc_offset})\n"
-        f"End: {end.local:%Y-%m-%d %H:%M} (UTC{end.utc_offset})\n"
-        f"UTC interval: {start.utc.isoformat()} - {end.utc.isoformat()}"
+    else:
+        zone = ZoneInfo(resolution.timezone)
+        start_local = start.utc.astimezone(zone)
+        end_local = end.utc.astimezone(zone)
+    interval = format_local_interval(
+        start_local, end_local, reference_date=reference_date
     )
+    return f"{interval}\nTimezone: {resolution.timezone}"
 
 
 def parse_timezone(value: str) -> str:
