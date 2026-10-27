@@ -27,6 +27,7 @@ from backend.events.occurrences import (
     RecurrenceSeries,
     derive_automatic_break,
     expand_recurrence,
+    open_ended_validation_cutoff,
     sort_occurrences,
 )
 from backend.events.range_service import load_raw_occurrences_for_validation
@@ -315,18 +316,19 @@ async def _candidate_occurrences(
         occurrence = Occurrence(source=source, start=start, end=end)
         return [occurrence], end, 1
 
-    if data.interval_end is None:
-        raise ValidationError(
-            "Open-ended recurrence writes are not supported by this backend release"
-        )
-    cutoff = normalize_utc(data.interval_end)
-    _validate_recurrence_horizon(start, cutoff)
     mode = recurrence_mode or RecurrenceMode.TEACHER_LOCAL
     if mode == RecurrenceMode.TEACHER_LOCAL and recurrence_timezone is None:
         teacher = await get_user_by_id(session, teacher_id)
         if teacher is None:
             raise ValidationError(f"Teacher with ID {teacher_id} does not exist")
         recurrence_timezone = teacher.timezone
+    if data.interval_end is None:
+        if event_type != EventType.LESSON or data.interval != 7:
+            raise ValidationError("Only weekly lessons may have no recurrence cutoff")
+        cutoff = open_ended_validation_cutoff(start, mode, recurrence_timezone)
+    else:
+        cutoff = normalize_utc(data.interval_end)
+        _validate_recurrence_horizon(start, cutoff)
 
     series = RecurrenceSeries(
         source=source,

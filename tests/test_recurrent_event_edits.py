@@ -126,6 +126,7 @@ def _update(
     end: datetime | None = None,
     interval: int = 7,
     interval_end: datetime | None = None,
+    open_ended: bool = False,
     cancels: list[RecurrentCancel] | None = None,
 ) -> RecurrentEventUpdate:
     fields = {
@@ -133,7 +134,7 @@ def _update(
         "start": start or _utc(1),
         "end": end or _utc(1, 10),
         "interval": interval,
-        "interval_end": interval_end or _utc(29),
+        "interval_end": (None if open_ended else interval_end or _utc(29)),
     }
     if cancels is not None:
         fields["cancels"] = cancels
@@ -254,6 +255,48 @@ async def test_supplied_cancellations_replace_after_full_occurrence_validation(
     )
     assert len(visible) == 1
     assert cancelled == []
+
+
+async def test_open_ended_transitions_preserve_existing_cancellation_rules(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student, _ = await _users(db_session)
+    series = await _series(db_session, teacher, student)
+    finite_cancel = await _cancel(db_session, series, 8)
+    await db_session.commit()
+
+    opened = await update_recurrent_event(
+        db_session,
+        series,
+        _update(student.id, open_ended=True),
+        EventValidator(),
+        teacher_id=teacher.id,
+    )
+    assert opened.interval_end is None
+    assert await _cancellations(db_session, series.id) == []
+
+    open_cancel = await _cancel(db_session, opened, 15)
+    await db_session.commit()
+    unchanged = await update_recurrent_event(
+        db_session,
+        opened,
+        _update(student.id, open_ended=True),
+        EventValidator(),
+        teacher_id=teacher.id,
+    )
+    assert unchanged.interval_end is None
+    assert await _cancellations(db_session, series.id) == [open_cancel]
+
+    closed = await update_recurrent_event(
+        db_session,
+        unchanged,
+        _update(student.id, interval_end=_utc(29)),
+        EventValidator(),
+        teacher_id=teacher.id,
+    )
+    assert closed.interval_end == datetime(2026, 10, 29, 9)
+    assert await _cancellations(db_session, series.id) == []
+    assert finite_cancel.id != open_cancel.id
 
 
 @pytest.mark.parametrize(

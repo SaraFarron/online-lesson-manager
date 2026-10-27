@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from httpx import AsyncClient
@@ -160,6 +160,71 @@ async def test_exact_occurrence_cancel_is_authorized_and_rejects_repeats(
     assert [item.start for item in cancellations] == [
         datetime(2026, 12, 8, 9),
         datetime(2026, 12, 15, 9),
+    ]
+
+
+async def test_open_ended_occurrences_can_be_cancelled_and_moved_decades_later(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, teacher_token, student_a, _ = await _teacher_and_students(
+        client, "actions-open-distant"
+    )
+    created = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=_headers(teacher_token),
+        json={
+            "start": "2026-12-01T09:00:00Z",
+            "end": "2026-12-01T09:30:00Z",
+            "interval": 7,
+            "interval_end": None,
+            "user_id": student_a[0],
+        },
+    )
+    assert created.status_code == 201, created.text
+    series_id = UUID(created.json()["id"])
+    series = await db_session.get(RecurrentEvent, series_id)
+    assert series is not None
+    assert series.interval_end is None
+
+    distant_start = datetime(2026, 12, 1, 9, tzinfo=UTC) + timedelta(weeks=700)
+    cancelled = await client.post(
+        f"/api/v1/recurrent-lessons/{series_id}/occurrences/cancel",
+        headers=_headers(teacher_token),
+        json={
+            "occurrence_start": distant_start.isoformat(),
+            "occurrence_end": (distant_start + timedelta(minutes=30)).isoformat(),
+        },
+    )
+    assert cancelled.status_code == 200, cancelled.text
+
+    moved_start = distant_start + timedelta(days=7)
+    moved = await client.post(
+        f"/api/v1/recurrent-lessons/{series_id}/occurrences/move",
+        headers=_headers(teacher_token),
+        json={
+            "occurrence_start": moved_start.isoformat(),
+            "occurrence_end": (moved_start + timedelta(minutes=30)).isoformat(),
+            "replacement_start": (moved_start + timedelta(hours=2)).isoformat(),
+            "replacement_end": (
+                moved_start + timedelta(hours=2, minutes=30)
+            ).isoformat(),
+        },
+    )
+    assert moved.status_code == 201, moved.text
+    assert (
+        moved.json()["replacement"]["start"]
+        == (moved_start + timedelta(hours=2)).isoformat()
+    )
+    cancellations = (
+        await db_session.scalars(
+            select(RecurrentCancels)
+            .where(RecurrentCancels.recurrent_event_id == series_id)
+            .order_by(RecurrentCancels.start)
+        )
+    ).all()
+    assert [item.start for item in cancellations] == [
+        distant_start.replace(tzinfo=None),
+        moved_start.replace(tzinfo=None),
     ]
 
 

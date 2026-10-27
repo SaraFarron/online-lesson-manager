@@ -392,10 +392,10 @@ async def _create_recurrent_event(
     actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
     interval_end = event_data.interval_end
-    if interval_end is None:
-        raise ValidationError(
-            "Open-ended weekly lessons are not supported by this backend release"
-        )
+    if interval_end is None and (
+        event_data.event_type != EventType.LESSON or event_data.interval != 7
+    ):
+        raise ValidationError("Only weekly lessons may have no recurrence cutoff")
 
     teacher = await get_user_by_id(session, teacher_id)
     if teacher is None:
@@ -437,7 +437,9 @@ async def _create_recurrent_event(
         teacher_id=teacher_id,
         event_type=event_data.event_type,
         interval=event_data.interval,
-        interval_end=to_storage_utc(interval_end),
+        interval_end=(
+            to_storage_utc(interval_end) if interval_end is not None else None
+        ),
         recurrence_mode=RecurrenceMode.TEACHER_LOCAL.value,
         recurrence_timezone=teacher.timezone,
         post_break_minutes=(
@@ -497,17 +499,16 @@ async def _update_recurrent_event(
     actor_is_teacher: bool = False,
 ) -> RecurrentEvent:
     interval_end = event_data.interval_end
-    if interval_end is None:
-        raise ValidationError(
-            "Open-ended weekly lessons are not supported by this backend release"
-        )
-
     fresh_event = await session.get(
         RecurrentEvent, recurrent_event.id, populate_existing=True
     )
     if fresh_event is None or fresh_event.teacher_id != teacher_id:
         raise ValidationError("Recurring event not found")
     recurrent_event = fresh_event
+    if interval_end is None and (
+        recurrent_event.event_type != EventType.LESSON.value or event_data.interval != 7
+    ):
+        raise ValidationError("Only weekly lessons may have no recurrence cutoff")
     if actor is not None:
         assert_owns_event(actor, recurrent_event)
         await assert_can_assign_user(session, actor, event_data.user_id)
@@ -543,7 +544,8 @@ async def _update_recurrent_event(
         recurrent_event.start != to_storage_utc(event_data.start)
         or recurrent_event.end != to_storage_utc(event_data.end)
         or recurrent_event.interval != event_data.interval
-        or recurrent_event.interval_end != to_storage_utc(interval_end)
+        or recurrent_event.interval_end
+        != (to_storage_utc(interval_end) if interval_end is not None else None)
     )
     replacement_cancellations = (
         _validate_cancellations(recurrent_event, event_data)
@@ -583,7 +585,9 @@ async def _update_recurrent_event(
     recurrent_event.end = to_storage_utc(event_data.end)
     recurrent_event.user_id = event_data.user_id
     recurrent_event.interval = event_data.interval
-    recurrent_event.interval_end = to_storage_utc(interval_end)
+    recurrent_event.interval_end = (
+        to_storage_utc(interval_end) if interval_end is not None else None
+    )
     recurrent_event.teacher_id = teacher_id
 
     if recurrence_changed or replacement_cancellations is not None:
@@ -709,10 +713,6 @@ async def _load_occurrence_action(
         or recurrent_event.teacher_id != teacher_id
     ):
         raise ValidationError("Recurring lesson not found")
-    if recurrent_event.interval_end is None:
-        raise ValidationError(
-            "Open-ended occurrence actions are not supported by this backend release"
-        )
     assert_owns_event(actor, recurrent_event)
 
     cancellations = list(
@@ -745,7 +745,11 @@ async def _load_occurrence_action(
         start=from_storage_utc(recurrent_event.start),
         end=from_storage_utc(recurrent_event.end),
         interval=recurrent_event.interval,
-        interval_end=from_storage_utc(recurrent_event.interval_end),
+        interval_end=(
+            from_storage_utc(recurrent_event.interval_end)
+            if recurrent_event.interval_end is not None
+            else None
+        ),
         recurrence_mode=recurrent_event.recurrence_mode,
         recurrence_timezone=recurrent_event.recurrence_timezone,
     )
@@ -824,11 +828,6 @@ def _validate_cancellations(
     event_data: RecurrentEventUpdate,
 ) -> list[tuple[datetime, datetime]]:
     interval_end = event_data.interval_end
-    if interval_end is None:
-        raise ValidationError(
-            "Open-ended weekly lessons are not supported by this backend release"
-        )
-
     try:
         event_type = EventType(recurrent_event.event_type)
     except (TypeError, ValueError) as exc:

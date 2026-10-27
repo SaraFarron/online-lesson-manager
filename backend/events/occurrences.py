@@ -110,6 +110,47 @@ def derive_automatic_break(lesson: Occurrence) -> Occurrence | None:
     return Occurrence(source=source, start=break_start, end=break_end)
 
 
+def open_ended_validation_cutoff(
+    start: datetime,
+    recurrence_mode: RecurrenceMode | str,
+    recurrence_timezone: str | None,
+) -> datetime:
+    """Return the exclusive one-calendar-year validation boundary for an open series."""
+    mode = _recurrence_mode(recurrence_mode)
+    start_utc = _as_utc(start, "series start")
+    if mode == RecurrenceMode.UTC_STEP:
+        if recurrence_timezone is not None:
+            raise ValidationError("UTC_STEP series must not have a recurrence timezone")
+        local_start = start_utc
+        timezone_name = None
+    else:
+        timezone_name = recurrence_timezone
+        if not timezone_name:
+            raise ValidationError("TEACHER_LOCAL series requires a recurrence timezone")
+        zone = get_timezone(timezone_name)
+        local_start = start_utc.astimezone(zone).replace(tzinfo=None)
+
+    target_year = local_start.year + 1
+    if target_year > 9999:
+        raise ValidationError("Recurrence start is outside the supported range")
+    try:
+        anniversary = local_start.replace(year=target_year)
+    except ValueError as exc:
+        if local_start.month != 2 or local_start.day != 29:
+            raise ValidationError(
+                "Could not calculate the open-ended validation boundary"
+            ) from exc
+        anniversary = local_start.replace(year=target_year, day=28)
+
+    if mode == RecurrenceMode.UTC_STEP:
+        anniversary_utc = anniversary
+    else:
+        if timezone_name is None:
+            raise ValidationError("TEACHER_LOCAL series requires a recurrence timezone")
+        anniversary_utc = resolve_local_datetime(anniversary, timezone_name)
+    return normalize_utc(anniversary_utc)
+
+
 def expand_recurrence(
     series: RecurrenceSeries,
     range_start: datetime,

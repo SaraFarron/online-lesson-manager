@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -143,6 +143,284 @@ async def test_later_recurrence_conflict_cancellation_and_adjacency(
         "/api/v1/lessons/", headers=headers, json=overlapping_payload
     )
     assert allowed_after_cancel.status_code == 201, allowed_after_cancel.text
+
+
+@pytest.mark.parametrize(
+    ("blocking_date", "expected_status"),
+    [
+        ("2027-10-26", 422),
+        ("2027-10-27", 201),
+    ],
+)
+async def test_open_weekly_lesson_validates_before_exclusive_year_boundary(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    blocking_date: str,
+    expected_status: int,
+) -> None:
+    _, teacher_token, students = await _teacher_and_students(
+        client, f"open-boundary-{blocking_date[-2:]}"
+    )
+    student_id = students[0][0]
+    headers = _headers(teacher_token)
+    existing = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": f"{blocking_date}T09:00:00Z",
+            "end": f"{blocking_date}T09:30:00Z",
+            "user_id": student_id,
+        },
+    )
+    assert existing.status_code == 201, existing.text
+
+    response = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2026-10-27T09:00:00Z",
+            "end": "2026-10-27T09:30:00Z",
+            "interval": 7,
+            "interval_end": None,
+            "user_id": student_id,
+        },
+    )
+
+    assert response.status_code == expected_status, response.text
+    if expected_status == 201:
+        series = await db_session.get(RecurrentEvent, UUID(response.json()["id"]))
+        assert series is not None
+        assert series.interval_end is None
+
+
+@pytest.mark.parametrize(
+    ("preferences", "break_minutes", "existing_time", "error"),
+    [
+        (
+            {"max_lessons_per_day": 1, "max_consecutive_lessons": 1},
+            0,
+            "11:00",
+            "daily lesson limit of 1",
+        ),
+        (
+            {"max_consecutive_lessons": 1},
+            30,
+            "10:00",
+            "consecutive lesson limit of 1",
+        ),
+    ],
+)
+async def test_open_series_applies_daily_and_consecutive_limits_within_year(
+    client: AsyncClient,
+    preferences: dict[str, int],
+    break_minutes: int,
+    existing_time: str,
+    error: str,
+) -> None:
+    teacher_id, teacher_token, students = await _teacher_and_students(
+        client,
+        f"open-limit-{existing_time[:2]}",
+        break_minutes=break_minutes,
+    )
+    headers = _headers(teacher_token)
+    profile_update = await client.put(
+        f"/api/v1/auth/users/{teacher_id}/teacher-profile",
+        headers=headers,
+        json=preferences,
+    )
+    assert profile_update.status_code == 200, profile_update.text
+
+    existing_start = datetime.fromisoformat(f"2027-10-26T{existing_time}:00+00:00")
+    existing = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": existing_start.isoformat(),
+            "end": (existing_start + timedelta(minutes=30)).isoformat(),
+            "user_id": students[0][0],
+        },
+    )
+    assert existing.status_code == 201, existing.text
+    response = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2026-10-27T09:00:00Z",
+            "end": "2026-10-27T09:30:00Z",
+            "interval": 7,
+            "interval_end": None,
+            "user_id": students[0][0],
+        },
+    )
+
+    assert response.status_code == 422
+    assert error in response.text
+
+
+async def test_open_series_checks_automatic_break_tail_inside_year(
+    client: AsyncClient,
+) -> None:
+    _, teacher_token, students = await _teacher_and_students(
+        client, "open-break-tail", break_minutes=5
+    )
+    headers = _headers(teacher_token)
+    existing = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2027-10-26T09:32:00Z",
+            "end": "2027-10-26T09:40:00Z",
+            "user_id": students[0][0],
+        },
+    )
+    assert existing.status_code == 201, existing.text
+
+    response = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2026-10-27T09:00:00Z",
+            "end": "2026-10-27T09:30:00Z",
+            "interval": 7,
+            "interval_end": None,
+            "user_id": students[0][0],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "automatic post-lesson break" in response.text.lower()
+
+
+async def test_finite_recurrence_retains_ten_year_horizon(
+    client: AsyncClient,
+) -> None:
+    _, teacher_token, students = await _teacher_and_students(
+        client, "finite-ten-year-horizon"
+    )
+    response = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=_headers(teacher_token),
+        json={
+            "start": "2026-10-27T09:00:00Z",
+            "end": "2026-10-27T09:30:00Z",
+            "interval": 7,
+            "interval_end": "2037-01-01T09:00:00Z",
+            "user_id": students[0][0],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "cannot exceed 10 years" in response.text
+
+
+async def test_one_off_write_detects_a_distant_open_ended_occurrence(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, teacher_token, students = await _teacher_and_students(client, "open-far-write")
+    student_id = students[0][0]
+    headers = _headers(teacher_token)
+    created = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2026-10-27T09:00:00Z",
+            "end": "2026-10-27T09:30:00Z",
+            "interval": 7,
+            "interval_end": None,
+            "user_id": student_id,
+        },
+    )
+    assert created.status_code == 201, created.text
+    series = await db_session.get(RecurrentEvent, UUID(created.json()["id"]))
+    assert series is not None
+    assert series.interval_end is None
+
+    distant_start = datetime(2026, 10, 27, 9, tzinfo=UTC) + timedelta(weeks=700)
+    blocked = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": distant_start.isoformat(),
+            "end": (distant_start + timedelta(minutes=30)).isoformat(),
+            "user_id": student_id,
+        },
+    )
+
+    assert blocked.status_code == 422
+    assert "overlaps" in blocked.text
+    finite_recurrence = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": distant_start.isoformat(),
+            "end": (distant_start + timedelta(minutes=30)).isoformat(),
+            "interval": 7,
+            "interval_end": (distant_start + timedelta(days=14)).isoformat(),
+            "user_id": student_id,
+        },
+    )
+    assert finite_recurrence.status_code == 422
+    assert "overlaps" in finite_recurrence.text
+
+
+async def test_confirmed_finite_break_displaces_distant_open_occurrence(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    teacher_id, teacher_token, students = await _teacher_and_students(
+        client, "open-break-displacement"
+    )
+    student_id = students[0][0]
+    headers = _headers(teacher_token)
+    created = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers=headers,
+        json={
+            "start": "2026-10-27T09:00:00Z",
+            "end": "2026-10-27T09:30:00Z",
+            "interval": 7,
+            "interval_end": None,
+            "user_id": student_id,
+        },
+    )
+    assert created.status_code == 201, created.text
+    series = await db_session.get(RecurrentEvent, UUID(created.json()["id"]))
+    assert series is not None
+    distant_start = datetime(2026, 10, 27, 9, tzinfo=UTC) + timedelta(weeks=700)
+    break_payload = {
+        "start": distant_start.isoformat(),
+        "end": (distant_start + timedelta(hours=1)).isoformat(),
+        "user_id": teacher_id,
+    }
+
+    preview = await client.post("/api/v1/breaks/", headers=headers, json=break_payload)
+    assert preview.status_code == 409, preview.text
+    detail = preview.json()["detail"]
+    assert len(detail["affected_occurrences"]) == 1
+    assert detail["affected_occurrences"][0]["source_id"] == str(series.id)
+
+    confirmed = await client.post(
+        "/api/v1/breaks/?confirm_displacement=true",
+        headers={
+            **headers,
+            "X-Displacement-Token": detail["confirmation_token"],
+        },
+        json=break_payload,
+    )
+    assert confirmed.status_code == 201, confirmed.text
+    cancellation = await db_session.scalar(
+        select(RecurrentCancels).where(RecurrentCancels.recurrent_event_id == series.id)
+    )
+    assert cancellation is not None
+    assert cancellation.start == distant_start.replace(tzinfo=None)
+    after_displacement = await load_raw_occurrences_for_validation(
+        db_session,
+        UUID(teacher_id),
+        distant_start,
+        distant_start + timedelta(hours=2),
+    )
+    assert [item.source.event_type for item in after_displacement] == [EventType.BREAK]
 
 
 async def test_automatic_break_admission_boundaries_and_full_series_horizon(

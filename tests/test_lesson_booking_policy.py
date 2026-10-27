@@ -474,6 +474,33 @@ async def test_recurring_lesson_checks_every_occurrence(
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_open_ended_lesson_still_enforces_teacher_work_hours(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _teacher_with_student(
+        db_session,
+        timezone="UTC",
+        work_start=time(9),
+        work_end=time(18),
+        working_days=[1, 2, 3, 4, 5, 6, 7],
+    )
+
+    with pytest.raises(ValidationError, match="before the teacher's work hours"):
+        await create_recurrent_event(
+            db_session,
+            RecurrentLessonCreate(
+                start=datetime(2026, 10, 26, 8, tzinfo=UTC),
+                end=datetime(2026, 10, 26, 9, tzinfo=UTC),
+                interval=7,
+                interval_end=None,
+                user_id=student.id,
+            ),
+            default_event_validator,
+            teacher_id=teacher.id,
+        )
+
+
 async def test_teacher_local_recurrence_checks_dst_shifted_occurrence(
     db_session: AsyncSession,
 ) -> None:
@@ -575,3 +602,31 @@ async def test_api_uses_default_duration_and_actor_specific_duration_rules(
         headers={"Authorization": teacher_auth},
     )
     assert teacher_override.status_code == 201, teacher_override.text
+
+    open_weekly = await client.post(
+        "/api/v1/recurrent-lessons/",
+        json={
+            "start": "2026-10-29T09:00:00Z",
+            "interval": 7,
+            "interval_end": None,
+            "user_id": student_id,
+        },
+        headers={"Authorization": student_auth},
+    )
+    assert open_weekly.status_code == 201, open_weekly.text
+    assert open_weekly.json()["interval_end"] is None
+    assert open_weekly.json()["end"] == "2026-10-29T09:45:00+00:00"
+
+    wrong_weekly_duration = await client.post(
+        "/api/v1/recurrent-lessons/",
+        json={
+            "start": "2026-11-05T09:00:00Z",
+            "end": "2026-11-05T10:00:00Z",
+            "interval": 7,
+            "interval_end": None,
+            "user_id": student_id,
+        },
+        headers={"Authorization": student_auth},
+    )
+    assert wrong_weekly_duration.status_code == 422
+    assert "configured lesson duration" in wrong_weekly_duration.json()["detail"]

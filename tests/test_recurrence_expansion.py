@@ -13,6 +13,7 @@ from backend.events.occurrences import (
     RecurrenceSeries,
     derive_automatic_break,
     expand_recurrence,
+    open_ended_validation_cutoff,
 )
 from backend.exceptions import ValidationError
 
@@ -389,6 +390,28 @@ def test_open_ended_series_seeks_to_distant_bounded_queries(
         distant_start,
         distant_start + timedelta(days=7),
     ]
+
+
+def test_open_ended_validation_cutoff_clamps_leap_day_in_utc_and_local_time() -> None:
+    start = _datetime("2024-02-29T09:00:00+00:00")
+
+    utc_cutoff = open_ended_validation_cutoff(start, RecurrenceMode.UTC_STEP, None)
+    local_cutoff = open_ended_validation_cutoff(
+        start, RecurrenceMode.TEACHER_LOCAL, "Europe/Berlin"
+    )
+
+    assert utc_cutoff == _datetime("2025-02-28T09:00:00+00:00")
+    assert local_cutoff == _datetime("2025-02-28T09:00:00+00:00")
+
+
+def test_open_ended_validation_cutoff_resolves_anniversary_dst_gap() -> None:
+    cutoff = open_ended_validation_cutoff(
+        _datetime("2026-03-28T01:30:00+00:00"),
+        RecurrenceMode.TEACHER_LOCAL,
+        "Europe/Berlin",
+    )
+
+    assert cutoff == _datetime("2027-03-28T01:30:00+00:00")
 
 
 def test_expansion_fails_instead_of_returning_a_partial_result_at_budget() -> None:
