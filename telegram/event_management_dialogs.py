@@ -473,7 +473,7 @@ async def _begin_date(
 ) -> None:
     manager.dialog_data.update(
         date_action=action,
-        date_prompt=f"Enter {prompt} as MM DD, MM:DD or MM/DD, optionally with year.",
+        date_prompt=f"Enter {prompt} as DD MM, DD:MM or DD/MM, optionally with year.",
         date_value=None,
         resolution=None,
         error="",
@@ -620,7 +620,7 @@ async def time_input(
                 date_value=existing_end_day.isoformat(),
                 date_prompt=(
                     "Enter the last weekly lesson date (inclusive), "
-                    "using MM DD, MM:DD or MM/DD."
+                    "using DD MM, DD:MM or DD/MM."
                 ),
                 error="",
             )

@@ -23,10 +23,10 @@ _SHORT_MONTH_NAMES = tuple(month[:3] for month in _MONTH_NAMES)
 _SHORT_WEEKDAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _DATE_PATTERNS = (
     re.compile(
-        r"(?P<month>[0-9]{1,2})\s+(?P<day>[0-9]{1,2})(?:\s+(?P<year>[0-9]{4}))?"
+        r"(?P<day>[0-9]{1,2})\s+(?P<month>[0-9]{1,2})(?:\s+(?P<year>[0-9]{4}))?"
     ),
-    re.compile(r"(?P<month>[0-9]{1,2}):(?P<day>[0-9]{1,2})(?::(?P<year>[0-9]{4}))?"),
-    re.compile(r"(?P<month>[0-9]{1,2})/(?P<day>[0-9]{1,2})(?:/(?P<year>[0-9]{4}))?"),
+    re.compile(r"(?P<day>[0-9]{1,2}):(?P<month>[0-9]{1,2})(?::(?P<year>[0-9]{4}))?"),
+    re.compile(r"(?P<day>[0-9]{1,2})/(?P<month>[0-9]{1,2})(?:/(?P<year>[0-9]{4}))?"),
 )
 _SCHEDULE_CLOCK_PATTERN = re.compile(r"[0-9]{1,2}(?::| )[0-9]{1,2}")
 
@@ -51,10 +51,10 @@ def parse_schedule_date(value: str, today: date) -> ParsedScheduleDate:
             break
     if match is None:
         raise ValueError(
-            "Enter a date as MM DD, MM:DD or MM/DD, optionally followed by a year."
+            "Enter a date as DD MM, DD:MM or DD/MM, optionally followed by a year."
         )
 
-    month, day = int(match["month"]), int(match["day"])
+    day, month = int(match["day"]), int(match["month"])
     explicit_year = match["year"]
     if explicit_year is not None:
         return ParsedScheduleDate(

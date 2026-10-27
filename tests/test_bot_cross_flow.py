@@ -16,7 +16,7 @@ from telegram.runtime import build_dispatcher
 from tests.bot_support import BotDriver
 
 _TELEGRAM_IDS = count(5_200_000_000, 10)
-_LOCAL_DATE = "11/04/2030"
+_LOCAL_DATE = "04/11/2030"
 _SCHEDULE_DATE = date(2030, 11, 4)
 _STUDENT_DATE = date(2030, 11, 3)
 _NOW = datetime(2030, 11, 4, 0, tzinfo=UTC)

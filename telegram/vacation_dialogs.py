@@ -877,7 +877,7 @@ async def date_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
         else "Enter the last vacation date (inclusive)"
     )
     return {
-        "prompt": prompt,
+        "prompt": f"{prompt} as DD MM, DD:MM or DD/MM, optionally with a year.",
         "timezone": escape(dialog_manager.dialog_data["viewer_timezone"]),
         "error": escape(str(dialog_manager.dialog_data.get("error", ""))),
     }
@@ -1038,14 +1038,14 @@ def build_vacation_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the last vacation date (inclusive).\n"
+                "{prompt}\n"
                 "The vacation ends at local midnight after this date.\n"
                 "Timezone: {timezone}\n{error}"
             ),
             TextInput("end_date", on_success=end_date_input, on_error=date_input_error),
             Button(Const("Cancel"), id="cancel", on_click=back_to_menu),
             state=VacationScreens.end_date,
-            getter=timezone_error_data,
+            getter=date_data,
         ),
         Window(
             Format(

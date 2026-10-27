@@ -25,12 +25,13 @@ from telegram.inputs import (
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        ("03 04", date(2035, 3, 4)),
-        ("03:04", date(2035, 3, 4)),
-        ("03/04", date(2035, 3, 4)),
-        ("03 04 2036", date(2036, 3, 4)),
-        ("03:04:2036", date(2036, 3, 4)),
-        ("03/04/2036", date(2036, 3, 4)),
+        ("05 11", date(2035, 11, 5)),
+        ("05:11", date(2035, 11, 5)),
+        ("05/11", date(2035, 11, 5)),
+        ("5/11", date(2035, 11, 5)),
+        ("05 11 2036", date(2036, 11, 5)),
+        ("05:11:2036", date(2036, 11, 5)),
+        ("05/11/2036", date(2036, 11, 5)),
     ],
 )
 def test_schedule_date_grammar(value: str, expected: date) -> None:
@@ -40,7 +41,7 @@ def test_schedule_date_grammar(value: str, expected: date) -> None:
 
 
 def test_schedule_date_infers_next_year_and_requires_confirmation() -> None:
-    parsed = parse_schedule_date("01/02", date(2035, 12, 30))
+    parsed = parse_schedule_date("02/01", date(2035, 12, 30))
 
     assert parsed.value == date(2036, 1, 2)
     assert parsed.inferred_year
@@ -53,10 +54,10 @@ def test_schedule_date_infers_next_year_and_requires_confirmation() -> None:
 
 def test_explicit_past_date_is_preserved_and_leap_days_are_checked() -> None:
     past = parse_schedule_date("03/04/2034", date(2035, 3, 5))
-    leap_day = parse_schedule_date("02/29/2024", date(2025, 1, 1))
-    upcoming_leap_day = parse_schedule_date("02/29", date(2024, 2, 28))
+    leap_day = parse_schedule_date("29/02/2024", date(2025, 1, 1))
+    upcoming_leap_day = parse_schedule_date("29/02", date(2024, 2, 28))
 
-    assert past.value == date(2034, 3, 4)
+    assert past.value == date(2034, 4, 3)
     assert leap_day.value == date(2024, 2, 29)
     assert upcoming_leap_day.value == date(2024, 2, 29)
     assert not past.requires_confirmation
@@ -65,10 +66,11 @@ def test_explicit_past_date_is_preserved_and_leap_days_are_checked() -> None:
 @pytest.mark.parametrize(
     ("value", "today", "message"),
     [
-        ("02/30", date(2035, 1, 1), "valid calendar date"),
-        ("13/01", date(2035, 1, 1), "valid calendar date"),
-        ("02/29", date(2025, 3, 1), "valid calendar date"),
-        ("02/29", date(2024, 3, 1), "explicit year"),
+        ("30/02", date(2035, 1, 1), "valid calendar date"),
+        ("01/13", date(2035, 1, 1), "valid calendar date"),
+        ("29/02", date(2025, 3, 1), "valid calendar date"),
+        ("29/02", date(2024, 3, 1), "explicit year"),
+        ("11/25", date(2035, 1, 1), "valid calendar date"),
         ("01/01", date.max, "explicit year"),
         ("03-04", date(2035, 1, 1), "Enter a date"),
         ("03/04/10000", date(2035, 1, 1), "Enter a date"),
@@ -79,6 +81,12 @@ def test_invalid_or_unrepresentable_schedule_dates(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         parse_schedule_date(value, today)
+
+
+def test_ambiguous_schedule_date_is_unambiguously_day_first() -> None:
+    parsed = parse_schedule_date("04/03", date(2035, 1, 1))
+
+    assert parsed.value == date(2035, 3, 4)
 
 
 @pytest.mark.parametrize(

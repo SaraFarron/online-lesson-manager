@@ -144,7 +144,7 @@ async def test_teacher_books_student_and_omits_default_duration(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.click("Use default (60 min)")
-        await driver.text("10 20 2026")
+        await driver.text("20 10 2026")
         await driver.text("25:00")
         assert "Hour must be 0–23" in driver.session.last_message.text
         await driver.text("10:00")
@@ -195,9 +195,9 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         await driver.click("Weekly")
         await driver.click("Custom duration")
         await driver.text("45")
-        await driver.text("10/20/2026")
+        await driver.text("20/10/2026")
         await driver.text("10:00")
-        await driver.text("10/27/2026")
+        await driver.text("27/10/2026")
         assert "Weekly through 2026-10-27 inclusive" in (
             driver.session.last_message.text
         )
@@ -240,9 +240,9 @@ async def test_student_books_self_weekly_without_duration_or_subject_forgery(
         await driver.text("/start")
         await driver.click("Add lesson")
         await driver.click("Weekly")
-        await driver.text("10/20/2026")
+        await driver.text("20/10/2026")
         await driver.text("10:00")
-        await driver.text("10/20/2026")
+        await driver.text("20/10/2026")
         assert "Automatic break after each lesson: 5 minutes" in (
             driver.session.last_message.text
         )
@@ -309,7 +309,7 @@ async def test_policy_rejection_keeps_review_editable(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.click("Use default (60 min)")
-        await driver.text("10/25/2026")
+        await driver.text("25/10/2026")
         await driver.text("10:00")
         await driver.click("Create lesson")
 
@@ -342,7 +342,7 @@ async def test_lost_create_response_requires_schedule_reload_without_retry(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.click("Use default (60 min)")
-        await driver.text("10/20/2026")
+        await driver.text("20/10/2026")
         await driver.text("12:00")
         await driver.click("Create lesson")
 
@@ -384,7 +384,7 @@ async def test_concurrent_schedule_change_shows_error_and_requires_reload(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.click("Use default (60 min)")
-        await driver.text("10/20/2026")
+        await driver.text("20/10/2026")
         await driver.text("12:00")
         await driver.click("Create lesson")
 
@@ -431,7 +431,7 @@ async def test_automatic_break_conflict_is_actionable_in_booking_review(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.click("Use default (60 min)")
-        await driver.text("10/20/2026")
+        await driver.text("20/10/2026")
         await driver.text("11:02")
         await driver.click("Create lesson")
 
@@ -471,7 +471,7 @@ async def test_new_automatic_break_conflict_is_not_misreported_as_existing_break
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.click("Use default (60 min)")
-        await driver.text("10/20/2026")
+        await driver.text("20/10/2026")
         await driver.text("10:00")
         await driver.click("Create lesson")
 

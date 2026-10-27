@@ -219,9 +219,9 @@ async def test_teacher_creates_edits_and_deletes_student_vacation(
         await _create_vacation(
             driver,
             subject="Alice Learner",
-            start_date="11/04/2030",
+            start_date="04/11/2030",
             start_time="10:00",
-            end_date="11/04/2030",
+            end_date="04/11/2030",
         )
         assert "Vacation created." in driver.session.last_message.text
         assert "Alice Learner" in _vacation_button(driver, "Alice Learner")
@@ -263,7 +263,7 @@ async def test_teacher_creates_edits_and_deletes_student_vacation(
 
         await driver.click("Edit vacation")
         await driver.click("Change last vacation date")
-        await driver.text("11/06/2030")
+        await driver.text("06/11/2030")
         assert "2030-11-06" in driver.session.last_message.text
         await driver.click("Save vacation")
         assert "Vacation updated." in driver.session.last_message.text
@@ -341,9 +341,9 @@ async def test_teacher_personal_vacation_hides_the_roster_and_students_cannot_ma
         await _create_vacation(
             driver,
             subject="Personal vacation",
-            start_date="11/04/2030",
+            start_date="04/11/2030",
             start_time="10:00",
-            end_date="11/04/2030",
+            end_date="04/11/2030",
         )
         teacher_vacation = (
             await db_session.execute(
@@ -414,9 +414,9 @@ async def test_student_creates_own_vacation_and_unknown_create_is_not_replayed(
         await _create_vacation(
             driver,
             subject=None,
-            start_date="11/04/2030",
+            start_date="04/11/2030",
             start_time="09:30",
-            end_date="11/05/2030",
+            end_date="05/11/2030",
         )
         assert "result is unknown" in driver.session.last_message.text
         vacation = (

@@ -232,7 +232,7 @@ async def test_teacher_creates_break_for_all_students_in_local_timezone(
         await _open_break_list(driver)
         await _enter_break(
             driver,
-            start_date="11/04/2030",
+            start_date="04/11/2030",
             start_time="10:00",
             end_time="10:30",
         )
@@ -363,7 +363,7 @@ async def test_displacement_preview_cancel_performs_no_write(
         await _open_break_list(driver)
         await _enter_break(
             driver,
-            start_date="11/04/2030",
+            start_date="04/11/2030",
             start_time="10:00",
             end_time="10:30",
         )
@@ -423,10 +423,10 @@ async def test_confirmed_weekly_break_deletes_exact_lessons_and_cancels_occurren
         await _open_break_list(driver, weekly=True)
         await _enter_break(
             driver,
-            start_date="11/05/2030",
+            start_date="05/11/2030",
             start_time="10:00",
             end_time="10:30",
-            cutoff_date="11/05/2030",
+            cutoff_date="05/11/2030",
         )
         await driver.click("Save break")
         preview_text = driver.session.last_message.text
@@ -508,10 +508,10 @@ async def test_displacement_preview_is_paged_and_revalidated_before_second_confi
         await _open_break_list(driver, weekly=True)
         await _enter_break(
             driver,
-            start_date="11/05/2030",
+            start_date="05/11/2030",
             start_time="10:00",
             end_time="10:30",
-            cutoff_date="01/14/2031",
+            cutoff_date="14/01/2031",
         )
         await driver.click("Save break")
         assert "Showing affected lessons 1–10 of 11" in driver.session.last_message.text
@@ -558,7 +558,7 @@ async def test_changed_displacement_preview_requires_a_new_confirmation(
         await _open_break_list(driver)
         await _enter_break(
             driver,
-            start_date="11/04/2030",
+            start_date="04/11/2030",
             start_time="10:00",
             end_time="10:30",
         )
@@ -616,7 +616,7 @@ async def test_editing_break_confirms_displacement_and_sends_revision(
         await _open_break_list(driver)
         await driver.click(_event_button(driver))
         await driver.click("Edit break")
-        await driver.text("11/04/2030")
+        await driver.text("04/11/2030")
         await driver.text("10:00")
         await driver.text("10:30")
         await driver.click("Save change")
@@ -672,10 +672,10 @@ async def test_weekly_break_edit_preserves_interval_and_delete_requires_confirma
         await _open_break_list(driver, weekly=True)
         await driver.click(_event_button(driver))
         await driver.click("Edit break")
-        await driver.text("11/05/2030")
+        await driver.text("05/11/2030")
         await driver.text("11:00")
         await driver.text("11:30")
-        await driver.text("11/26/2030")
+        await driver.text("26/11/2030")
         assert "does not restore lessons previously displaced" in (
             driver.session.last_message.text
         )
@@ -733,7 +733,7 @@ async def test_generic_schedule_conflict_does_not_show_displacement_confirmation
         await _open_break_list(driver)
         await _enter_break(
             driver,
-            start_date="11/04/2030",
+            start_date="04/11/2030",
             start_time="10:15",
             end_time="10:45",
         )
@@ -849,7 +849,7 @@ async def test_lost_break_create_response_is_not_replayed(
         await _open_break_list(driver)
         await _enter_break(
             driver,
-            start_date="11/04/2030",
+            start_date="04/11/2030",
             start_time="10:00",
             end_time="10:30",
         )

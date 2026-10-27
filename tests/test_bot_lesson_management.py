@@ -173,7 +173,7 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         await driver.click(_event_button(driver))
         assert "Alice Learner" in driver.session.last_message.text
         await driver.click("Edit lesson or series")
-        await driver.text("11/03/2026")
+        await driver.text("03/11/2026")
         await driver.text("11:00")
         assert "Start: Tue, 2026-11-03 11:00" in driver.session.last_message.text
         assert "Automatic break after this lesson (5 min)" in (
@@ -248,14 +248,14 @@ async def test_student_can_move_and_cancel_own_occurrences_with_break_feedback(
         await _open_list(driver, weekly=True)
         await driver.click(_event_button(driver))
         await driver.click("Inspect occurrence")
-        await driver.text("11/16/2026")
+        await driver.text("16/11/2026")
         await driver.text("10:00")
         assert "Automatic break after this occurrence (5 min)" in (
             driver.session.last_message.text
         )
 
         await driver.click("Move this occurrence")
-        await driver.text("11/16/2026")
+        await driver.text("16/11/2026")
         await driver.text("12:00")
         assert "Automatic break after the replacement lesson (5 min)" in (
             driver.session.last_message.text
@@ -267,7 +267,7 @@ async def test_student_can_move_and_cancel_own_occurrences_with_break_feedback(
         assert "(cancelled)" in driver.session.last_message.text
 
         await driver.click("Inspect occurrence")
-        await driver.text("11/23/2026")
+        await driver.text("23/11/2026")
         await driver.text("10:00")
         await driver.click("Cancel this occurrence")
         assert "automatic break reservation will also be removed" in (
@@ -438,7 +438,7 @@ async def test_recurring_occurrence_cancel_preserves_series_and_other_occurrence
         await driver.click("Clear occurrence selection")
 
         await driver.click("Inspect occurrence")
-        await driver.text("11/16/2026")
+        await driver.text("16/11/2026")
         await driver.text("10:00")
         assert "(visible)" in driver.session.last_message.text
         await driver.click("Cancel this occurrence")
@@ -536,10 +536,10 @@ async def test_recurring_occurrence_move_cancels_exact_source_and_creates_one_of
         await _open_list(driver, weekly=True)
         await driver.click(_event_button(driver))
         await driver.click("Inspect occurrence")
-        await driver.text("11/16/2026")
+        await driver.text("16/11/2026")
         await driver.text("10:00")
         await driver.click("Move this occurrence")
-        await driver.text("11/17/2026")
+        await driver.text("17/11/2026")
         await driver.text("12:00")
         assert "The original weekly occurrence will be cancelled" in (
             driver.session.last_message.text
@@ -603,9 +603,9 @@ async def test_series_edit_warns_and_clears_cancellations_when_recurrence_change
         await _open_list(driver, weekly=True)
         await driver.click(_event_button(driver))
         await driver.click("Edit lesson or series")
-        await driver.text("11/02/2026")
+        await driver.text("02/11/2026")
         await driver.text("11:30")
-        await driver.text("11/30/2026")
+        await driver.text("30/11/2026")
         assert "clears saved individual cancellations" in (
             driver.session.last_message.text
         )
@@ -641,7 +641,7 @@ async def test_stale_revision_requires_reload_before_edit_can_submit(
         await _open_list(driver)
         await driver.click(_event_button(driver))
         await driver.click("Edit lesson or series")
-        await driver.text("11/03/2026")
+        await driver.text("03/11/2026")
         await driver.text("11:00")
 
         event.start = datetime(2026, 11, 2, 10, 30)
@@ -682,7 +682,7 @@ async def test_unknown_update_outcome_requires_reload_without_replay(
         await _open_list(driver)
         await driver.click(_event_button(driver))
         await driver.click("Edit lesson or series")
-        await driver.text("11/03/2026")
+        await driver.text("03/11/2026")
         await driver.text("11:00")
         await driver.click("Save change")
 
@@ -720,10 +720,10 @@ async def test_failed_occurrence_move_keeps_series_and_cancellation_unchanged(
         await _open_list(driver, weekly=True)
         await driver.click(_event_button(driver))
         await driver.click("Inspect occurrence")
-        await driver.text("11/16/2026")
+        await driver.text("16/11/2026")
         await driver.text("10:00")
         await driver.click("Move this occurrence")
-        await driver.text("11/17/2026")
+        await driver.text("17/11/2026")
         await driver.text("12:00")
         await driver.click("Move occurrence")
 
@@ -765,10 +765,10 @@ async def test_automatic_break_conflict_is_actionable_when_moving_occurrence(
         await _open_list(driver, weekly=True)
         await driver.click(_event_button(driver))
         await driver.click("Inspect occurrence")
-        await driver.text("11/16/2026")
+        await driver.text("16/11/2026")
         await driver.text("10:00")
         await driver.click("Move this occurrence")
-        await driver.text("11/16/2026")
+        await driver.text("16/11/2026")
         await driver.text("10:02")
         await driver.click("Move occurrence")
 

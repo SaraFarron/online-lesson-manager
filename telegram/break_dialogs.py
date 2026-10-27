@@ -1173,7 +1173,7 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the break date as MM DD, MM:DD, or MM/DD, optionally with a year.\n{date_hint}\n{error}"
+                "Enter the break date as DD MM, DD:MM, or DD/MM, optionally with a year.\n{date_hint}\n{error}"
             ),
             TextInput("start_date", on_success=start_date_input, on_error=break_error),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
@@ -1206,7 +1206,7 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the last recurring break date (inclusive) as MM DD, MM:DD, or MM/DD, optionally with a year.\n{date_hint}\n{error}"
+                "Enter the last recurring break date (inclusive) as DD MM, DD:MM, or DD/MM, optionally with a year.\n{date_hint}\n{error}"
             ),
             TextInput(
                 "cutoff_date", on_success=cutoff_date_input, on_error=break_error

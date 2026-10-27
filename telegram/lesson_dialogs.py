@@ -826,7 +826,7 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the lesson start date as MM DD, MM:DD or MM/DD, optionally followed by a year.\n{start_date_hint}\n{error}"
+                "Enter the lesson start date as DD MM, DD:MM or DD/MM, optionally followed by a year.\n{start_date_hint}\n{error}"
             ),
             TextInput(
                 "start_date", on_success=start_date_input, on_error=_date_input_error
@@ -851,7 +851,7 @@ def build_lesson_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "Enter the last lesson start date (inclusive), using the same date format.\n{start_date_hint}\n{error}"
+                "Enter the last lesson start date (inclusive) as DD MM, DD:MM or DD/MM, optionally followed by a year.\n{start_date_hint}\n{error}"
             ),
             TextInput(
                 "cutoff_date", on_success=cutoff_date_input, on_error=_date_input_error
