@@ -202,7 +202,11 @@ async def get_managed_event(
         cancelled_occurrences=len(cancellations),
         post_break_minutes=event.post_break_minutes,
         interval=event.interval,
-        interval_end=from_storage_utc(event.interval_end),
+        interval_end=(
+            from_storage_utc(event.interval_end)
+            if event.interval_end is not None
+            else None
+        ),
         recurrence_mode=recurrence_mode,
         recurrence_timezone=event.recurrence_timezone,
         cancels=cancellation_schemas,
@@ -386,7 +390,7 @@ async def _inspect_occurrence(
         start=event.start,
         end=event.end,
         interval=event.interval,
-        interval_end=event.interval_end,
+        interval_end=_require_finite_cutoff(event.interval_end),
         recurrence_mode=event.recurrence_mode,
         recurrence_timezone=event.recurrence_timezone,
     )
@@ -443,5 +447,15 @@ async def _cancellation_counts(
     return counts
 
 
-def _timestamp(value: datetime) -> str:
+def _require_finite_cutoff(value: datetime | None) -> datetime:
+    if value is None:
+        raise ValidationError(
+            "Open-ended occurrence inspection is not supported by this backend release"
+        )
+    return value
+
+
+def _timestamp(value: datetime | None) -> str | None:
+    if value is None:
+        return None
     return from_storage_utc(value).isoformat()

@@ -12,6 +12,7 @@ from backend.events.schemas import (
     RecurrentEventPublic,
     RecurrentEventUpdate,
     UtcTimestamp,
+    _validate_open_ended_recurrence,
 )
 
 
@@ -37,6 +38,13 @@ class RecurrentLessonPublic(RecurrentEventPublic):
 
 class RecurrentLessonUpdate(RecurrentEventUpdate):
     event_type: Literal[EventType.LESSON] | None = None
+
+    @model_validator(mode="after")
+    def validate_lesson_recurrence_cutoff(self) -> Self:
+        _validate_open_ended_recurrence(
+            EventType.LESSON, self.interval, self.interval_end
+        )
+        return self
 
 
 class RecurrentOccurrenceCancelRequest(BaseModel):

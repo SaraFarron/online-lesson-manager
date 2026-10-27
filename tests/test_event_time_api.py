@@ -240,3 +240,24 @@ async def test_recurrent_api_snapshots_teacher_timezone_and_normalizes_cancels(
     assert cancel is not None
     assert cancel.start == datetime(2026, 10, 20, 9)
     assert cancel.end == datetime(2026, 10, 20, 10)
+
+
+async def test_open_ended_lesson_write_waits_for_service_support(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    teacher_id, token = await _register_teacher(client)
+    response = await client.post(
+        "/api/v1/recurrent-lessons/",
+        headers={"Authorization": token},
+        json={
+            "start": "2026-10-27T09:00:00Z",
+            "end": "2026-10-27T10:00:00Z",
+            "interval": 7,
+            "interval_end": None,
+            "user_id": teacher_id,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "not supported by this backend release" in response.text
+    assert await db_session.scalar(select(RecurrentEvent.id)) is None

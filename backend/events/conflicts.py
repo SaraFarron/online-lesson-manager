@@ -315,6 +315,10 @@ async def _candidate_occurrences(
         occurrence = Occurrence(source=source, start=start, end=end)
         return [occurrence], end, 1
 
+    if data.interval_end is None:
+        raise ValidationError(
+            "Open-ended recurrence writes are not supported by this backend release"
+        )
     cutoff = normalize_utc(data.interval_end)
     _validate_recurrence_horizon(start, cutoff)
     mode = recurrence_mode or RecurrenceMode.TEACHER_LOCAL

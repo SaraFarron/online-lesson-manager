@@ -14,7 +14,11 @@ from pydantic import (
 
 from backend.constants import EventType
 from backend.events.constants import RecurrenceMode
-from backend.events.schemas import RecurrentCancel, UtcTimestamp
+from backend.events.schemas import (
+    RecurrentCancel,
+    UtcTimestamp,
+    _validate_open_ended_recurrence,
+)
 from backend.events.time_utils import normalize_utc
 
 
@@ -79,15 +83,15 @@ class EventManagementDetail(EventManagementItem):
 
     @model_validator(mode="after")
     def validate_recurrence_shape(self) -> EventManagementDetail:
-        recurrence_fields = (
-            self.interval,
-            self.interval_end,
-            self.recurrence_mode,
-        )
+        recurrence_fields = (self.interval, self.recurrence_mode)
         if self.is_recurrent and any(value is None for value in recurrence_fields):
             raise ValueError("Recurring event details require recurrence metadata")
+        if self.is_recurrent:
+            _validate_open_ended_recurrence(
+                self.event_type, self.interval or 0, self.interval_end
+            )
         if not self.is_recurrent and (
-            any(value is not None for value in recurrence_fields)
+            any(value is not None for value in (*recurrence_fields, self.interval_end))
             or self.recurrence_timezone is not None
             or self.cancels
         ):

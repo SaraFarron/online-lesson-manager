@@ -1,4 +1,6 @@
-from typing import Literal
+from typing import Literal, Self
+
+from pydantic import model_validator
 
 from backend.constants import EventType
 from backend.events.schemas import (
@@ -36,3 +38,9 @@ class RecurrentBreakPublic(RecurrentEventPublic):
 
 class RecurrentBreakUpdate(RecurrentEventUpdate):
     event_type: Literal[EventType.BREAK] | None = None
+
+    @model_validator(mode="after")
+    def require_recurrence_cutoff(self) -> Self:
+        if self.interval_end is None:
+            raise ValueError("Recurring breaks require a recurrence cutoff")
+        return self

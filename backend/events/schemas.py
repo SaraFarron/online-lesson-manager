@@ -43,6 +43,13 @@ def _validate_time_range(
         raise ValueError("Recurrence cutoff must be after the first occurrence start")
 
 
+def _validate_open_ended_recurrence(
+    event_type: EventType, interval: int, interval_end: datetime | None
+) -> None:
+    if interval_end is None and (event_type != EventType.LESSON or interval != 7):
+        raise ValueError("Only weekly lessons may have no recurrence cutoff")
+
+
 class EventCreate(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
@@ -96,16 +103,25 @@ class RecurrentEventCreate(BaseModel):
     user_id: uuid.UUID
     event_type: EventType
     interval: PositiveInterval
-    interval_end: UtcTimestamp
+    interval_end: UtcTimestamp | None = Field(
+        default=None,
+        description=(
+            "Inclusive series cutoff. Omit or set null for an open-ended weekly "
+            "lesson; other recurring event types require a finite cutoff."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_time_range(self) -> Self:
         if self.end is not None:
             _validate_time_range(self.start, self.end, self.interval_end)
-        elif self.interval_end <= self.start:
+        elif self.interval_end is not None and self.interval_end <= self.start:
             raise ValueError(
                 "Recurrence cutoff must be after the first occurrence start"
             )
+        _validate_open_ended_recurrence(
+            self.event_type, self.interval, self.interval_end
+        )
         return self
 
 
@@ -118,10 +134,17 @@ class RecurrentEventPublic(BaseModel):
     user_id: uuid.UUID
     event_type: EventType
     interval: PositiveInterval
-    interval_end: UtcTimestamp
+    interval_end: UtcTimestamp | None = Field(
+        description=(
+            "Inclusive series cutoff. Updates must provide this field explicitly; "
+            "null clears the cutoff only for a weekly lesson."
+        )
+    )
 
     @field_serializer("start", "end", "interval_end", when_used="json")
-    def serialize_utc_timestamps(self, value: datetime) -> str:
+    def serialize_utc_timestamps(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
         return normalize_utc(value).isoformat()
 
 
@@ -144,7 +167,7 @@ class RecurrentEventUpdate(BaseModel):
     start: UtcTimestamp
     end: UtcTimestamp
     interval: PositiveInterval
-    interval_end: UtcTimestamp
+    interval_end: UtcTimestamp | None
     cancels: list[RecurrentCancel] | None = Field(
         default=None,
         description=(

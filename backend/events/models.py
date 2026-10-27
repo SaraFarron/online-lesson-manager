@@ -60,7 +60,11 @@ class RecurrentEvent(Base, TimestampMixin):
     __table_args__ = (
         CheckConstraint("interval > 0", name="interval_positive"),
         CheckConstraint('"end" > start', name="start_before_end"),
-        CheckConstraint("interval_end > start", name="interval_end_after_start"),
+        CheckConstraint(
+            "(interval_end IS NOT NULL AND interval_end > start) OR "
+            "(interval_end IS NULL AND event_type = 'LESSON' AND \"interval\" = 7)",
+            name="interval_end_after_start",
+        ),
         CheckConstraint(
             "recurrence_mode IN ('UTC_STEP', 'TEACHER_LOCAL')",
             name="recurrence_mode_valid",
@@ -99,8 +103,8 @@ class RecurrentEvent(Base, TimestampMixin):
     start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     interval: Mapped[int] = mapped_column(Integer, nullable=False)  # in days
-    interval_end: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False
+    interval_end: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
     )  # when the recurrence ends
     recurrence_mode: Mapped[str] = mapped_column(
         String(16),
