@@ -62,7 +62,8 @@ class RecurrentEvent(Base, TimestampMixin):
         CheckConstraint('"end" > start', name="start_before_end"),
         CheckConstraint(
             "(interval_end IS NOT NULL AND interval_end > start) OR "
-            "(interval_end IS NULL AND event_type = 'LESSON' AND \"interval\" = 7)",
+            "(interval_end IS NULL AND event_type IN ('LESSON', 'BREAK') "
+            'AND "interval" = 7)',
             name="interval_end_after_start",
         ),
         CheckConstraint(

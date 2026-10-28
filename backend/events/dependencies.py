@@ -15,7 +15,7 @@ from backend.events.validators import (
 async def validated_event_data(
     session: Annotated[AsyncSession, Depends(get_db)],  # noqa: ARG001
     validator: Annotated[EventValidator, Depends(lambda: default_event_validator)],
-):
+) -> EventValidator:
     return validator
 
 

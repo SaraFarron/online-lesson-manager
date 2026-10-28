@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -6,7 +7,7 @@ from backend.config import settings
 
 _is_sqlite = "sqlite" in str(settings.DATABASE_URL)
 
-_engine_kwargs: dict = {"pool_pre_ping": True}
+_engine_kwargs: dict[str, Any] = {"pool_pre_ping": True}
 if not _is_sqlite:
     # PostgreSQL – tune the connection pool
     _engine_kwargs["pool_size"] = 10

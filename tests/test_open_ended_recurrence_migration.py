@@ -1,6 +1,7 @@
 from datetime import datetime
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 import sqlalchemy as sa
@@ -19,6 +20,17 @@ SPEC = spec_from_file_location("open_ended_weekly_lessons", MIGRATION_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MIGRATION = module_from_spec(SPEC)
 SPEC.loader.exec_module(MIGRATION)
+
+BREAK_MIGRATION_PATH = (
+    Path(__file__).parents[1]
+    / "alembic"
+    / "versions"
+    / "2026-10-29_open_ended_weekly_breaks.py"
+)
+BREAK_SPEC = spec_from_file_location("open_ended_weekly_breaks", BREAK_MIGRATION_PATH)
+assert BREAK_SPEC is not None and BREAK_SPEC.loader is not None
+BREAK_MIGRATION = module_from_spec(BREAK_SPEC)
+BREAK_SPEC.loader.exec_module(BREAK_MIGRATION)
 
 
 def _create_finite_schema(connection: sa.Connection) -> None:
@@ -72,10 +84,40 @@ def _create_finite_schema(connection: sa.Connection) -> None:
     )
 
 
-def _run_migration(connection: sa.Connection, operation: str) -> None:
+def _run_migration(
+    connection: sa.Connection,
+    operation: str,
+    migration: ModuleType = MIGRATION,
+) -> None:
     context = MigrationContext.configure(connection)
     with Operations.context(context):
-        getattr(MIGRATION, operation)()
+        getattr(migration, operation)()
+
+
+def _insert_recurrent_event(
+    connection: sa.Connection,
+    *,
+    event_id: str,
+    event_type: str,
+    interval: int,
+    interval_end: str | None,
+) -> None:
+    connection.execute(
+        sa.text(
+            "INSERT INTO recurrent_event "
+            '(id, event_type, start, "end", "interval", interval_end, '
+            "recurrence_mode, recurrence_timezone, post_break_minutes) "
+            "VALUES (:id, :event_type, '2026-10-27 09:00:00', "
+            "'2026-10-27 10:00:00', :interval, :interval_end, "
+            "'TEACHER_LOCAL', 'UTC', 0)"
+        ),
+        {
+            "id": event_id,
+            "event_type": event_type,
+            "interval": interval,
+            "interval_end": interval_end,
+        },
+    )
 
 
 def test_migration_preserves_finite_rows_and_refuses_data_loss_on_downgrade(
@@ -154,5 +196,134 @@ def test_migration_preserves_finite_rows_and_refuses_data_loss_on_downgrade(
                         "'TEACHER_LOCAL', 'UTC', 0)"
                     )
                 )
+    finally:
+        engine.dispose()
+
+
+def test_weekly_break_migration_preserves_rows_and_refuses_downgrade_with_breaks(
+    tmp_path: Path,
+) -> None:
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'weekly-break-migration.db'}")
+    try:
+        with engine.begin() as connection:
+            _create_finite_schema(connection)
+            _run_migration(connection, "upgrade")
+            _insert_recurrent_event(
+                connection,
+                event_id="open-lesson",
+                event_type="LESSON",
+                interval=7,
+                interval_end=None,
+            )
+            _insert_recurrent_event(
+                connection,
+                event_id="finite-break",
+                event_type="BREAK",
+                interval=7,
+                interval_end="2026-12-01 09:00:00",
+            )
+            _run_migration(connection, "upgrade", BREAK_MIGRATION)
+            _insert_recurrent_event(
+                connection,
+                event_id="open-break",
+                event_type="BREAK",
+                interval=7,
+                interval_end=None,
+            )
+
+            with pytest.raises(IntegrityError):
+                _insert_recurrent_event(
+                    connection,
+                    event_id="nonweekly-open-break",
+                    event_type="BREAK",
+                    interval=1,
+                    interval_end=None,
+                )
+            with pytest.raises(IntegrityError):
+                _insert_recurrent_event(
+                    connection,
+                    event_id="open-vacation",
+                    event_type="VACATION",
+                    interval=7,
+                    interval_end=None,
+                )
+
+        with engine.begin() as connection:
+            with pytest.raises(RuntimeError, match="no data was modified"):
+                _run_migration(connection, "downgrade", BREAK_MIGRATION)
+
+            rows = connection.execute(
+                sa.text(
+                    "SELECT id, interval_end FROM recurrent_event "
+                    "WHERE id IN ('finite', 'finite-break', 'open-lesson', 'open-break') "
+                    "ORDER BY id"
+                )
+            ).all()
+            assert rows == [
+                ("finite", "2026-12-01 09:00:00"),
+                ("finite-break", "2026-12-01 09:00:00"),
+                ("open-break", None),
+                ("open-lesson", None),
+            ]
+            interval_end = next(
+                column
+                for column in inspect(connection).get_columns("recurrent_event")
+                if column["name"] == "interval_end"
+            )
+            assert interval_end["nullable"] is True
+            check = next(
+                constraint
+                for constraint in inspect(connection).get_check_constraints(
+                    "recurrent_event"
+                )
+                if constraint["name"]
+                == "recurrent_event_interval_end_after_start_check"
+            )
+            assert "BREAK" in check["sqltext"]
+
+        with engine.begin() as connection:
+            connection.execute(
+                sa.text("DELETE FROM recurrent_event WHERE id = 'open-break'")
+            )
+            _run_migration(connection, "downgrade", BREAK_MIGRATION)
+            assert (
+                connection.execute(
+                    sa.text(
+                        "SELECT interval_end FROM recurrent_event "
+                        "WHERE id = 'open-lesson'"
+                    )
+                ).scalar_one()
+                is None
+            )
+            assert (
+                connection.execute(
+                    sa.text(
+                        "SELECT interval_end FROM recurrent_event "
+                        "WHERE id = 'finite-break'"
+                    )
+                ).scalar_one()
+                == "2026-12-01 09:00:00"
+            )
+            interval_end = next(
+                column
+                for column in inspect(connection).get_columns("recurrent_event")
+                if column["name"] == "interval_end"
+            )
+            assert interval_end["nullable"] is True
+            with pytest.raises(IntegrityError):
+                _insert_recurrent_event(
+                    connection,
+                    event_id="break-after-downgrade",
+                    event_type="BREAK",
+                    interval=7,
+                    interval_end=None,
+                )
+            _insert_recurrent_event(
+                connection,
+                event_id="lesson-after-downgrade",
+                event_type="LESSON",
+                interval=7,
+                interval_end=None,
+            )
     finally:
         engine.dispose()

@@ -46,8 +46,10 @@ def _validate_time_range(
 def _validate_open_ended_recurrence(
     event_type: EventType, interval: int, interval_end: datetime | None
 ) -> None:
-    if interval_end is None and (event_type != EventType.LESSON or interval != 7):
-        raise ValueError("Only weekly lessons may have no recurrence cutoff")
+    if interval_end is None and (
+        event_type not in (EventType.LESSON, EventType.BREAK) or interval != 7
+    ):
+        raise ValueError("Only weekly lessons and breaks may have no recurrence cutoff")
 
 
 class EventCreate(BaseModel):
@@ -106,8 +108,9 @@ class RecurrentEventCreate(BaseModel):
     interval_end: UtcTimestamp | None = Field(
         default=None,
         description=(
-            "Inclusive series cutoff. Omit or set null for an open-ended weekly "
-            "lesson; other recurring event types require a finite cutoff."
+            "Exclusive occurrence-start cutoff. Omit or set null for an open-ended "
+            "weekly lesson or break; other event types and nonweekly intervals "
+            "require a finite cutoff."
         ),
     )
 
@@ -136,8 +139,8 @@ class RecurrentEventPublic(BaseModel):
     interval: PositiveInterval
     interval_end: UtcTimestamp | None = Field(
         description=(
-            "Inclusive series cutoff. Updates must provide this field explicitly; "
-            "null clears the cutoff only for a weekly lesson."
+            "Exclusive occurrence-start cutoff. Updates must provide this field "
+            "explicitly; null clears the cutoff only for a weekly lesson or break."
         )
     )
 

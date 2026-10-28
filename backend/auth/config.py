@@ -11,4 +11,4 @@ class AuthConfig(BaseSettings):
     JWT_EXP_MINUTES: int = 30
 
 
-auth_settings = AuthConfig()
+auth_settings = AuthConfig()  # type: ignore[call-arg]  # Loaded from AUTH_ environment variables.

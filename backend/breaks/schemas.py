@@ -11,6 +11,7 @@ from backend.events.schemas import (
     RecurrentEventPublic,
     RecurrentEventUpdate,
     UtcTimestamp,
+    _validate_open_ended_recurrence,
 )
 
 
@@ -41,6 +42,7 @@ class RecurrentBreakUpdate(RecurrentEventUpdate):
 
     @model_validator(mode="after")
     def require_recurrence_cutoff(self) -> Self:
-        if self.interval_end is None:
-            raise ValueError("Recurring breaks require a recurrence cutoff")
+        _validate_open_ended_recurrence(
+            EventType.BREAK, self.interval, self.interval_end
+        )
         return self

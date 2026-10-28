@@ -4,11 +4,15 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from backend.breaks.schemas import RecurrentBreakCreate, RecurrentBreakUpdate
+from backend.breaks.schemas import (
+    RecurrentBreakCreate,
+    RecurrentBreakPublic,
+    RecurrentBreakUpdate,
+)
 from backend.constants import EventType
 from backend.events.constants import RecurrenceMode
 from backend.events.management_schemas import EventManagementDetail
-from backend.events.schemas import RecurrentEventPublic
+from backend.events.schemas import RecurrentEventCreate, RecurrentEventPublic
 from backend.lessons.schemas import (
     RecurrentLessonCreate,
     RecurrentLessonPublic,
@@ -61,18 +65,47 @@ def test_create_rejects_invalid_open_or_finite_cutoffs(
         RecurrentLessonCreate.model_validate(_create_fields(**fields))
 
 
-def test_recurrent_break_schemas_require_a_finite_cutoff() -> None:
-    with pytest.raises(PydanticValidationError):
-        RecurrentBreakCreate.model_validate(_create_fields())
+def test_weekly_recurrent_break_schemas_allow_a_null_cutoff() -> None:
+    shared = RecurrentEventCreate.model_validate(
+        _create_fields(event_type=EventType.BREAK)
+    )
+    assert shared.interval_end is None
 
+    created = RecurrentBreakCreate.model_validate(_create_fields())
+    assert created.interval_end is None
+
+    updated = RecurrentBreakUpdate.model_validate(
+        {
+            **_create_fields(),
+            "event_type": EventType.BREAK,
+            "interval_end": None,
+        }
+    )
+    assert updated.interval_end is None
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"event_type": EventType.BREAK, "interval": 1, "interval_end": None},
+        {"event_type": EventType.VACATION, "interval": 7, "interval_end": None},
+    ],
+)
+def test_nonweekly_break_and_vacation_null_cutoffs_are_rejected(
+    fields: dict[str, object],
+) -> None:
     with pytest.raises(PydanticValidationError):
-        RecurrentBreakUpdate.model_validate(
-            {
-                **_create_fields(),
-                "event_type": EventType.BREAK,
-                "interval_end": None,
-            }
-        )
+        RecurrentEventCreate.model_validate(_create_fields(**fields))
+
+    if fields["event_type"] == EventType.BREAK:
+        with pytest.raises(PydanticValidationError):
+            RecurrentBreakUpdate.model_validate(
+                {
+                    **_create_fields(interval=1),
+                    "event_type": EventType.BREAK,
+                    "interval_end": None,
+                }
+            )
 
 
 def test_update_requires_explicit_cutoff_and_allows_clearing_weekly_lesson() -> None:
@@ -105,6 +138,24 @@ def test_public_models_serialize_null_cutoff_as_json_null() -> None:
     )
     assert (
         RecurrentLessonPublic.model_validate(fields).model_dump(mode="json")[
+            "interval_end"
+        ]
+        is None
+    )
+
+    break_fields = {**fields, "event_type": EventType.BREAK}
+    assert (
+        RecurrentBreakCreate.model_validate(
+            {
+                **_create_fields(),
+                "event_type": EventType.BREAK,
+                "interval_end": None,
+            }
+        ).model_dump(mode="json")["interval_end"]
+        is None
+    )
+    assert (
+        RecurrentBreakPublic.model_validate(break_fields).model_dump(mode="json")[
             "interval_end"
         ]
         is None
