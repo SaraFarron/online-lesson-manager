@@ -7,16 +7,18 @@
 # Configuration is interpolated from .env, or --env-file .env.docker.
 # For quick local dev without Docker use SQLite (.env → dev.db).
 
+name: online-lesson-manager-dev
+
 services:
   db:
     image: postgres:17-alpine
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-app}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,17 +29,30 @@ services:
 
   app:
     build: .
-    restart: always
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic upgrade head && exec uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload",
+      ]
     environment:
       ENVIRONMENT: local
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app}
+      SCHEDULE_TEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Set AUTH_JWT_SECRET}
       AUTH_JWT_EXP_MINUTES: ${AUTH_JWT_EXP_MINUTES:-30}
       TELEGRAM_SERVICE_CREDENTIAL: ${TELEGRAM_SERVICE_CREDENTIAL:?Set TELEGRAM_SERVICE_CREDENTIAL}
       HOMEWORK_STORAGE_PATH: /var/lib/olm/homework
     volumes:
+      - ./backend:/app/backend
+      - ./telegram:/app/telegram
+      - ./templates:/app/templates
+      - ./static:/app/static
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini:ro
       - homework_data:/var/lib/olm/homework
     depends_on:
       db:

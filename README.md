@@ -225,9 +225,18 @@ You can also launch **Dev server (reload)** and **Telegram bot (local backend)**
 individually; VS Code supports simultaneous debug sessions. Stop any existing
 bot poller before starting a debug session with the same token.
 
-Local Compose (PostgreSQL + backend + opt-in bot):
+Local development Compose (PostgreSQL + hot-reloading backend + opt-in bot):
 ```shell
-docker compose --profile bot up --build
+docker compose up -d --build
+# Optional Telegram bot:
+docker compose --profile bot up -d --build
+```
+The development stack uses an isolated `online-lesson-manager-dev` Compose
+project and its own PostgreSQL volume; it does not reuse production Compose
+resources. The `.env` file's `SCHEDULE_TEST_DATABASE_URL` points to this
+database from the host. Run PostgreSQL concurrency tests with:
+```shell
+uv run --env-file .env pytest -q tests/test_schedule_concurrency.py
 ```
 Production Compose:
 ```shell

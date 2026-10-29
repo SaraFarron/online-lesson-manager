@@ -10,7 +10,9 @@ features.
 
 - Package manager: **uv** (`uv.lock` present). Install deps: `uv sync`.
 - Run dev server: `fastapi run backend/main.py` (uses SQLite `dev.db` via
-  `DATABASE_URL` in `.env`). Full stack incl. Postgres: `docker compose up`.
+  `DATABASE_URL` in `.env`). The isolated, hot-reloading PostgreSQL dev stack
+  is `docker compose up -d --build`; host-side schedule concurrency checks use
+  `uv run --env-file .env pytest -q tests/test_schedule_concurrency.py`.
 - Run the separate bot: `uv run python -m telegram`, or opt in with
   `docker compose --profile bot up --build`. Configure `BOT_TOKEN`,
   `BOT_BACKEND_URL`, and `BOT_SERVICE_CREDENTIAL` in ignored `.env`; the service
