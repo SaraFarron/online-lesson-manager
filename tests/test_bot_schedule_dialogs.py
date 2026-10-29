@@ -11,8 +11,8 @@ from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from backend.main import app
 from backend.schedule.router import get_schedule_clock
 from telegram.api import BackendClient
+from telegram.dialogs.schedule.dialog import ScheduleDialogState
 from telegram.runtime import build_dispatcher
-from telegram.schedule_dialogs import ScheduleDialogState
 from tests.bot_support import BotDriver
 from tests.test_bot_onboarding import teacher_defaults
 
@@ -458,7 +458,7 @@ async def test_period_switch_and_home_reopen_apply_live_schedule_changes(
 async def test_page_navigation_and_period_switch_shrinks_page_controls(
     client, bot_service_key, monkeypatch
 ) -> None:
-    import telegram.schedule_dialogs as schedule_dialogs
+    import telegram.dialogs.schedule.dialog as schedule_dialogs
 
     api = BackendClient(client, bot_service_key)
     driver = BotDriver(build_dispatcher(api))
@@ -517,7 +517,7 @@ async def test_page_navigation_and_period_switch_shrinks_page_controls(
 async def test_invalid_schedule_output_has_home_and_period_recovery(
     client, bot_service_key, monkeypatch
 ) -> None:
-    import telegram.schedule_dialogs as schedule_dialogs
+    import telegram.dialogs.schedule.dialog as schedule_dialogs
 
     api = BackendClient(client, bot_service_key)
     driver = BotDriver(build_dispatcher(api))

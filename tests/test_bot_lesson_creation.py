@@ -15,7 +15,7 @@ from backend.events.models import Event, RecurrentEvent
 from backend.main import app
 from backend.schedule.router import get_schedule_clock
 from telegram.api import BackendClient
-from telegram.lesson_dialogs import submit_lesson
+from telegram.dialogs.lessons.creation import submit_lesson
 from telegram.runtime import build_dispatcher
 from tests.bot_support import BotDriver
 

@@ -20,12 +20,6 @@ from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.auth.models import User
 from backend.exceptions import Forbidden
-from backend.homework import (
-    assignment_service,
-    management_service,
-    read_service,
-    submission_service,
-)
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.constants import ATTACHMENT_TRANSFER_TIMEOUT_SECONDS
 from backend.homework.models import HomeworkAttachment
@@ -41,7 +35,19 @@ from backend.homework.schemas import (
     HomeworkSubmissionPage,
     StagedAttachmentPublic,
 )
-from backend.homework.service import (
+from backend.homework.services import (
+    assignments as assignment_service,
+)
+from backend.homework.services import (
+    management as management_service,
+)
+from backend.homework.services import (
+    reads as read_service,
+)
+from backend.homework.services import (
+    submissions as submission_service,
+)
+from backend.homework.services.attachments import (
     cancel_staged_attachment,
     open_attachment_download,
     stage_attachment,

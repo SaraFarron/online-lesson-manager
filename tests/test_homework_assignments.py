@@ -15,7 +15,6 @@ from backend.auth.utils import create_access_token
 from backend.constants import EventType
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from backend.events.time_utils import to_storage_utc
-from backend.homework.assignment_service import create_assignment
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.constants import (
     MAX_ASSIGNMENT_ATTACHMENT_BYTES,
@@ -23,6 +22,7 @@ from backend.homework.constants import (
 )
 from backend.homework.models import Homework, HomeworkAttachment
 from backend.homework.schemas import HomeworkCreate
+from backend.homework.services.assignments import create_assignment
 from backend.main import app
 
 
@@ -418,6 +418,7 @@ async def test_assignment_enforces_five_file_and_fifty_mib_limits(
         },
     )
     assert rejected.status_code == 413
+    assert rejected.json()["detail"] == "Assignment attachments exceed the 50 MiB limit"
     assert await db_session.scalar(select(func.count()).select_from(Homework)) == 1
     for item in over_limit:
         staged = await db_session.get(HomeworkAttachment, item.id)

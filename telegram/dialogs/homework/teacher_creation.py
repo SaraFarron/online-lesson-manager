@@ -33,13 +33,13 @@ from telegram.api import (
     StagedHomeworkAttachment,
     StudentPickerPage,
 )
-from telegram.feedback import feedback_block
-from telegram.homework_text import (
+from telegram.dialogs.homework.text import (
     change_homework_text_page,
     homework_text_page,
 )
-from telegram.inputs import format_compact_schedule_date
-from telegram.onboarding import backend
+from telegram.shared.access import backend
+from telegram.shared.feedback import feedback_block
+from telegram.shared.inputs import format_compact_schedule_date
 
 STUDENT_PAGE_SIZE = 20
 LESSON_PAGE_SIZE = 10

@@ -12,7 +12,7 @@ from backend.auth.models import User
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.models import Homework, HomeworkAttachment
-from backend.homework.read_service import list_homework
+from backend.homework.services.reads import list_homework
 from backend.main import app
 
 

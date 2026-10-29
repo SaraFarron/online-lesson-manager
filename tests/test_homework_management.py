@@ -10,7 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import backend.homework.management_service as management_service
+import backend.homework.services.management as management_service
 from backend.auth.models import User
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings

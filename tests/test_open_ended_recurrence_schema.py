@@ -11,7 +11,7 @@ from backend.breaks.schemas import (
 )
 from backend.constants import EventType
 from backend.events.constants import RecurrenceMode
-from backend.events.management_schemas import EventManagementDetail
+from backend.events.management.schemas import EventManagementDetail
 from backend.events.schemas import RecurrentEventCreate, RecurrentEventPublic
 from backend.lessons.schemas import (
     RecurrentLessonCreate,

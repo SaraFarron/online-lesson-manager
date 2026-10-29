@@ -1,4 +1,4 @@
-from telegram.feedback import feedback_block
+from telegram.shared.feedback import feedback_block
 
 
 def test_feedback_block_escapes_reason_and_keeps_multiline_text() -> None:

@@ -27,12 +27,13 @@ from telegram.api import (
     RecurrentOccurrenceMovePayload,
     SessionView,
 )
-from telegram.date_cleanup import (
+from telegram.shared.access import backend
+from telegram.shared.date_cleanup import (
     delete_accepted_date_message,
     delete_accepted_input_message,
 )
-from telegram.feedback import feedback_block
-from telegram.inputs import (
+from telegram.shared.feedback import feedback_block
+from telegram.shared.inputs import (
     combine_schedule_date_time,
     format_duration,
     format_human_date,
@@ -42,7 +43,6 @@ from telegram.inputs import (
     parse_schedule_date,
     parse_schedule_time,
 )
-from telegram.onboarding import backend
 
 MANAGEMENT_PAGE_SIZE = 20
 EventKind = Literal["once", "weekly"]

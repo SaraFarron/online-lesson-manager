@@ -10,7 +10,7 @@ from telegram.api import (
     Registration,
     ResolvedLocalInstant,
 )
-from telegram.inputs import (
+from telegram.shared.inputs import (
     combine_schedule_date_time,
     format_compact_schedule_date,
     format_duration,

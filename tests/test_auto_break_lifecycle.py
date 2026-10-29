@@ -305,6 +305,25 @@ async def test_manual_break_displacement_removes_the_lesson_reservation(
     assert occurrences[0].source.id != lesson.id
 
 
+async def test_deleting_displacing_break_does_not_restore_lesson(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student, _ = await _accounts(db_session)
+    lesson = await _create_lesson(db_session, teacher, student, 2, hour=9)
+    manual_break = await create_event(
+        db_session,
+        BreakCreate(start=_at(2, 9, 30), end=_at(2, 10, 30), user_id=teacher.id),
+        EventValidator(expected_event_type=EventType.BREAK),
+        teacher.id,
+        confirm_displacement=True,
+        actor_is_teacher=True,
+    )
+
+    await delete_event(db_session, manual_break)
+
+    assert await db_session.scalar(select(Event).where(Event.id == lesson.id)) is None
+
+
 async def test_manual_break_displacement_cancels_only_the_matching_series_break(
     db_session: AsyncSession,
 ) -> None:

@@ -11,7 +11,6 @@ from sqlalchemy.sql.selectable import Exists
 from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.exceptions import Conflict, Forbidden, NotFound
-from backend.homework import service as attachment_service
 from backend.homework.config import HomeworkConfig
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
 from backend.homework.schemas import (
@@ -22,6 +21,7 @@ from backend.homework.schemas import (
     HomeworkSubmissionPage,
     HomeworkSubmissionReviewItem,
 )
+from backend.homework.services import attachments as attachment_service
 
 logger = logging.getLogger(__name__)
 

@@ -9,20 +9,20 @@ from aiogram_dialog import DialogManager, ShowMode, StartMode, setup_dialogs
 from aiogram_dialog.api.exceptions import OutdatedIntent, UnknownIntent
 
 from telegram.api import BackendClient, BackendError, BackendUnavailable
-from telegram.break_dialogs import build_break_dialog
-from telegram.dialogs import Screens, build_dialog
-from telegram.event_management_dialogs import build_event_management_dialog
-from telegram.homework_student_dialogs import build_homework_student_dialog
-from telegram.homework_teacher_dialogs import build_homework_teacher_dialog
-from telegram.homework_teacher_management_dialogs import (
+from telegram.dialogs.breaks import build_break_dialog
+from telegram.dialogs.home import Screens, build_dialog
+from telegram.dialogs.homework.student import build_homework_student_dialog
+from telegram.dialogs.homework.teacher_creation import build_homework_teacher_dialog
+from telegram.dialogs.homework.teacher_management import (
     build_homework_teacher_management_dialog,
 )
+from telegram.dialogs.lessons.creation import build_lesson_dialog
+from telegram.dialogs.lessons.management import build_event_management_dialog
+from telegram.dialogs.onboarding import Wizard, build_wizard
+from telegram.dialogs.schedule.dialog import build_schedule_dialog
+from telegram.dialogs.settings import build_settings_dialog
+from telegram.dialogs.vacations import build_vacation_dialog
 from telegram.invitations import create_teacher_invitation, parse_teacher_start_payload
-from telegram.lesson_dialogs import build_lesson_dialog
-from telegram.onboarding import Wizard, build_wizard
-from telegram.schedule_dialogs import build_schedule_dialog
-from telegram.settings_dialogs import build_settings_dialog
-from telegram.vacation_dialogs import build_vacation_dialog
 
 logger = logging.getLogger(__name__)
 

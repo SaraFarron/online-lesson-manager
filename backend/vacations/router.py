@@ -7,7 +7,7 @@ from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.constants import EventType
 from backend.events import management as management_service
 from backend.events import service
-from backend.events.management_schemas import (
+from backend.events.management.schemas import (
     EventManagementDetail,
     EventManagementPage,
 )

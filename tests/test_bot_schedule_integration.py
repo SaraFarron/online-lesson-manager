@@ -13,8 +13,11 @@ from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from backend.main import app
 from backend.schedule.router import get_schedule_clock
 from telegram.api import BackendClient, ScheduleResponse
+from telegram.dialogs.schedule.formatting import (
+    MAX_LABEL_CODEPOINTS,
+    MAX_MESSAGE_UTF16_UNITS,
+)
 from telegram.runtime import build_dispatcher
-from telegram.schedule_format import MAX_LABEL_CODEPOINTS, MAX_MESSAGE_UTF16_UNITS
 from tests.bot_support import BotDriver
 
 TEACHER_TG_ID = 5_100_000_000

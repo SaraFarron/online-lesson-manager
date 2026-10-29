@@ -1,8 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from backend.events.management import build_event_revision
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
+from backend.events.revisions import build_event_revision
 
 _TEACHER_ID = UUID("00000000-0000-0000-0000-000000000001")
 _STUDENT_ID = UUID("00000000-0000-0000-0000-000000000002")

@@ -24,12 +24,14 @@ from telegram.api import (
     SessionView,
     StudentPickerPage,
 )
-from telegram.date_cleanup import (
+from telegram.dialogs.schedule.dialog import open_schedule_week
+from telegram.shared.access import backend
+from telegram.shared.date_cleanup import (
     delete_accepted_date_message,
     delete_accepted_input_message,
 )
-from telegram.feedback import feedback_block
-from telegram.inputs import (
+from telegram.shared.feedback import feedback_block
+from telegram.shared.inputs import (
     ParsedScheduleDate,
     combine_schedule_date_time,
     format_duration,
@@ -41,8 +43,6 @@ from telegram.inputs import (
     parse_schedule_date,
     parse_schedule_time,
 )
-from telegram.onboarding import backend
-from telegram.schedule_dialogs import open_schedule_week
 
 STUDENT_PAGE_SIZE = 20
 

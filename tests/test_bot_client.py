@@ -1098,7 +1098,7 @@ async def test_homework_upload_renews_jwt_and_recreates_stream() -> None:
 async def test_homework_attachment_upload_enforces_actual_size(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("telegram.api.MAX_HOMEWORK_ATTACHMENT_BYTES", 5)
+    monkeypatch.setattr("telegram.api.transfer.MAX_HOMEWORK_ATTACHMENT_BYTES", 5)
     attempts = 0
 
     async def transport(request: httpx.Request) -> httpx.Response:
@@ -1128,7 +1128,7 @@ async def test_homework_attachment_upload_enforces_actual_size(
 async def test_homework_download_rejects_oversized_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("telegram.api.MAX_HOMEWORK_ATTACHMENT_BYTES", 5)
+    monkeypatch.setattr("telegram.api.transfer.MAX_HOMEWORK_ATTACHMENT_BYTES", 5)
 
     async def transport(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, headers={"Content-Length": "5"}, content=b"123456")
@@ -1148,7 +1148,7 @@ async def test_homework_download_rejects_oversized_response(
 async def test_homework_transfer_timeout_is_unknown_for_upload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("telegram.api.HOMEWORK_TRANSFER_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr("telegram.api.transfer.HOMEWORK_TRANSFER_TIMEOUT_SECONDS", 0.01)
 
     async def slow_source():
         await asyncio.sleep(0.1)
@@ -1172,7 +1172,7 @@ async def test_homework_transfer_timeout_is_unknown_for_upload(
 async def test_homework_download_timeout_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("telegram.api.HOMEWORK_TRANSFER_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr("telegram.api.transfer.HOMEWORK_TRANSFER_TIMEOUT_SECONDS", 0.01)
 
     class SlowResponse(httpx.AsyncByteStream):
         async def __aiter__(self):

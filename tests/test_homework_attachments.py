@@ -15,13 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import ClientDisconnect
 
 import backend.homework.router as homework_router_module
-import backend.homework.service as homework_service_module
+import backend.homework.services.attachments as homework_service_module
 from backend.auth.models import User
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.constants import STAGED_ATTACHMENT_TTL
 from backend.homework.models import Homework, HomeworkAttachment
-from backend.homework.service import (
+from backend.homework.services.attachments import (
     cleanup_expired_staged_attachments,
     stage_attachment,
     stream_attachment,

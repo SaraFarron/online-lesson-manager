@@ -63,6 +63,11 @@ remain in `docs/plans/` as project documentation.
   `events` validators/schemas and specialize `event_type`
   (`EventType` enum: `LESSON`, `BREAK`, `VACATION`) — follow this
   compose-don't-duplicate pattern for any new event-like domain.
+- Event management reads and schemas live in `backend/events/management/`;
+  revision hashing lives in `backend/events/revisions.py`; mutation
+  implementations live in `backend/events/mutations/`. Keep
+  `backend/events/service.py` as the explicit public facade for mutation
+  callers, and do not route implementation imports back through that facade.
 - Recurring events (`RecurrentEvent`) have an `interval`/`interval_end`;
   individual skipped occurrences are stored as rows in `RecurrentCancels`
   rather than mutating the series.
@@ -77,19 +82,24 @@ remain in `docs/plans/` as project documentation.
   Registration owns one transaction; `auth.service.add_*` helpers flush only.
   Profile routes require owner or superuser; profile PUT is a partial update.
 - Top-level `telegram/` is a separate aiogram 3 / aiogram-dialog 2 client,
-  not the backend adapter package. It uses typed async HTTP calls, memory-only
-  drafts/JWT cache, a bounded circuit breaker, and per-user update isolation.
-  Normal inline and text-input transitions edit the active screen. Completed
-  users recover through `/start` after restart; incomplete drafts restart.
-  Never import backend models/settings/services into the bot or start polling
-  inside FastAPI.
+  not the backend adapter package. `telegram/api/` owns typed async HTTP
+  contracts and transfers, `telegram/shared/` owns flow-independent helpers,
+  and `telegram/dialogs/` groups UI flows by feature. The client uses
+  memory-only drafts/JWT cache, a bounded circuit breaker, and per-user update
+  isolation. Normal inline and text-input transitions edit the active screen.
+  Completed users recover through `/start` after restart; incomplete drafts
+  restart. Never import backend models/settings/services into the bot or start
+  polling inside FastAPI.
 - **Partially implemented packages** — don't assume behavior exists just
   because the package exists: `backend/homework/` has metadata and private
-  attachment staging/transfer, teacher assignment creation, and authorized
-  assignment/material reads and student submission/completion, plus teacher
-  submission review, manual completion, and deletion with recoverable file
-  cleanup; Telegram supports assignment creation, student browsing/downloads/
-  submissions, and teacher review/completion/deletion;
+  attachment staging/transfer; its assignment, read, submission, attachment,
+  management, and staged-attachment use cases live in
+  `backend/homework/services/`. The backend supports teacher assignment
+  creation, authorized assignment/material reads and student
+  submission/completion, teacher submission review, manual completion, and
+  deletion with recoverable file cleanup. Telegram supports assignment
+  creation, student browsing/downloads/submissions, and teacher
+  review/completion/deletion;
   `backend/schedule/router.py` is empty. `backend/notifications/` has only an
   ORM model, no router/service yet.
 - Config is split per-domain (`BaseSettings` subclasses), e.g.
@@ -216,6 +226,24 @@ backend/
 ├── exceptions.py       # Global exceptions
 ├── database.py         # Async engine + session factory
 └── main.py             # FastAPI app + lifespan
+```
+
+The repository already uses grouped packages for larger domains:
+
+```
+backend/
+├── events/
+│   ├── management/     # Shared management reads and schemas
+│   ├── mutations/      # Serialized event mutation implementations
+│   ├── revisions.py    # Stable event revision hashes
+│   └── service.py      # Explicit public mutation facade
+└── homework/
+    └── services/       # Assignment, read, submission, and attachment use cases
+
+telegram/
+├── api/                # Typed backend client, contracts, and transfers
+├── shared/             # Flow-independent bot helpers
+└── dialogs/            # UI flows grouped by feature
 ```
 
 **Cross-domain imports**: always use the explicit module name. Never `from backend.auth import *`.

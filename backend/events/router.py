@@ -4,7 +4,7 @@ from fastapi import APIRouter
 
 from backend.auth.constants import Roles
 from backend.auth.dependencies import CurrentUser
-from backend.events.management_schemas import (
+from backend.events.management.schemas import (
     LocalIntervalResolution,
     LocalIntervalResolutionRequest,
     ResolvedLocalInstant,

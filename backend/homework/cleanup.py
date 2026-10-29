@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from backend.database import SessionFactory
 from backend.homework.config import homework_settings
-from backend.homework.service import cleanup_expired_staged_attachments
+from backend.homework.services.attachments import cleanup_expired_staged_attachments
 
 logger = logging.getLogger(__name__)
 

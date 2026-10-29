@@ -20,8 +20,8 @@ from telegram.api import (
     StudentProfileUpdate,
     TeacherProfileUpdate,
 )
-from telegram.feedback import feedback_block
-from telegram.inputs import (
+from telegram.shared.feedback import feedback_block
+from telegram.shared.inputs import (
     DAY_NAMES,
     digest_clock,
     parse_clock,

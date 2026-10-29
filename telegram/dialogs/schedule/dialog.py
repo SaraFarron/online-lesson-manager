@@ -9,9 +9,9 @@ from aiogram_dialog.widgets.text import Const, Format
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from telegram.api import BackendError, BackendUnavailable, SessionView
-from telegram.feedback import feedback_block
-from telegram.onboarding import backend
-from telegram.schedule_format import ViewerRole, format_schedule_pages
+from telegram.dialogs.schedule.formatting import ViewerRole, format_schedule_pages
+from telegram.shared.access import backend
+from telegram.shared.feedback import feedback_block
 
 SchedulePeriod = Literal["day", "week"]
 

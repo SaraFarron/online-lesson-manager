@@ -9,20 +9,20 @@ from aiogram_dialog.widgets.kbd import Button, Row, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import SessionView
-from telegram.break_dialogs import open_break_management
-from telegram.event_management_dialogs import open_event_management
-from telegram.feedback import feedback_block
-from telegram.homework_student_dialogs import open_student_homework
-from telegram.homework_teacher_dialogs import open_homework_creation
-from telegram.homework_teacher_management_dialogs import (
+from telegram.dialogs.breaks import open_break_management
+from telegram.dialogs.homework.student import open_student_homework
+from telegram.dialogs.homework.teacher_creation import open_homework_creation
+from telegram.dialogs.homework.teacher_management import (
     open_teacher_homework_management,
 )
-from telegram.inputs import digest_clock, format_working_days, parse_timezone
-from telegram.lesson_dialogs import open_lesson_creation
-from telegram.onboarding import begin_student, begin_teacher
-from telegram.schedule_dialogs import open_today, open_week
-from telegram.settings_dialogs import open_settings
-from telegram.vacation_dialogs import open_vacation_management
+from telegram.dialogs.lessons.creation import open_lesson_creation
+from telegram.dialogs.lessons.management import open_event_management
+from telegram.dialogs.onboarding import begin_student, begin_teacher
+from telegram.dialogs.schedule.dialog import open_today, open_week
+from telegram.dialogs.settings import open_settings
+from telegram.dialogs.vacations import open_vacation_management
+from telegram.shared.feedback import feedback_block
+from telegram.shared.inputs import digest_clock, format_working_days, parse_timezone
 
 
 class Screens(StatesGroup):

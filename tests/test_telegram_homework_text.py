@@ -2,7 +2,7 @@ from html import unescape
 
 import pytest
 
-from telegram.homework_text import (
+from telegram.dialogs.homework.text import (
     MAX_HOMEWORK_TEXT_PAGE_UNITS,
     homework_text_page,
 )

@@ -8,7 +8,7 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import telegram.homework_teacher_dialogs as homework_dialogs
+import telegram.dialogs.homework.teacher_creation as homework_dialogs
 from backend.auth.models import StudentProfile, TeacherProfile, User
 from backend.auth.utils import create_access_token
 from backend.constants import EventType

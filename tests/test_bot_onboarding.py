@@ -8,10 +8,10 @@ from sqlalchemy import func, select
 
 from backend.auth.models import TeacherProfile, User
 from telegram.api import BackendClient, Registration
-from telegram.dialogs import screen_data
-from telegram.inputs import parse_clock
-from telegram.onboarding import STUDENT_STEPS, TEACHER_STEPS, Step
+from telegram.dialogs.home import screen_data
+from telegram.dialogs.onboarding import STUDENT_STEPS, TEACHER_STEPS, Step
 from telegram.runtime import build_dispatcher
+from telegram.shared.inputs import parse_clock
 from tests.bot_support import BotDriver
 
 

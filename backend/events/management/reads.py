@@ -1,5 +1,3 @@
-import hashlib
-import json
 import uuid
 from datetime import datetime, timedelta
 
@@ -13,7 +11,7 @@ from backend.events.constants import (
     AUTOMATIC_BREAK_READ_ONLY_DETAIL,
     RecurrenceMode,
 )
-from backend.events.management_schemas import (
+from backend.events.management.schemas import (
     EventManagementDetail,
     EventManagementItem,
     EventManagementPage,
@@ -28,6 +26,7 @@ from backend.events.occurrences import (
     RecurrenceSeries,
     expand_recurrence,
 )
+from backend.events.revisions import build_event_revision
 from backend.events.schemas import RecurrentCancel
 from backend.events.time_utils import from_storage_utc, normalize_utc
 from backend.events.utils import assert_owns_event
@@ -213,42 +212,6 @@ async def get_managed_event(
         revision=build_event_revision(event, cancellations),
         inspected_occurrence=inspected,
     )
-
-
-def build_event_revision(
-    event: Event | RecurrentEvent,
-    cancellations: tuple[RecurrentCancels, ...] | list[RecurrentCancels],
-) -> str:
-    payload: dict[str, object] = {
-        "id": str(event.id),
-        "teacher_id": str(event.teacher_id),
-        "user_id": str(event.user_id),
-        "event_type": event.event_type,
-        "start": _timestamp(event.start),
-        "end": _timestamp(event.end),
-        "post_break_minutes": event.post_break_minutes,
-        "updated_at": normalize_utc(event.updated_at).isoformat(),
-        "cancellations": [
-            {
-                "id": str(cancel.id),
-                "start": _timestamp(cancel.start),
-                "end": _timestamp(cancel.end),
-                "updated_at": normalize_utc(cancel.updated_at).isoformat(),
-            }
-            for cancel in cancellations
-        ],
-    }
-    if isinstance(event, RecurrentEvent):
-        payload.update(
-            {
-                "interval": event.interval,
-                "interval_end": _timestamp(event.interval_end),
-                "recurrence_mode": event.recurrence_mode,
-                "recurrence_timezone": event.recurrence_timezone,
-            }
-        )
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(encoded).hexdigest()
 
 
 async def _resolve_scope(
@@ -445,9 +408,3 @@ async def _cancellation_counts(
     for event_id, count in results:
         counts[event_id] = count
     return counts
-
-
-def _timestamp(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    return from_storage_utc(value).isoformat()

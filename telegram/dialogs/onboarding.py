@@ -11,16 +11,17 @@ from aiogram_dialog.widgets.kbd import Button, Column, Multiselect, Row, Select
 from aiogram_dialog.widgets.kbd.select import ManagedMultiselect
 from aiogram_dialog.widgets.text import Const, Format
 
-from telegram.api import BackendClient, BackendError, BackendUnavailable, Registration
-from telegram.feedback import feedback_block
-from telegram.inputs import (
+from telegram.api import BackendError, BackendUnavailable, Registration
+from telegram.invitations import create_teacher_invitation
+from telegram.shared.access import backend
+from telegram.shared.feedback import feedback_block
+from telegram.shared.inputs import (
     DAY_NAMES,
     digest_clock,
     parse_clock,
     parse_integer,
     parse_timezone,
 )
-from telegram.invitations import create_teacher_invitation
 
 
 class Wizard(StatesGroup):
@@ -92,13 +93,6 @@ def steps(manager: DialogManager) -> tuple[Step, ...]:
         if manager.dialog_data["draft"]["role"] == "TEACHER"
         else STUDENT_STEPS
     )
-
-
-def backend(manager: DialogManager) -> BackendClient:
-    client = manager.middleware_data["backend_client"]
-    if not isinstance(client, BackendClient):
-        raise TypeError("Backend client is not configured")
-    return client
 
 
 def current_step(manager: DialogManager) -> Step:

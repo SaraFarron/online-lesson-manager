@@ -9,12 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.constants import Roles
 from backend.auth.models import User
-from backend.events.time_utils import normalize_utc
-from backend.exceptions import Conflict, Forbidden, NotFound, ValidationError
-from backend.homework.constants import (
-    MAX_ASSIGNMENT_ATTACHMENT_BYTES,
-    MAX_ASSIGNMENT_ATTACHMENTS,
-)
+from backend.exceptions import Conflict, Forbidden, NotFound
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
 from backend.homework.schemas import (
     HomeworkCompletionSource,
@@ -22,6 +17,7 @@ from backend.homework.schemas import (
     HomeworkSubmissionCreate,
     HomeworkSubmissionCreated,
 )
+from backend.homework.services.staged_attachments import load_staged_attachments
 
 logger = logging.getLogger(__name__)
 
@@ -84,49 +80,6 @@ async def _existing_submission(
         ) from exc
 
 
-async def _load_staged_attachments(
-    session: AsyncSession,
-    student_id: uuid.UUID,
-    attachment_ids: list[uuid.UUID],
-) -> list[HomeworkAttachment]:
-    if len(attachment_ids) > MAX_ASSIGNMENT_ATTACHMENTS:
-        raise ValidationError("A submission may contain at most 5 attachments")
-    if not attachment_ids:
-        return []
-
-    attachments = list(
-        (
-            await session.scalars(
-                select(HomeworkAttachment)
-                .where(
-                    HomeworkAttachment.id.in_(attachment_ids),
-                    HomeworkAttachment.owner_user_id == student_id,
-                    HomeworkAttachment.homework_id.is_(None),
-                    HomeworkAttachment.submission_id.is_(None),
-                    HomeworkAttachment.cleanup_pending.is_(False),
-                )
-                .with_for_update()
-            )
-        ).all()
-    )
-    if len(attachments) != len(attachment_ids):
-        raise NotFound("Staged attachment not found")
-
-    now = datetime.now(UTC)
-    if any(
-        attachment.staged_until is None or normalize_utc(attachment.staged_until) <= now
-        for attachment in attachments
-    ):
-        raise HTTPException(status_code=410, detail="Staged attachment has expired")
-    if sum(attachment.byte_size for attachment in attachments) > (
-        MAX_ASSIGNMENT_ATTACHMENT_BYTES
-    ):
-        raise HTTPException(
-            status_code=413, detail="Submission attachments exceed the 50 MiB limit"
-        )
-    return attachments
-
-
 async def create_submission(
     session: AsyncSession,
     student: User,
@@ -182,8 +135,12 @@ async def create_submission(
             raise Conflict("Homework is not available for submission")
 
     try:
-        attachments = await _load_staged_attachments(
-            session, active_student.id, payload.attachment_ids
+        attachments = await load_staged_attachments(
+            session,
+            active_student.id,
+            payload.attachment_ids,
+            count_error="A submission may contain at most 5 attachments",
+            size_error="Submission attachments exceed the 50 MiB limit",
         )
     except NotFound:
         replay = await _existing_submission(session, homework_id, payload)

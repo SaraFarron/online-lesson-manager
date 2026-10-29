@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from telegram.api import ScheduleDay, ScheduleItem, ScheduleResponse
-from telegram.schedule_format import (
+from telegram.dialogs.schedule.formatting import (
     MAX_LABEL_CODEPOINTS,
     MAX_MESSAGE_UTF16_UNITS,
     format_schedule_pages,

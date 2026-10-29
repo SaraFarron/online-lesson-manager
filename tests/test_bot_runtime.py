@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from aiogram.exceptions import TelegramBadRequest
 
-from telegram.dialogs import Screens
+from telegram.dialogs.home import Screens
 from telegram.runtime import build_dispatcher
 from tests.bot_support import BotDriver
 

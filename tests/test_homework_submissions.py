@@ -20,7 +20,7 @@ from backend.homework.constants import (
 )
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
 from backend.homework.schemas import HomeworkSubmissionCreate
-from backend.homework.submission_service import create_submission
+from backend.homework.services.submissions import create_submission
 from backend.main import app
 
 
@@ -413,6 +413,9 @@ async def test_submission_attachment_limits_and_foreign_staging(
         },
     )
     assert over_limit.status_code == 413
+    assert (
+        over_limit.json()["detail"] == "Submission attachments exceed the 50 MiB limit"
+    )
     assert (
         await db_session.scalar(select(func.count()).select_from(HomeworkSubmission))
         == 1

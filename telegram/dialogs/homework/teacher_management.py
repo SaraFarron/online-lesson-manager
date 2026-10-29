@@ -20,13 +20,13 @@ from telegram.api import (
     SessionView,
     StudentPickerPage,
 )
-from telegram.feedback import feedback_block
-from telegram.homework_text import (
+from telegram.dialogs.homework.text import (
     change_homework_text_page,
     homework_text_page,
 )
-from telegram.homework_transfer import HomeworkDownloadFile
-from telegram.onboarding import backend
+from telegram.dialogs.homework.transfer import HomeworkDownloadFile
+from telegram.shared.access import backend
+from telegram.shared.feedback import feedback_block
 
 STUDENT_PAGE_SIZE = 20
 ASSIGNMENT_PAGE_SIZE = 20

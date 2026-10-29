@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.constants import EventType
 from backend.events.constants import RecurrenceMode
-from backend.events.management import build_event_revision
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
+from backend.events.revisions import build_event_revision
 
 
 def _headers(token: str) -> dict[str, str]:

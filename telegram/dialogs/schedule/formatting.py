@@ -7,7 +7,7 @@ from unicodedata import category
 from zoneinfo import ZoneInfo
 
 from telegram.api import ScheduleDay, ScheduleItem, ScheduleResponse
-from telegram.inputs import format_compact_schedule_date, format_human_time
+from telegram.shared.inputs import format_compact_schedule_date, format_human_time
 
 ViewerRole = Literal["TEACHER", "STUDENT"]
 MAX_MESSAGE_UTF16_UNITS = 3500

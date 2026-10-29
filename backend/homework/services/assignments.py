@@ -14,10 +14,6 @@ from backend.events import range_service as event_range_service
 from backend.events.occurrences import OccurrenceSourceKind
 from backend.events.time_utils import normalize_utc, to_storage_utc
 from backend.exceptions import Conflict, Forbidden, NotFound, ValidationError
-from backend.homework.constants import (
-    MAX_ASSIGNMENT_ATTACHMENT_BYTES,
-    MAX_ASSIGNMENT_ATTACHMENTS,
-)
 from backend.homework.models import Homework, HomeworkAttachment
 from backend.homework.schemas import (
     HomeworkCreate,
@@ -25,6 +21,7 @@ from backend.homework.schemas import (
     HomeworkStatus,
     LessonOccurrenceReference,
 )
+from backend.homework.services.staged_attachments import load_staged_attachments
 
 logger = logging.getLogger(__name__)
 
@@ -148,49 +145,6 @@ async def _validate_lesson_occurrence(
     return values
 
 
-async def _load_staged_attachments(
-    session: AsyncSession,
-    teacher_id: uuid.UUID,
-    attachment_ids: list[uuid.UUID],
-) -> list[HomeworkAttachment]:
-    if len(attachment_ids) > MAX_ASSIGNMENT_ATTACHMENTS:
-        raise ValidationError("An assignment may contain at most 5 attachments")
-    if not attachment_ids:
-        return []
-
-    attachments = list(
-        (
-            await session.scalars(
-                select(HomeworkAttachment)
-                .where(
-                    HomeworkAttachment.id.in_(attachment_ids),
-                    HomeworkAttachment.owner_user_id == teacher_id,
-                    HomeworkAttachment.homework_id.is_(None),
-                    HomeworkAttachment.submission_id.is_(None),
-                    HomeworkAttachment.cleanup_pending.is_(False),
-                )
-                .with_for_update()
-            )
-        ).all()
-    )
-    if len(attachments) != len(attachment_ids):
-        raise NotFound("Staged attachment not found")
-
-    now = datetime.now(UTC)
-    if any(
-        attachment.staged_until is None or normalize_utc(attachment.staged_until) <= now
-        for attachment in attachments
-    ):
-        raise HTTPException(status_code=410, detail="Staged attachment has expired")
-    if sum(attachment.byte_size for attachment in attachments) > (
-        MAX_ASSIGNMENT_ATTACHMENT_BYTES
-    ):
-        raise HTTPException(
-            status_code=413, detail="Assignment attachments exceed the 50 MiB limit"
-        )
-    return attachments
-
-
 async def create_assignment(
     session: AsyncSession,
     teacher: User,
@@ -225,8 +179,12 @@ async def create_assignment(
         payload.lesson_occurrence,
     )
     try:
-        attachments = await _load_staged_attachments(
-            session, teacher_id, payload.attachment_ids
+        attachments = await load_staged_attachments(
+            session,
+            teacher_id,
+            payload.attachment_ids,
+            count_error="An assignment may contain at most 5 attachments",
+            size_error="Assignment attachments exceed the 50 MiB limit",
         )
     except NotFound:
         replay = await _existing_result(session, teacher_id, payload, operation_key)
