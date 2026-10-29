@@ -3,16 +3,21 @@ import asyncio
 import pytest
 from aiogram.exceptions import TelegramBadRequest
 
+from telegram.dialogs import Screens
 from telegram.runtime import build_dispatcher
 from tests.bot_support import BotDriver
 
 
 async def test_editable_screens_and_input() -> None:
+    assert Screens.welcome.state == "Screens:welcome"
+    assert Screens.details.state == "Screens:details"
     driver = BotDriver(build_dispatcher())
     try:
         await driver.text("/start")
+        assert driver.callback_data("Continue").endswith("\x1dcontinue")
         first = driver.session.last_message.message_id
         await driver.click("Continue")
+        assert driver.callback_data("Timezone").endswith("\x1dtimezone")
         await driver.click("Timezone")
         await driver.text("Invalid/Zone")
         assert "valid IANA timezone" in driver.session.last_message.text
