@@ -140,9 +140,11 @@ records the nullable weekly-lesson cutoff contract, one-year validation limit,
 date/time prompt behavior, schedule labels, and this release's verification.
 [Automatic between-lesson breaks](docs/plans/automatic-between-lesson-breaks.md)
 are implemented and verified; [homework](docs/plans/homework-backend-and-telegram-ui.md)
-teacher and student Telegram actions are implemented, with Task 11
-cross-flow/restart/storage verification remaining. Notification delivery is
-not implemented.
+teacher and student Telegram actions are implemented. Homework Task 11's
+cross-flow/restart/storage verification is recorded as complete; the focused
+2026-10-31 rerun passed (87 tests), including persisted file transfer,
+restart/recovery, authorization, deletion cleanup, and staging cleanup.
+Notification delivery is not implemented.
 [Telegram error feedback](docs/plans/telegram-error-emphasis.md) defines the
 verified bot presentation contract: escaped errors and attention notices lead
 the active screen, ordinary failures do not add messages or callback popups,

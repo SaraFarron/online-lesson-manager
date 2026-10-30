@@ -4,7 +4,7 @@
 
 Establish which disputed features really work, finish verified gaps, and publish one consistent, evidence-backed completion record.
 
-**Status:** In progress; Tasks 00–01 complete, Tasks 02–04 not yet verified.
+**Status:** In progress; Tasks 00–02 complete, Tasks 03–04 not yet verified.
 
 ## Scope (README.md sections covered)
 
@@ -87,7 +87,9 @@ The schedule router's empty-file note is not proof of missing schedule APIs: ins
 
 **Reuse:** [Homework plan](./homework-backend-and-telegram-ui.md), existing homework fixtures/services and Bot API recorder.
 
-**Acceptance Criteria:** [ ] Data/file persistence, access revocation and cleanup outcomes are demonstrated. [ ] Task 11 and AGENTS handoff agree; no duplicate implementation of working homework.
+**Acceptance Criteria:** [x] Data/file persistence, access revocation and cleanup outcomes are demonstrated. [x] Task 11 and AGENTS handoff agree; no duplicate implementation of working homework.
+
+**Execution (2026-10-31):** Focused backend/dispatcher coverage passed (87 passed) across `test_homework_*.py`, teacher/student homework dialogs, cross-flow, Telegram homework text, and package-boundary tests. Assertions cover actual bytes across bot restart, role/teacher isolation, inaccessible deleted files, retryable deletion tombstones, interrupted uploads, and expiry cleanup. An isolated SQLite database was migrated to head and `uv run python -m backend.homework.cleanup` exited successfully against a separate temporary storage path (0 failures); the cleanup-service test separately confirmed removal of an expired file and row. The first CLI attempt exposed missing SQLAlchemy model registration (`User.events` could not resolve `Event`); the CLI now imports the auth, event, and homework model modules, matching the test model-registration pattern. Ruff check, touched-file format check, `mypy backend`, and `mypy telegram` passed. Local and production Compose manifests were inspected for persistent `homework_data` mounts; no live storage was accessed.
 
 **Out of scope:** Homework notification delivery. **Suitable for:** AI agent.
 

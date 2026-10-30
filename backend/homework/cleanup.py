@@ -3,7 +3,10 @@ import logging
 
 from fastapi import HTTPException
 
+from backend.auth import models as auth_models  # noqa: F401
 from backend.database import SessionFactory
+from backend.events import models as event_models  # noqa: F401
+from backend.homework import models as homework_models  # noqa: F401
 from backend.homework.config import homework_settings
 from backend.homework.services.attachments import cleanup_expired_staged_attachments
 
