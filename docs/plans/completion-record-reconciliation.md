@@ -4,7 +4,7 @@
 
 Establish which disputed features really work, finish verified gaps, and publish one consistent, evidence-backed completion record.
 
-**Status:** In progress; Tasks 00–02 complete, Tasks 03–04 not yet verified.
+**Status:** Tasks 00–02 complete; Task 03 blocked on owner-provided external acceptance; Task 04 pending.
 
 ## Scope (README.md sections covered)
 
@@ -104,6 +104,8 @@ The schedule router's empty-file note is not proof of missing schedule APIs: ins
 **Reuse:** [Auth plan](./TELEGRAM-AUTH-PLAN.md), [UX fixes](./AUTH-UX-FIXES.md), existing Compose/run documentation.
 
 **Acceptance Criteria:** [ ] Automated/local/live results are separated. [ ] Unavailable external checks remain unchecked with owner prerequisites; genuine deployment defects have bounded fixes and checks.
+
+**Execution (2026-10-31; external gate pending):** Auth/onboarding/code tests passed (30 passed); repository Ruff check/format and backend/Telegram mypy passed. Local and production Compose configs validated; an isolated local Compose project migrated PostgreSQL to head, served `/docs` (HTTP 200), created homework storage on the named persistent volume with mode 0700, shut down cleanly (exit 0), and recovered after restart (an immediate probe was early; a retry returned HTTP 200 and storage remained mode 0700). The disposable project/volumes were removed; the pre-existing development stack remained responsive. No bot poller or live code rotation was started. The real separate-server HTTPS check remains blocked because no approved HTTPS target or test access was provided. Exact follow-up: provide a disposable HTTPS backend target with a valid certificate and arrange test credentials through an ignored local `.env` or secret manager; then run the compatible backend and bot against that host and verify a real HTTPS auth/session flow. Narrow-screen registration review also remains a manual owner check in a real Telegram client; verify teacher and student setting labels, correct edit destinations, and same-message navigation. These checks are not claimed complete.
 
 **Out of scope:** Unsolicited live messages, production rotation or infrastructure redesign. **Suitable for:** AI agent; human approval/access for live acceptance.
 
