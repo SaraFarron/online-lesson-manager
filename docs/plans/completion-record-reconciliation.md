@@ -4,7 +4,7 @@
 
 Establish which disputed features really work, finish verified gaps, and publish one consistent, evidence-backed completion record.
 
-**Status:** In progress; Task 00 complete, Tasks 01–04 not yet verified.
+**Status:** In progress; Tasks 00–01 complete, Tasks 02–04 not yet verified.
 
 ## Scope (README.md sections covered)
 
@@ -71,7 +71,9 @@ The schedule router's empty-file note is not proof of missing schedule APIs: ins
 
 **Reuse:** [Scheduling UI plan](./telegram-scheduling-and-settings-ui.md), current dialogs and existing booking/bot tests.
 
-**Acceptance Criteria:** [ ] Original Tasks 09–11 are closed or individually blocked with evidence. [ ] Restart, stale callbacks, permissions and uncertain writes are covered; regressions/common checks pass.
+**Acceptance Criteria:** [x] Original Tasks 09–11 are closed or individually blocked with evidence. [x] Restart, stale callbacks, permissions and uncertain writes are covered; regressions/common checks pass.
+
+**Execution (2026-10-31):** `uv run pytest -q tests/test_bot_vacation_management.py tests/test_bot_settings_dialogs.py tests/test_bot_cross_flow.py tests/test_bot_schedule_integration.py tests/test_bot_lesson_creation.py tests/test_bot_lesson_management.py tests/test_bot_break_management.py tests/test_occurrence_actions.py tests/test_recurrent_event_edits.py tests/test_bot_runtime.py` passed (77 passed). `uv run ruff check telegram tests`, `uv run ruff format --check telegram tests`, and `uv run mypy telegram` passed. The focused real-dispatcher/ASGI tests cover creation/management, settings, vacations, break displacement, permissions, restart/stale callbacks and uncertain writes. No live Telegram readability check was performed; it was not claimed by the original Task 11.
 
 **Out of scope:** Notifications or new scheduling rules. **Suitable for:** AI agent.
 
