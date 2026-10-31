@@ -145,6 +145,12 @@ cross-flow/restart/storage verification is recorded as complete; the focused
 2026-10-31 rerun passed (87 tests), including persisted file transfer,
 restart/recovery, authorization, deletion cleanup, and staging cleanup.
 Notification delivery is not implemented.
+[Event-editor consistency](docs/plans/telegram-event-editor-consistency.md)
+owns the remaining form-consistency criteria; PostgreSQL verification remains
+unavailable. Do not infer its completion from the scheduling/settings UI plan.
+[Completion-record reconciliation](docs/plans/completion-record-reconciliation.md)
+records current evidence; the disposable local Compose stack was verified,
+while separate-server HTTPS and narrow-screen Telegram checks remain blocked.
 [Telegram error feedback](docs/plans/telegram-error-emphasis.md) defines the
 verified bot presentation contract: escaped errors and attention notices lead
 the active screen, ordinary failures do not add messages or callback popups,

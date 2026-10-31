@@ -4,7 +4,7 @@
 
 Teachers and students can manage their authorized lessons and vacations, teachers can manage manual breaks, and both roles can edit saved preferences from Telegram without using Swagger.
 
-**Status:** Tasks 00–08 approved/verified; Tasks 09–11 are pending.
+**Status:** Tasks 00–11 approved/verified with simulated dispatcher and real ASGI backend; live Telegram readability smoke test not run.
 
 ## Scope (README.md sections covered)
 
@@ -19,8 +19,8 @@ Teachers and students can manage their authorized lessons and vacations, teacher
 - [Lesson routes](../../backend/lessons/router.py), [break routes](../../backend/breaks/router.py), and [vacation routes](../../backend/vacations/router.py) provide mutations. They do not currently provide the authorized detail/list reads needed for editing. Recurring lesson/break updates accept full recurrence data; vacations have one-off routes only.
 - [Schedule reads](../../backend/schedule/service.py) intentionally hide vacation-suppressed occurrences. Their response is a display snapshot, not an editable series representation: it lacks subject IDs, recurrence metadata, and cancellation lists. Do not repurpose it as an unrestricted management API.
 - [Auth routes](../../backend/auth/router.py) expose owner-only profile reads/updates and self PATCH, plus a bounded active-student picker for the authenticated teacher; the general users list remains superuser-only. Do not relax owner-only profile access to populate the picker.
-- [BackendClient](../../telegram/api.py) supports onboarding, account/profile reads, and schedules. Its generic response parsing expects JSON and its error mapping discards structured backend details; add explicit mutation/204/error support rather than displaying arbitrary response bodies.
-- Reuse [dialogs](../../telegram/dialogs.py), [onboarding parsers/widgets](../../telegram/onboarding.py), [clock/timezone parsers](../../telegram/inputs.py), [schedule dialogs](../../telegram/schedule_dialogs.py), and [runtime isolation/edit middleware](../../telegram/runtime.py).
+- [BackendClient](../../telegram/api/client.py) supports typed backend operations. At plan creation, the client only handled onboarding, account/profile reads, and schedules; the completed tasks below added the required management operations.
+- Reuse [dialogs](../../telegram/dialogs/), [onboarding](../../telegram/dialogs/onboarding.py), [clock/timezone parsers](../../telegram/shared/inputs.py), [schedule dialogs](../../telegram/dialogs/schedule/), and [runtime isolation/edit middleware](../../telegram/runtime.py).
 - Backend authorization remains in `resolve_teacher_id`, `assert_can_assign_user`, `assert_owns_event`, and `assert_teacher_actor` in [event utilities](../../backend/events/utils.py). The existing generic event dependency is not a substitute for domain-specific dependencies on live routes.
 
 ## Dependencies and execution order

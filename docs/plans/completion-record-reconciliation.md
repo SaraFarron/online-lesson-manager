@@ -4,7 +4,7 @@
 
 Establish which disputed features really work, finish verified gaps, and publish one consistent, evidence-backed completion record.
 
-**Status:** Tasks 00–02 complete; Task 03 blocked on owner-provided external acceptance; Task 04 pending.
+**Status:** Tasks 00–02 complete; Task 03 blocked/incomplete pending owner-provided external acceptance; Task 04 complete under explicit user authorization while Task 03 remains blocked.
 
 ## Scope (README.md sections covered)
 
@@ -14,7 +14,7 @@ Establish which disputed features really work, finish verified gaps, and publish
 
 ## Evidence and boundaries
 
-At planning time, the working tree is clean. The following conflicts require verification:
+At planning time, the working tree is clean. The following conflicts were identified before execution; their current disposition is in the execution inventory below.
 
 | Record | Conflict or unresolved check |
 |---|---|
@@ -31,11 +31,11 @@ The schedule router's empty-file note is not proof of missing schedule APIs: ins
 
 | Disputed item | Evidence-backed status | Evidence and owning check |
 |---|---|---|
-| Scheduling/settings Tasks 09–11 | Implemented with recorded simulated-dispatcher/real-ASGI coverage; the plan header is stale. | [Scheduling plan](./telegram-scheduling-and-settings-ui.md) records completed acceptance and execution for vacations, settings, and cross-flow behavior, including 265 passed/4 skipped for Task 11. Current code is under `telegram/dialogs/vacations.py`, `settings.py`, `lessons/`, and `breaks.py`. Focused current regression checks belong to Task 01: `test_bot_vacation_management.py`, `test_bot_settings_dialogs.py`, `test_bot_cross_flow.py`, `test_bot_schedule_integration.py`, `test_bot_lesson_creation.py`, `test_bot_lesson_management.py`, `test_bot_break_management.py`, `test_occurrence_actions.py`, `test_recurrent_event_edits.py`, and `test_bot_runtime.py`. Live Telegram readability was not claimed. No code defect is established by the status conflict. |
-| Homework Task 11 | Historically verified; the completion claim is supported, while README/AGENTS handoffs are stale. | [Homework plan](./homework-backend-and-telegram-ui.md) records 366 passed/5 skipped, isolated SQLite upgrade/downgrade/re-upgrade and `alembic check`, Compose validation, persisted file checks, restart, retry, outage, and ownership cases (2026-10-26). Current code is under `telegram/dialogs/homework/`, `telegram/api/transfer.py`, and `backend/homework/services/`; storage cleanup is in `backend/homework/services/attachments.py`. Task 02 will rerun focused coverage in `test_homework_*.py`, `test_bot_homework_creation.py`, `test_bot_homework_management.py`, `test_bot_homework_student.py`, `test_bot_cross_flow.py`, and `test_telegram_homework_text.py`, including cleanup behavior. No duplicate homework implementation is indicated. |
-| Event-editor consistency | Open/partially verified; not a scheduling/settings closeout item. | [Original event-editor plan](./telegram-event-editor-consistency.md) records Task 01 complete on SQLite and PostgreSQL unavailable; its remaining criteria are unchecked. [Closeout plan](./telegram-event-editor-closeout.md) owns the bounded mapping and remaining UI work. Current client owners are `telegram/dialogs/lessons/`, `breaks.py`, and `vacations.py`, with shared inputs in `telegram/shared/`; regression owners include `test_bot_lesson_creation.py`, `test_bot_lesson_management.py`, `test_bot_break_management.py`, `test_bot_vacation_management.py`, `test_bot_cross_flow.py`, `test_bot_runtime.py`, `test_open_ended_recurrence_schema.py`, `test_event_conflicts.py`, and `test_recurrent_event_edits.py`. Task 04 will link the continuation without claiming its criteria complete. |
-| Auth, deployment, and auth UX | Automated onboarding/code behavior has historical verification; full Compose startup, separate-server HTTPS, narrow-mobile rendering, and approved live code-rotation acceptance remain distinct checks. | [Auth plan](./TELEGRAM-AUTH-PLAN.md) records Tasks 00–13 verified except full Compose startup and real separate-server HTTPS. [Auth UX plan](./AUTH-UX-FIXES.md) still has unchecked items; Task 03 will run `test_bot_onboarding.py`, `test_teacher_codes.py`, `test_bot_runtime.py`, and `test_smoke.py`, plus applicable lint/type checks. Mobile rendering requires a real narrow Telegram client; production rotation/live invitation checks require owner approval. Do not treat local tests as those checks. |
-| Refactoring path references | Historical test counts remain historical; current package ownership is split. | Use `telegram/dialogs/`, `telegram/api/`, and `backend/homework/services/` when updating affected links. Task 04 owns only links/status text directly involved in this reconciliation; no broad historical rewrite is warranted. |
+| Scheduling/settings Tasks 09–11 | Verified; the stale status header is now reconciled. | [Scheduling plan](./telegram-scheduling-and-settings-ui.md) records completed acceptance and execution for vacations, settings, and cross-flow behavior; Task 01 rerun passed 77 focused tests across real-dispatcher/ASGI flows. Current code is under `telegram/dialogs/vacations.py`, `settings.py`, `lessons/`, and `breaks.py`. Tests cover restart/stale callbacks, permissions and uncertain writes. Live Telegram readability remains unverified; no code defect was established. |
+| Homework Task 11 | Verified historically and by the reconciliation rerun; README/AGENTS handoffs now agree. | [Homework plan](./homework-backend-and-telegram-ui.md) records 366 passed/5 skipped, isolated SQLite upgrade/downgrade/re-upgrade and `alembic check`, persisted file/restart/retry/outage/ownership coverage (2026-10-26). Task 02 rerun passed 87 focused tests, including deletion revocation/retry, interrupted uploads, and expiry cleanup. Current code is under `telegram/dialogs/homework/`, `telegram/api/transfer.py`, and `backend/homework/services/`; standalone cleanup CLI model loading was fixed and verified on disposable SQLite. |
+| Event-editor consistency | Open/partially verified; not a scheduling/settings closeout item. | [Original event-editor plan](./telegram-event-editor-consistency.md) records Task 01 complete on SQLite and PostgreSQL unavailable; remaining criteria are unchecked. It owns the open UI work. Current client owners are `telegram/dialogs/lessons/`, `breaks.py`, and `vacations.py`, with shared inputs in `telegram/shared/`; regression owners include `test_bot_lesson_creation.py`, `test_bot_lesson_management.py`, `test_bot_break_management.py`, `test_bot_vacation_management.py`, `test_bot_cross_flow.py`, `test_bot_runtime.py`, `test_open_ended_recurrence_schema.py`, `test_event_conflicts.py`, and `test_recurrent_event_edits.py`. Task 04 links the tracked plan without claiming its criteria complete. |
+| Auth, deployment, and auth UX | Automated onboarding/code behavior and the default local Compose stack are verified; separate-server HTTPS, narrow-mobile rendering, and approved live code-rotation acceptance remain blocked/unverified. | [Auth plan](./TELEGRAM-AUTH-PLAN.md) now records the isolated PostgreSQL/backend stack, migrations, readiness, private persistent storage, graceful shutdown, and restart; its separate-server HTTPS checkbox remains unchecked. [Auth UX plan](./AUTH-UX-FIXES.md) records 30 passing tests and checked automated criteria, while mobile readability and live second-account acceptance remain unchecked. HTTPS requires an owner-approved target and local secret provisioning; mobile verification requires a real Telegram client. |
+| Refactoring path references | Current package ownership is split and affected plan links now point to current paths. | Use `telegram/dialogs/`, `telegram/api/`, `backend/events/management/`, `backend/events/mutations/`, and `backend/homework/services/`; historical test counts remain dated evidence. No broad historical rewrite is warranted. |
 
 ## Common execution and validation rules
 
@@ -57,7 +57,7 @@ The schedule router's empty-file note is not proof of missing schedule APIs: ins
 
 **Acceptance Criteria:** [x] Every disputed item has evidence or a named check still needed. [x] Each actual defect gets a bounded repair criterion and owning task; unrelated opportunities stay excluded.
 
-**Execution (2026-10-31):** Inspected the current dialog, homework-service, cleanup, and invitation-code implementations and confirmed the named test files and historical plan evidence. The only confirmed discrepancy is stale completion/handoff documentation, assigned to Task 04. No behavioral defect was established from plan-status conflicts. Scheduling, homework, and auth regression checks are assigned to Tasks 01–03; event-editor criteria remain with the linked closeout plan. External HTTPS, manual mobile, and owner-approved live rotation checks remain explicitly unverified.
+**Execution (2026-10-31):** Inspected the current dialog, homework-service, cleanup, and invitation-code implementations and confirmed the named test files and historical plan evidence. The only confirmed discrepancy was stale completion/handoff documentation, reconciled in Task 04. No behavioral defect was established from the original status conflicts. Scheduling and homework regression checks passed; auth local checks passed, while Task 03 remains blocked on owner-provided external acceptance. Event-editor criteria remain with the linked original plan.
 
 **Out of scope:** Broad redesign or declaring success from unchecked claims. **Suitable for:** AI agent.
 
@@ -115,11 +115,13 @@ The schedule router's empty-file note is not proof of missing schedule APIs: ins
 
 **Context:** Historical baselines must not be mistaken for present functionality.
 
-**What to do:** Update statuses, checkboxes and affected relative links consistently, preserve dated historical evidence, and explicitly cross-link superseding contracts. Reference [event-editor closeout](./telegram-event-editor-closeout.md) for still-open UI work. Add the remaining feature sequence without marking plans implemented. Check local links and whitespace.
+**What to do:** Update statuses, checkboxes and affected relative links consistently, preserve dated historical evidence, and explicitly cross-link superseding contracts. Reference the [original event-editor plan](./telegram-event-editor-consistency.md) for still-open UI work. Add the remaining feature sequence without marking plans implemented. Check local links and whitespace.
 
 **Reuse:** Existing status conventions and canonical `docs/plans/` location.
 
-**Acceptance Criteria:** [ ] No remaining contradictory completion claims for audited criteria. [ ] A blocked check stays blocked, not complete. [ ] Every follow-up has one owning plan.
+**Acceptance Criteria:** [x] No remaining contradictory completion claims for audited criteria. [x] A blocked check stays blocked, not complete. [x] Every follow-up has one owning plan.
+
+**Execution (2026-10-31; completed under explicit authorization while Task 03 remains blocked):** Reconciled README/AGENTS and the scheduling, homework, authentication, and package-refactoring handoffs with the verified evidence. Updated the relevant local links to current package paths and linked open event-editor UI work to its tracked plan; remaining feature plans are listed as future work, not completed features. A local-link check across eight reconciled documents found all targets, and `git diff --check` passed. Task 03 remains blocked on owner-provided separate-server HTTPS access and manual narrow-screen Telegram review.
 
 **Out of scope:** Rewriting all historical prose or fixing unrelated docs. **Suitable for:** AI agent.
 

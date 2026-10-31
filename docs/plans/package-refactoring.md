@@ -28,20 +28,20 @@ changing API contracts, scheduling rules, stored data, or Telegram behavior.
   relevant backend flows as implemented and the bot as partially implemented
   overall. There is **no Known Issues / Tech Debt section** in the inspected
   instructions; do not infer missing behavior from that absent section.
-- The bot has 23 top-level Python files. The approximately 1,900-line
-  [API module](../../telegram/api.py) contains client models, exceptions, circuit
-  breaking, HTTP handling, and streaming. Several dialogs exceed 1,000 lines.
-  Size is a navigation warning, not proof that their behavior needs rewriting.
+- At plan creation, the bot had 23 top-level Python files. The approximately
+  1,900-line API module has since been split into the [API package](../../telegram/api/),
+  containing client models, exceptions, circuit breaking, HTTP handling, and
+  streaming. Several dialogs exceeded 1,000 lines. Size is a navigation warning,
+  not proof that their behavior needs rewriting.
 - Scheduling, settings, and homework dialogs import `backend(manager)` from
-  [onboarding](../../telegram/onboarding.py). This shared dependency lookup does
-  not belong to a registration flow.
+  the shared [onboarding dialog](../../telegram/dialogs/onboarding.py). This
+  shared dependency lookup does not belong to a registration flow.
 - [Runtime](../../telegram/runtime.py) is already a useful composition root:
   it constructs and registers dialogs explicitly, isolates updates per user,
   and handles expired callbacks. Keep that design.
-- [Event management](../../backend/events/management.py) contains both authorized
-  reads and `build_event_revision`; [mutations](../../backend/events/service.py)
-  import the latter from the read module. Revision generation belongs below
-  both readers and writers.
+- Event reads are in [management/reads.py](../../backend/events/management/reads.py);
+  [revision generation](../../backend/events/revisions.py) is shared by readers
+  and [mutations](../../backend/events/mutations/).
 - The approximately 890-line event service mixes database serialization,
   one-off writes, recurrence writes, and occurrence actions. Extract these
   cohesive units without duplicating
@@ -51,10 +51,12 @@ changing API contracts, scheduling rules, stored data, or Telegram behavior.
   [range reads](../../backend/events/range_service.py),
   [recurrence expansion](../../backend/events/occurrences.py), or
   [visibility](../../backend/events/visibility.py).
-- Homework's ambiguously named [service](../../backend/homework/service.py)
-  actually owns attachment staging, private storage, streaming, and cleanup.
-  The assignment, read, submission, and management services are already
-  meaningful divisions; group and rename them rather than merging them.
+- The former ambiguously named homework service is now split between
+  [attachment transfer](../../backend/homework/services/attachments.py),
+  [staged attachment handling](../../backend/homework/services/staged_attachments.py),
+  and the [cleanup command](../../backend/homework/cleanup.py). Assignment,
+  read, submission, and management services remain separate; group and rename
+  them rather than merging them.
 - `assignment_service._load_staged_attachments` and
   `submission_service._load_staged_attachments` duplicate the owner-scoped locked
   query, expiry, and byte-limit checks. Their assignment/submission error text

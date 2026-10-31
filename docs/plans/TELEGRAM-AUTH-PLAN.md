@@ -165,8 +165,10 @@ separation was checked without printing secrets. Local backend/live bot startup
 and graceful poller replacement were verified. Backend outage/retry is tested
 with injected transport failures, not by interrupting the live user's backend.
 
-Full Compose stack startup and real separate-server HTTPS deployment remain
-deployment acceptance checks, not claims of verified production operation.
+The default local Compose stack (PostgreSQL and backend; no optional bot
+profile) was exercised on 2026-10-31 with isolated project resources. A real
+separate-server HTTPS deployment remains an external acceptance check, not a
+claim of verified production operation.
 Scheduling enforcement, notification delivery, offline schedule cache,
 account linking and post-onboarding settings UI remain outside this milestone.
 
@@ -710,12 +712,14 @@ AI agent; coordinate shared helper ownership with Task 10.
 
 - [x] Same-machine backend/bot launch is documented; local backend/live-bot startup is smoke-tested.
 - [x] Separate-server configuration is documented and both Compose files validate.
-- [ ] Full Compose stack startup is verified.
+- [x] Full default local Compose stack startup is verified; the optional bot profile was not started.
 - [ ] Real separate-server HTTPS deployment is smoke-tested.
 - [x] Image includes required bot modules and production dependencies.
 - [x] Service environment separation is verified without printing secret values.
 - [x] Graceful stop/start does not leave a duplicate poller; backend outage/retry behavior is tested with injected transport failures.
 - [x] Common implementation checks pass. Use configured container tooling for any container commands.
+
+**Reconciliation verification (2026-10-31):** Local Compose migrations reached head, the backend served `/docs` (HTTP 200), the named homework volume was mounted and initialized with mode 0700, and the backend stopped cleanly (exit 0). After restart, readiness returned HTTP 200 and storage permissions persisted. Production Compose configuration also validated with `.env.example`. The isolated stack and volumes were removed; the pre-existing development stack remained responsive. No bot poller was started. Real separate-server HTTPS remains unchecked pending an owner-approved target and test access.
 
 ### Out of scope
 

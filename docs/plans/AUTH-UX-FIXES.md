@@ -1,5 +1,7 @@
 # Auth onboarding UX fixes
 
+**Status:** Automated onboarding/code-format and disposable rotation behavior verified on 2026-10-31; narrow-screen rendering and approved live post-rotation invitation acceptance remain unverified.
+
 Follow analyze -> implement -> verify for each task. Finish verification before
 starting the next task. Stop for an unanticipated product decision or required
 scope change. Automated tests are needed only where manual Telegram/API checks
@@ -20,11 +22,12 @@ Owner-approved scope:
 
 ### Context
 
-[README onboarding](./README.md#implemented-telegram-flows-and-limits) supports
-review/edit before registration. The review `Select` in
-[onboarding.py](./telegram/onboarding.py) currently renders all edit choices
-without an explicit row layout. On Telegram mobile, labels truncate to
-indistinguishable "Edi..." buttons.
+[README onboarding](../../README.md#интерфейс-бота) supports
+review/edit before registration. At plan creation, the review `Select` in the
+bot onboarding dialog rendered edit choices without an explicit row layout.
+The current [onboarding dialog](../../telegram/dialogs/onboarding.py) uses a
+one-choice-per-row `Column` with concise labels; automated keyboard assertions
+do not establish actual narrow-screen readability.
 
 ### What to do
 
@@ -40,8 +43,8 @@ indistinguishable "Edi..." buttons.
 
 ### Reuse
 
-Reuse `build_wizard`, `wizard_data`, `edit_setting`, and `show_step` in
-[onboarding.py](./telegram/onboarding.py), plus aiogram-dialog layout widgets.
+Reuse `build_wizard`, `wizard_data`, `edit_setting`, and `show_step` in the
+[onboarding dialog](../../telegram/dialogs/onboarding.py), plus aiogram-dialog layout widgets.
 Do not create a separate review-navigation framework.
 
 ### Acceptance Criteria
@@ -51,13 +54,15 @@ Do not create a separate review-navigation framework.
 - [ ] Student review also has readable setting choices.
 - [ ] Every choice opens the correct setting and returns to review after an
       accepted edit; unchanged values remain intact.
-- [ ] Register, Back and Cancel retain their intended behavior.
-- [ ] Normal review navigation edits the same message rather than sending
+- [x] Register, Back and Cancel retain their intended behavior.
+- [x] Normal review navigation edits the same message rather than sending
       additional messages.
 - [ ] Verify the actual mobile rendering manually. Keyboard structure assertions
       alone do not prove labels are readable.
-- [ ] Run relevant existing onboarding checks, Ruff/format checks, and
+- [x] Run relevant existing onboarding checks, Ruff/format checks, and
       `uv run mypy telegram`.
+
+**Execution (2026-10-31):** `tests/test_bot_onboarding.py` verifies one edit choice per row, distinct setting labels, separate Register/Back/Cancel controls, teacher and student review navigation, and same-message transitions with one initial `sendMessage`. The suite and Telegram Ruff/format/type checks passed. The manual narrow-screen rendering check remains unverified.
 
 ### Out of scope
 
@@ -76,11 +81,12 @@ AI agent for implementation; human for final Telegram mobile rendering check.
 
 ### Context
 
-[README invitation contract](./README.md#implemented-telegram-flows-and-limits)
-currently uses `teacher_<code>`. `generate_teacher_code` in
-[auth/service.py](./backend/auth/service.py) generates 32-character UUID hex
-codes, making links unnecessarily long. The owner approved replacing existing
-codes even though previously shared links may stop working.
+[README invitation contract](../../README.md#интерфейс-бота)
+and the code generator in [auth/service.py](../../backend/auth/service.py)
+were the implementation targets when this plan was written. At that time,
+codes were long UUID values and invitation payload formatting was duplicated.
+The owner approved replacing existing codes even though previously shared
+links may stop working.
 
 ### What to do
 
@@ -93,8 +99,9 @@ codes even though previously shared links may stop working.
 - Generate `https://t.me/<bot_username>?start=t_ABC123` instead of adding another
   `teacher_` prefix. Wire both signup completion and returning-teacher home.
 - Share bot invitation formatting/parsing logic between
-  [runtime.py](./telegram/runtime.py) and
-  [onboarding.py](./telegram/onboarding.py), rather than maintaining two rules.
+  [runtime.py](../../telegram/runtime.py) and the
+  [onboarding dialog](../../telegram/dialogs/onboarding.py), rather than
+  maintaining two rules.
 - Parse short payloads strictly. Manual student code entry and backend
   resolution must accept the full displayed code, including `t_`.
 - Audit `TeacherCode`, teacher-profile creation/update, trusted registration,
@@ -110,7 +117,7 @@ codes even though previously shared links may stop working.
   State that existing shared links will become invalid; do not add aliases.
 - Ensure returning teachers fetch and display the replacement code/link rather
   than a stale cached profile. Existing student-teacher links must not change.
-- Update [README.md](./README.md), examples and affected feature documentation.
+- Update [README.md](../../README.md), examples and affected feature documentation.
 
 ### Reuse
 
@@ -123,26 +130,29 @@ application-startup side effect.
 
 ### Acceptance Criteria
 
-- [ ] Every newly generated teacher code matches `^t_[A-Z0-9]{6}$` and has
+- [x] Every newly generated teacher code matches `^t_[A-Z0-9]{6}$` and has
       exactly eight characters; the invitation payload equals that code.
-- [ ] The generated link contains `?start=t_XXXXXX`, with no duplicated prefix,
+- [x] The generated link contains `?start=t_XXXXXX`, with no duplicated prefix,
       and Telegram opens the correct teacher-confirmation flow.
-- [ ] Manual code entry and invitation signup link students to the correct
+- [x] Manual code entry and invitation signup link students to the correct
       active teacher; invalid/inactive codes cannot create partial accounts.
-- [ ] Forced collisions exercise retry and retry-exhaustion behavior without
+- [x] Forced collisions exercise retry and retry-exhaustion behavior without
       duplicate codes or partial registration. Use focused automated checks
       for these cases rather than waiting for a random collision.
-- [ ] Dry-run performs no writes. Apply replaces every nonconforming code,
+- [x] Dry-run performs no writes. Apply replaces every nonconforming code,
       preserves already conforming codes, and rerunning is a no-op.
-- [ ] A failed rotation leaves no partially rotated set of codes. Teacher IDs,
+- [x] A failed rotation leaves no partially rotated set of codes. Teacher IDs,
       settings and existing student links remain unchanged.
-- [ ] Returning `/start` displays the updated invitation for existing teachers.
+- [x] Returning `/start` displays the updated invitation for existing teachers.
       Old rotated codes fail resolution clearly; old-code aliases are absent.
-- [ ] Verify rotation on a disposable database, then confirm the live teacher
-      home and new invitation from a second Telegram account after approved apply.
-- [ ] Existing password auth and bot signup/recovery checks remain passing.
+- [x] Rotation is verified on a disposable database.
+- [ ] Confirm the live teacher home and new invitation from a second Telegram
+      account after approved apply; production codes were not rotated.
+- [x] Existing password auth and bot signup/recovery checks remain passing.
       Run relevant Ruff/format/type checks; report known backend baseline
       failures separately rather than fixing unrelated issues.
+
+**Execution (2026-10-31):** `tests/test_teacher_codes.py`, `tests/test_bot_onboarding.py`, `tests/test_bot_runtime.py`, and `tests/test_smoke.py` passed (30 passed). The tests cover short-code generation/payloads, valid and inactive invitation flows, collision exhaustion, disposable dry-run/apply and rollback, idempotency, unchanged teacher settings/student links, refreshed returning-teacher invitations, and password-auth regressions. Ruff, formatting, and backend/Telegram mypy passed. No production code rotation or live second-account check was performed.
 
 ### Out of scope
 

@@ -14,10 +14,10 @@ Teachers can assign text/files to their own students, students can open material
 
 ## Baseline and prerequisites
 
-- [AGENTS.md](../../AGENTS.md#feature-status-vs-product-spec) and the actual [homework package](../../backend/homework/) show no homework models/router/service. Do not invent a reusable homework store.
+- At plan creation, [AGENTS.md](../../AGENTS.md#feature-status-vs-product-spec) and the actual [homework package](../../backend/homework/) showed no homework models/router/service; this plan added those pieces. Do not invent a reusable homework store.
 - [Notification model](../../backend/notifications/models.py) is only a placeholder (`receivers`, `message`, `is_sent`); no delivery service/worker exists. Do not call it an outbox or rely on it for retries.
 - [Auth models](../../backend/auth/models.py) supply teacher/student linkage and Telegram identity/routing. User IDs are the domain identities; the backend must own homework state independently of Telegram message IDs.
-- [Bot client](../../telegram/api.py), [onboarding](../../telegram/onboarding.py), [runtime](../../telegram/runtime.py) and [recording transport](../../tests/bot_support.py) provide HTTP, dialog, private-chat, isolation and test patterns; attachment transfer is new.
+- [Bot client](../../telegram/api/client.py), [onboarding](../../telegram/dialogs/onboarding.py), [runtime](../../telegram/runtime.py) and [recording transport](../../tests/bot_support.py) provide HTTP, dialog, private-chat, isolation and test patterns; attachment transfer is new.
 - Schedule foundation provides exact `(source kind, source ID, UTC occurrence start)` identities and vacation/cancellation filtering. Use these if homework is linked to lessons; do not use a series UUID alone or create homework as a fake scheduling event.
 - Recommended implementation order: [scheduling/settings UI](./telegram-scheduling-and-settings-ui.md), [automatic breaks](./automatic-between-lesson-breaks.md), then this milestone. Homework's core backend does not technically depend on automatic breaks, but Telegram home/client edits should be coordinated.
 
@@ -319,6 +319,8 @@ Document later notification consumers: assignment-created and finalized-solution
 **Acceptance:** [x] Every README homework action is reachable and verified from Telegram, with exact data/file assertions. [x] Storage persists across restart; failure cleanup and ownership boundaries are tested. [x] Common checks and migration evidence are recorded; notification limitations are explicit.
 
 **Verification (2026-10-26):** `uv run pytest -q tests` (366 passed, 5 skipped); focused `uv run pytest -q tests/test_bot_homework_management.py` (4 passed); `uv run ruff check telegram tests`; `uv run ruff format --check telegram tests`; `uv run mypy backend/homework`; and `uv run mypy telegram`. Isolated SQLite checks upgraded through head, downgraded to base, re-upgraded, and passed `alembic check`; local and production Compose configurations passed validation with `.env.example`. Dispatcher tests exercise teacher assignment, student material download and file submission, persisted completion provenance/bytes across newly built bot drivers, student/teacher isolation, teacher manual completion and deletion, auth renewal, interrupted upload retry with the same idempotency key, and storage outage/recovery without publishing partial work. The README records the future notification consumer handoff; delivery, an outbox, and assignment/submission push toggles remain out of scope.
+
+**Reconciliation verification (2026-10-31):** The focused homework backend/dispatcher suites passed (87 passed), covering actual file bytes across bot restart, role isolation, deletion revocation/retry, interrupted uploads, and expired staged-file cleanup. The cleanup CLI was run against a migrated disposable SQLite database and temporary storage path with zero failures. This rerun also found and fixed standalone CLI model registration; no live storage was accessed.
 
 **Out of scope:** Morning digests, reminder scheduling, broadcast delivery, HTMX, full student history. **Suitable for:** AI agent; human for optional real-Telegram file/readability acceptance.
 

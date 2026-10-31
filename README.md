@@ -189,8 +189,11 @@ were also manually confirmed. PostgreSQL schedule-mutation tests run when
 `SCHEDULE_TEST_DATABASE_URL` points to a disposable PostgreSQL database; each
 test creates and removes its own temporary schema. Disposable
 SQLite/PostgreSQL migration checks and image/Compose configuration checks
-passed; a full Compose stack startup and separate-server HTTPS deployment have
-not been exercised.
+passed. A disposable local PostgreSQL/backend Compose stack was also started
+and verified on 2026-10-31: migrations reached head, the backend served `/docs`,
+private homework storage was mounted with mode `0700`, and graceful stop/restart
+preserved the storage mount. The optional bot profile was not started. A
+separate-server HTTPS deployment has not been exercised.
 
 ### Running backend and bot
 
@@ -289,12 +292,12 @@ intermediate mismatch returns authentication errors, not offline success.
 1. [Telegram: управление расписанием и настройками](./docs/plans/telegram-scheduling-and-settings-ui.md) — реализовано; проверка и критерии завершения записаны в плане.
 2. [Автоматические перерывы после уроков, включая Telegram UI](./docs/plans/automatic-between-lesson-breaks.md) —
    реализовано и проверено на SQLite/PostgreSQL; наследуемые уроки не изменяются автоматически.
-3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md) — реализованы контракт, backend, создание и управление заданиями учителем, а также просмотр/сдача решений учеником в Telegram; осталось сквозное подтверждение хранения, поведения после перезапуска и передача требований для будущих уведомлений.
+3. [Домашние задания: backend и Telegram UI](./docs/plans/homework-backend-and-telegram-ui.md) — реализованы контракт, backend, создание и управление заданиями учителем, а также просмотр/сдача решений учеником в Telegram; Task 11 и повторная проверка хранения, поведения после перезапуска и очистки завершены. Требования для будущих уведомлений записаны отдельно; доставка остается нереализованной.
 4. [Сокращение интерфейса Telegram](./docs/plans/telegram-interface-streamlining.md) — завершено и проверено. Этот план заменяет только старую грамматику дат и контракт отображения расписания (UTC-смещения, счетчики страниц, Refresh); он не меняет API, правила расписания или авторизацию.
 5. [Ошибки в интерфейсе Telegram](./docs/plans/telegram-error-emphasis.md) — ошибки и неопределённые исходы выделяются в начале текущего экрана; длинный текст заданий разбит на страницы без усечения.
 6. [Рефакторинг пакетов Telegram, событий и домашних заданий](./docs/plans/package-refactoring.md) — перегруппировка модулей завершена поэтапно с сохранением поведения и проверкой контрактов; результаты проверок записаны в плане.
 
-Следующий шаг плана домашних заданий — сквозная проверка и документирование требований для будущих уведомлений; доставка уведомлений остается нереализованной.
+Единообразие редакторов событий Telegram остается частично подтвержденным; незакрытые UI-критерии принадлежат [исходному плану редакторов](./docs/plans/telegram-event-editor-consistency.md), а не завершенному плану управления расписанием. Следующий продуктовый этап уведомлений описан ниже; доставка уведомлений остается нереализованной.
 
 ## Фронтенд
 В случае если до фронтенда дойдет, первые версии нужно делать без использования каких то больших фреймворков типо react. Из шаблона проектов есть начальные файлы в templates - используется htmx. Этого должно быть достаточно на первое время.
