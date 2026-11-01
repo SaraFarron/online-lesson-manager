@@ -165,6 +165,7 @@ class StudentProfileCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     notification_lesson: LessonReminder | None = 15
     notification_homework: HomeworkReminder | None = 2
+    notification_homework_assignment: bool = True
 
 
 class StudentProfilePublic(BaseModel):
@@ -172,6 +173,7 @@ class StudentProfilePublic(BaseModel):
     student_id: uuid.UUID
     notification_lesson: int | None = None
     notification_homework: int | None = None
+    notification_homework_assignment: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -180,6 +182,14 @@ class StudentProfileUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     notification_lesson: LessonReminder | None = None
     notification_homework: HomeworkReminder | None = None
+    notification_homework_assignment: bool | None = None
+
+    @field_validator("notification_homework_assignment", mode="before")
+    @classmethod
+    def reject_null_assignment_toggle(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("Assignment notification toggle cannot be null")
+        return value
 
 
 class TeacherPreferences(BaseModel):
@@ -191,6 +201,7 @@ class TeacherPreferences(BaseModel):
     between_lessons_break: BreakMinutes = 5
     max_consecutive_lessons: PositiveInt = 4
     max_lessons_per_day: PositiveInt = 6
+    notification_homework_submission: bool = True
 
     @model_validator(mode="after")
     def validate_preferences(self) -> Self:
@@ -222,6 +233,7 @@ class TeacherProfilePublic(BaseModel):
         ),
     )
     max_lessons_per_day: int = 6
+    notification_homework_submission: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -248,6 +260,7 @@ class TeacherProfileUpdate(BaseModel):
     )
     max_consecutive_lessons: PositiveInt | None = None
     max_lessons_per_day: PositiveInt | None = None
+    notification_homework_submission: bool | None = None
 
     @field_validator(
         "code",
@@ -258,6 +271,7 @@ class TeacherProfileUpdate(BaseModel):
         "between_lessons_break",
         "max_consecutive_lessons",
         "max_lessons_per_day",
+        "notification_homework_submission",
         mode="before",
     )
     @classmethod

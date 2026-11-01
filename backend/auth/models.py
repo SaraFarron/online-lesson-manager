@@ -90,6 +90,9 @@ class StudentProfile(Base, TimestampMixin):
     notification_homework: Mapped[int | None] = mapped_column(
         Integer, nullable=True, default=None
     )
+    notification_homework_assignment: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
 
 
 class TeacherProfile(Base, TimestampMixin):
@@ -121,3 +124,6 @@ class TeacherProfile(Base, TimestampMixin):
         Integer, nullable=False, default=5
     )
     max_lessons_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+    notification_homework_submission: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
