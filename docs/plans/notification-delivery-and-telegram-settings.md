@@ -4,7 +4,7 @@
 
 Deliver authorized schedule/homework notifications to Telegram reliably, with user-controlled preferences and explicit handling of delivery failures.
 
-**Status:** Tasks 00–01 complete; Tasks 02–07 planned.
+**Status:** Tasks 00–02 complete; Tasks 03–07 planned.
 
 ## Scope (README.md sections covered)
 
@@ -50,6 +50,8 @@ Approve backend outbox plus bot-worker trust boundary, scoped service credential
 - Catch-up sends digests only on the same local date, lesson/homework reminders at most 15 minutes late, and assignment/submission pushes within 24 hours. Every send revalidates current preferences and source state; moved, canceled, hidden, completed, or otherwise stale items are suppressed. Enabling a preference late does not backfill.
 - Dedupe by recipient and local digest date; recipient, notification type, and exact occurrence identity/start for schedule notices; and recipient plus assignment or finalized submission version for homework pushes. Each finalized submission version is distinct; reconciled repeats are not.
 - Assignment-created student pushes and solution-submitted teacher pushes have separate, enabled-by-default toggles. A missing Telegram recipient creates no intent and linking later does not backfill.
+- One backend producer runner polls every 30 seconds; database-level deduplication protects against accidental duplicate runner processes.
+- Assignment-created and submission-version alerts may still send after the homework becomes complete while the assignment and active teacher/student link remain valid. Incomplete-homework reminders are suppressed after completion. Deletion or loss of the active link suppresses all affected alerts.
 - Store source references and render current safe text at send time. Retain sent intents 30 days and suppressed/terminal intents 90 days.
 - Use a separate least-privilege notification credential, atomic bounded claims with 60-second leases, and one serial sender per bot token. Honor Telegram 429 `retry_after`; retry transient and ambiguous outcomes exponentially up to 8 attempts. Blocked/invalid routing is terminal. Ambiguous sends may duplicate; exactly-once delivery is not promised.
 
@@ -83,7 +85,9 @@ The reconciled completion inventory’s Tasks 00 and 04 establish the prerequisi
 
 **Reuse:** Existing credential-validation conventions, database transaction patterns and async APIs.
 
-**Acceptance Criteria:** [ ] Concurrent claimers never own one active lease; crash/restart recovers as approved on both DBs. [ ] 429 deadlines, poison jobs, disabled accounts and lease-expiry races have deterministic tests.
+**Acceptance Criteria:** [x] Concurrent claimers never own one active lease; crash/restart recovers as approved on both DBs. [x] 429 deadlines, poison jobs, disabled accounts and lease-expiry races have deterministic tests.
+
+**Execution (2026-11-01):** Added a separately authenticated delivery API for bounded claim/ack and safe health reporting; claims revalidate recipient routing, account/link, preferences, current homework status and exact visible lesson occurrence. Leases recover after expiry, reject stale acknowledgements, respect Telegram retry deadlines, and transition exhausted/terminal outcomes explicitly. Added a 30-second bounded producer-runner loop. Focused notification/schema/boundary tests passed (22 passed, 2 PostgreSQL-only cases skipped in the regular run); the skipped concurrency and runner cases passed against both SQLite and an ephemeral PostgreSQL 17 database (4 passed). `ruff check backend tests`, `ruff format --check backend tests`, and `mypy backend` passed.
 
 **Out of scope:** Telegram calls inside FastAPI or a new general job framework. **Suitable for:** AI agent.
 
