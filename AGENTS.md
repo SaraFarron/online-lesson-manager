@@ -119,7 +119,7 @@ a README-described feature.
 | Teacher/student registration (`/auth/register`, `/auth/login`) | **Done** | Password auth retained; trusted Telegram API and private-chat `/start` teacher/student wizards implemented. Teacher invitations use short `t_[A-Z0-9]{6}` codes in `/start` payloads; existing codes can be replaced with the explicit rotation command. No account merging/password addition for Telegram-only users. |
 | Teacher settings (work hours, lesson length, break, max/day) | **Done** | Validated work hours, JSON ISO weekdays, lesson length, break, max/day and max consecutive preferences are persisted with README defaults and editable in Telegram Settings. Workdays/hours, lesson duration, daily/consecutive limits, and snapshotted automatic post-lesson breaks are enforced. |
 | Student settings (notifications) | **Partial** | Validated digest minutes-of-local-day, lesson reminder minutes (1–600), homework days; null disables. Safe partial updates and Telegram Settings editing are implemented. Notification delivery is not implemented. |
-| Lessons / breaks / vacations CRUD (one-off + recurring) | **Done** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, confirmed manual-break displacement, teacher-local workday/hour checks, lesson duration defaults/authorization, daily/consecutive limits, database-backed per-teacher mutation serialization, and derived automatic post-lesson reservations are implemented. Weekly lessons alone may have a null `interval_end` for a genuinely open-ended series; open-ended writes validate one recurrence-timezone calendar year, not an infinite conflict horizon. Breaks and vacations remain finite; finite recurrences retain the ten-year limit. Lesson snapshots default to zero for existing rows; preference changes apply only to future writes. |
+| Lessons / breaks / vacations CRUD (one-off + recurring) | **Done** | Shared UTC normalization, recurring occurrence/cancellation lifecycle, teacher-scoped conflict validation, vacation visibility, confirmed manual-break displacement, teacher-local workday/hour checks, lesson duration defaults/authorization, daily/consecutive limits, database-backed per-teacher mutation serialization, and derived automatic post-lesson reservations are implemented. Weekly lessons and manual breaks may have a null `interval_end` for a genuinely open-ended series; their writes validate one recurrence-timezone calendar year, not an infinite conflict horizon. Open-ended break displacement is limited to that validation window and does not schedule later cancellations. Recurring vacations remain finite; finite recurrences retain the ten-year limit. Lesson snapshots default to zero for existing rows; preference changes apply only to future writes. |
 | Schedule viewing (day/week, timeline, teacher sees student names) | **Partial** | Authenticated viewer-local day/week endpoints and live Telegram Today/This week screens are implemented, including role-scoped results, previous/next-week navigation, capitalized compact weekday/date labels, `⏳` for upcoming rows, unchanged past/ongoing markers, shorter derived-break labels, human snapshot time, one timezone footer, DST fold labels, explicit cross-midnight dates, and overflow-only pagination without page counters or a Refresh control. HTMX/arbitrary-date UI and offline cache are not implemented. |
 | Notifications (morning digest, before-lesson, broadcast, homework) | **Not started** | `backend/notifications/models.py` has only an ORM model (`Notification`); no service, router, or scheduler. |
 | Homework (assign/submit/mark done) | **Done** | Approved contract, metadata, authenticated private attachment staging/download, teacher assignment creation, active-link-scoped paginated assignment/material reads, versioned student text/file submissions, teacher submission review, idempotent manual completion, and recoverable deletion exist in the backend. Telegram supports teacher assignment creation with exact upcoming lesson links, student paginated browsing/downloads and explicit versioned submissions, plus teacher filtering/review of current and prior solutions, separate streamed downloads, manual completion, and confirmed deletion with unknown-outcome reconciliation. Dispatcher cross-flow/restart/storage recovery, ownership, file persistence, migrations, and deployment configuration are verified. Notification delivery remains unimplemented. |
@@ -136,8 +136,12 @@ records the current day-first input and compact schedule presentation contract.
 It supersedes only the README's older month-first/UTC-offset/Refresh presentation,
 not API timestamp formats, scheduling rules, or authorization.
 The [Telegram UI refinements plan](docs/plans/telegram-ui-refinements.md)
-records the nullable weekly-lesson cutoff contract, one-year validation limit,
-date/time prompt behavior, schedule labels, and this release's verification.
+records the nullable weekly-lesson cutoff contract; the
+[event-editor consistency plan](docs/plans/telegram-event-editor-consistency.md)
+extends the same bounded recurrence contract to manual breaks and owns the
+remaining editor consistency work. The one-year validation limit, date/time
+prompt behavior, schedule labels, and this release's verification are recorded
+in the linked handoffs.
 [Automatic between-lesson breaks](docs/plans/automatic-between-lesson-breaks.md)
 are implemented and verified; [homework](docs/plans/homework-backend-and-telegram-ui.md)
 teacher and student Telegram actions are implemented. Homework Task 11's
@@ -178,14 +182,16 @@ buttons, and safe retry/reconciliation behavior when changing these dialogs.
   offline caching and an HTMX/arbitrary-date schedule UI remain unimplemented.
   Apply viewer authorization before shaping or caching results; never return
   teacher-wide raw event details to a student.
-- A null `interval_end` represents only an open-ended weekly lesson. Open-ended
-  writes validate one calendar year from series start in recurrence timezone;
-  this is a validation bound, never a stored cutoff or an infinite-conflict
-  guarantee. Finite series retain their ten-year limit, and recurring
-  breaks/vacations stay finite. Apply
-  `2026-10-27_open_ended_weekly_lessons.py` before backend/bot rollout; its
-  downgrade refuses before mutation while any null cutoff remains. See the
-  README scheduling handoff and linked UI refinements plan for details.
+- A null `interval_end` represents only an open-ended weekly lesson or manual
+  break. Open-ended writes validate one calendar year from series start in
+  recurrence timezone; this is a validation bound, never a stored cutoff or
+  an infinite-conflict guarantee. Break displacement is limited to that
+  window and does not schedule later cancellations. Finite series retain
+  their ten-year limit, and recurring vacations stay finite. Apply
+  `2026-10-27_open_ended_weekly_lessons.py` and
+  `2026-10-29_open_ended_weekly_breaks.py` before backend/bot rollout; their
+  downgrades refuse before mutation while the corresponding null cutoffs
+  remain. See the README scheduling handoff and linked event-editor plan.
 - Workday/hour and duration enforcement, daily/consecutive limits, and
   database-backed mutation serialization are implemented. Automatic breaks
   are derived from each lesson's snapshotted duration; existing lessons and

@@ -323,8 +323,10 @@ async def _candidate_occurrences(
             raise ValidationError(f"Teacher with ID {teacher_id} does not exist")
         recurrence_timezone = teacher.timezone
     if data.interval_end is None:
-        if event_type != EventType.LESSON or data.interval != 7:
-            raise ValidationError("Only weekly lessons may have no recurrence cutoff")
+        if event_type not in (EventType.LESSON, EventType.BREAK) or data.interval != 7:
+            raise ValidationError(
+                "Only weekly lessons and breaks may have no recurrence cutoff"
+            )
         cutoff = open_ended_validation_cutoff(start, mode, recurrence_timezone)
     else:
         cutoff = normalize_utc(data.interval_end)

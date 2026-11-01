@@ -6,7 +6,8 @@ Make every implemented Telegram event creation and update flow follow the
 working lesson UX: accepted date/time input disappears, defaults avoid unnecessary
 steps, and focused edits preserve unrelated draft values.
 
-**Status:** In progress; Task 01 is complete (SQLite verified; PostgreSQL unavailable).
+**Status:** In progress; original Tasks 01–03 are verified on SQLite and the
+typed client. PostgreSQL verification remains unavailable.
 
 ## Scope (README.md sections covered)
 
@@ -249,16 +250,26 @@ displacement application, ownership/revision checks, and teacher schedule guard.
 
 ### Acceptance Criteria
 
-- [ ] API POST/PUT round-trip weekly breaks with JSON null; finite and legacy
+- [x] API POST/PUT round-trip weekly breaks with JSON null; finite and legacy
   nonweekly breaks retain their contracts.
-- [ ] Preview changes no data; confirmation deletes/cancels only exact in-window
+- [x] Preview changes no data; confirmation deletes/cancels only exact in-window
   lesson occurrences, and changed affected sets require renewed confirmation.
-- [ ] Fixtures immediately before/at/after the exclusive anniversary prove
+- [x] Fixtures immediately before/at/after the exclusive anniversary prove
   the boundary; later existing lessons remain untouched and distant new
   lesson writes detect the open break.
-- [ ] Leap-day, DST, cancellation, automatic-break tails, occurrence-budget
+- [x] Leap-day, DST, cancellation, automatic-break tails, occurrence-budget
   failure, stale revision, and failed-write rollback retain explicit behavior.
-- [ ] Existing lesson and finite-break tests pass; common backend checks pass.
+- [x] Existing lesson and finite-break tests pass; common backend checks pass.
+
+**Execution (2026-11-01):** Fixed the service and conflict guards that still
+rejected weekly breaks with null cutoffs. Added SQLite API round-trip and
+management-detail checks, a distant lesson-write conflict check, and a
+before/at/after-anniversary preview/confirmation check that leaves the
+boundary and later lessons untouched. The focused schema, migration, conflict,
+recurrence-expansion/edit, typed-client, and break-management suite passed
+(120 tests); common lint/format and backend/bot mypy checks passed. PostgreSQL
+was not run because no `DATABASE_URL` is configured; no PostgreSQL result is
+claimed.
 
 ### Out of scope
 
@@ -296,11 +307,18 @@ Existing models, `write_management_event`, response parsing, and
 
 ### Acceptance Criteria
 
-- [ ] Open/finite lesson and break payloads/results/details round-trip;
+- [x] Open/finite lesson and break payloads/results/details round-trip;
   null nonweekly/vacation shapes remain rejected.
-- [ ] Null is sent as null, not omitted accidentally or replaced with a date;
+- [x] Null is sent as null, not omitted accidentally or replaced with a date;
   preview tokens and revision headers are preserved.
-- [ ] Common bot checks pass.
+- [x] Common bot checks pass.
+
+**Execution (2026-11-01):** Updated all four typed-client open-ended shape
+validators to accept only weekly lessons and breaks. Integration coverage
+round-trips an open break through write, result, detail, and update responses;
+request assertions prove explicit JSON null, displacement confirmation/token,
+and revision headers are retained. Negative shapes remain rejected. The bot
+client tests and common lint/format and mypy checks passed.
 
 ### Out of scope
 
@@ -643,8 +661,8 @@ closeout execution. It records source inspection, not new test results.
 | Original task | Current owner and focused checks | Initial disposition |
 |---|---|---|
 | 01 — persisted weekly-break recurrence | `backend/events/models.py`, `backend/events/schemas.py`, `backend/breaks/schemas.py`, `alembic/versions/2026-10-29_open_ended_weekly_breaks.py`; `tests/test_open_ended_recurrence_schema.py`, `tests/test_open_ended_recurrence_migration.py` | Implemented; SQLite evidence is recorded above. PostgreSQL verification remains externally blocked. |
-| 02 — bounded break writes and conflicts | `backend/events/mutations/recurring.py`, `backend/events/conflicts.py`, `backend/events/occurrences.py`, `backend/events/management/`; `tests/test_event_conflicts.py`, `tests/test_recurrent_event_edits.py` | Implemented by current code; rerun the focused boundary, preview, and mutation checks in closeout. |
-| 03 — typed client open-ended shapes | `telegram/api/models/events.py`, `telegram/api/client.py`; `tests/test_bot_client.py` | Defect found: the client validators currently admit null cutoffs only for weekly lessons, rejecting the approved weekly-break shape. |
+| 02 — bounded break writes and conflicts | `backend/events/mutations/recurring.py`, `backend/events/conflicts.py`, `backend/events/occurrences.py`, `backend/events/management/`; `tests/test_event_conflicts.py`, `tests/test_recurrent_event_edits.py` | Verified in closeout Task 01 after fixing weekly-break null-cutoff guards; SQLite boundary, later-write, confirmation, and regression evidence is recorded above. PostgreSQL remains unavailable. |
+| 03 — typed client open-ended shapes | `telegram/api/models/events.py`, `telegram/api/client.py`; `tests/test_bot_client.py` | Verified in closeout Task 01; open/finite round-trips, exact null JSON, confirmation/revision headers, and malformed null shapes are covered. |
 | 04 — accepted-time cleanup | `telegram/dialogs/breaks.py`, `telegram/dialogs/vacations.py`, `telegram/shared/date_cleanup.py`; `tests/test_bot_break_management.py`, `tests/test_bot_vacation_management.py` | Date cleanup is present, but accepted break/vacation time messages are not deleted; focused verification and repair remain. |
 | 05 — default-first weekly-break creation | `telegram/dialogs/breaks.py`; `tests/test_bot_break_management.py`, `tests/test_bot_client.py` | Defect found: weekly creation still requires a finite cutoff and review assumes one exists. |
 | 06 — focused break updates | `telegram/dialogs/breaks.py`; `tests/test_bot_break_management.py` | Defect found: edit entry clears the saved interval/cutoff and restarts date entry instead of opening a populated review. |

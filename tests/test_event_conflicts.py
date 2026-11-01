@@ -1375,3 +1375,126 @@ async def test_recurring_break_create_and_update_displace_exact_occurrences(
         )
         == 4
     )
+
+
+async def test_open_ended_weekly_break_create_detail_and_update_round_trip(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    teacher_id, teacher_token, students = await _teacher_and_students(
+        client, "open-weekly-break-round-trip"
+    )
+    headers = _headers(teacher_token)
+    payload = {
+        "start": "2026-12-08T13:00:00Z",
+        "end": "2026-12-08T13:30:00Z",
+        "interval": 7,
+        "interval_end": None,
+        "user_id": teacher_id,
+    }
+
+    created = await client.post(
+        "/api/v1/recurrent-breaks/", headers=headers, json=payload
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["interval_end"] is None
+
+    break_id = UUID(created.json()["id"])
+    stored = await db_session.get(RecurrentEvent, break_id)
+    assert stored is not None
+    assert stored.interval_end is None
+
+    distant_start = datetime(2026, 12, 8, 13, tzinfo=UTC) + timedelta(weeks=700)
+    blocked_lesson = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": distant_start.isoformat(),
+            "end": (distant_start + timedelta(minutes=30)).isoformat(),
+            "user_id": students[0][0],
+        },
+    )
+    assert blocked_lesson.status_code == 422
+    assert "overlaps" in blocked_lesson.text
+
+    detail = await client.get(f"/api/v1/recurrent-breaks/{break_id}", headers=headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["interval_end"] is None
+
+    updated = await client.put(
+        f"/api/v1/recurrent-breaks/{break_id}", headers=headers, json=payload
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["interval_end"] is None
+    await db_session.refresh(stored)
+    assert stored.interval_end is None
+
+
+async def test_open_ended_weekly_break_displaces_only_before_anniversary(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    teacher_id, teacher_token, students = await _teacher_and_students(
+        client, "open-weekly-break-boundary"
+    )
+    headers = _headers(teacher_token)
+    before_boundary = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2027-10-26T09:00:00Z",
+            "end": "2027-10-26T09:30:00Z",
+            "user_id": students[0][0],
+        },
+    )
+    assert before_boundary.status_code == 201, before_boundary.text
+    at_boundary = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2027-10-27T09:00:00Z",
+            "end": "2027-10-27T09:30:00Z",
+            "user_id": students[1][0],
+        },
+    )
+    assert at_boundary.status_code == 201, at_boundary.text
+    after_boundary = await client.post(
+        "/api/v1/lessons/",
+        headers=headers,
+        json={
+            "start": "2027-10-28T09:00:00Z",
+            "end": "2027-10-28T09:30:00Z",
+            "user_id": students[1][0],
+        },
+    )
+    assert after_boundary.status_code == 201, after_boundary.text
+
+    payload = {
+        "start": "2026-10-27T09:00:00Z",
+        "end": "2026-10-27T09:30:00Z",
+        "interval": 7,
+        "interval_end": None,
+        "user_id": teacher_id,
+    }
+    preview = await client.post(
+        "/api/v1/recurrent-breaks/", headers=headers, json=payload
+    )
+    assert preview.status_code == 409, preview.text
+    preview_detail = preview.json()["detail"]
+    assert [item["start"] for item in preview_detail["affected_occurrences"]] == [
+        "2027-10-26T09:00:00+00:00"
+    ]
+
+    confirmed = await client.post(
+        "/api/v1/recurrent-breaks/?confirm_displacement=true",
+        headers={
+            **headers,
+            "X-Displacement-Token": preview_detail["confirmation_token"],
+        },
+        json=payload,
+    )
+    assert confirmed.status_code == 201, confirmed.text
+    assert confirmed.json()["interval_end"] is None
+    assert await db_session.get(Event, UUID(before_boundary.json()["id"])) is None
+    assert await db_session.get(Event, UUID(at_boundary.json()["id"])) is not None
+    assert await db_session.get(Event, UUID(after_boundary.json()["id"])) is not None

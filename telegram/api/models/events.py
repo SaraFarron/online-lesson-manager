@@ -93,9 +93,11 @@ class EventManagementDetail(EventManagementItem):
         if (
             self.is_recurrent
             and self.interval_end is None
-            and (self.event_type != "LESSON" or self.interval != 7)
+            and (self.event_type not in {"LESSON", "BREAK"} or self.interval != 7)
         ):
-            raise ValueError("Only weekly lessons can have an open-ended recurrence")
+            raise ValueError(
+                "Only weekly lessons and breaks can have an open-ended recurrence"
+            )
         if not self.is_recurrent and (
             any(value is not None for value in (*recurrence_fields, self.interval_end))
             or self.recurrence_timezone is not None
@@ -128,9 +130,11 @@ class RecurrentEventWriteResult(EventWriteResult):
     @model_validator(mode="after")
     def validate_open_ended_shape(self) -> Self:
         if self.interval_end is None and (
-            self.event_type != "LESSON" or self.interval != 7
+            self.event_type not in {"LESSON", "BREAK"} or self.interval != 7
         ):
-            raise ValueError("Only weekly lessons can have an open-ended recurrence")
+            raise ValueError(
+                "Only weekly lessons and breaks can have an open-ended recurrence"
+            )
         return self
 
 
@@ -159,9 +163,11 @@ class RecurrentEventCreatePayload(EventCreatePayload):
     @model_validator(mode="after")
     def validate_open_ended_shape(self) -> Self:
         if self.interval_end is None and (
-            self.event_type != "LESSON" or self.interval != 7
+            self.event_type not in {"LESSON", "BREAK"} or self.interval != 7
         ):
-            raise ValueError("Only weekly lessons can have an open-ended recurrence")
+            raise ValueError(
+                "Only weekly lessons and breaks can have an open-ended recurrence"
+            )
         return self
 
 
@@ -174,9 +180,11 @@ class RecurrentEventUpdatePayload(EventUpdatePayload):
     @model_validator(mode="after")
     def validate_open_ended_shape(self) -> Self:
         if self.interval_end is None and (
-            self.event_type != "LESSON" or self.interval != 7
+            self.event_type not in {"LESSON", "BREAK"} or self.interval != 7
         ):
-            raise ValueError("Only weekly lessons can have an open-ended recurrence")
+            raise ValueError(
+                "Only weekly lessons and breaks can have an open-ended recurrence"
+            )
         return self
 
 

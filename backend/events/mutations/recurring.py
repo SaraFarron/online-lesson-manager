@@ -67,9 +67,12 @@ async def _create_recurrent_event(
 ) -> RecurrentEvent:
     interval_end = event_data.interval_end
     if interval_end is None and (
-        event_data.event_type != EventType.LESSON or event_data.interval != 7
+        event_data.event_type not in (EventType.LESSON, EventType.BREAK)
+        or event_data.interval != 7
     ):
-        raise ValidationError("Only weekly lessons may have no recurrence cutoff")
+        raise ValidationError(
+            "Only weekly lessons and breaks may have no recurrence cutoff"
+        )
 
     teacher = await get_user_by_id(session, teacher_id)
     if teacher is None:
@@ -180,9 +183,13 @@ async def _update_recurrent_event(
         raise ValidationError("Recurring event not found")
     recurrent_event = fresh_event
     if interval_end is None and (
-        recurrent_event.event_type != EventType.LESSON.value or event_data.interval != 7
+        recurrent_event.event_type
+        not in (EventType.LESSON.value, EventType.BREAK.value)
+        or event_data.interval != 7
     ):
-        raise ValidationError("Only weekly lessons may have no recurrence cutoff")
+        raise ValidationError(
+            "Only weekly lessons and breaks may have no recurrence cutoff"
+        )
     if actor is not None:
         assert_owns_event(actor, recurrent_event)
         await assert_can_assign_user(session, actor, event_data.user_id)

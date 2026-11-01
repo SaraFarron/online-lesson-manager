@@ -521,34 +521,39 @@ There is no offline schedule cache.
 #### Open-ended weekly lessons and deployment
 
 - `recurrent_event.interval_end IS NULL` means there is no fixed recurrence
-  end. It is allowed only for a weekly lesson (`event_type=LESSON`,
-  `interval=7`); one-off events and recurring breaks/vacations remain distinct
-  and finite. The value is not a hidden date or a limit on bounded reads.
+  end. It is allowed only for a weekly lesson or manual break
+  (`event_type=LESSON` or `BREAK`, `interval=7`); one-off events and recurring
+  vacations remain distinct and finite. The value is not a hidden date or a
+  limit on bounded reads.
 - Finite `interval_end` remains an exclusive occurrence-start cutoff. In
-  Telegram, the teacher's inclusive last lesson date is resolved as the
-  following local midnight; clearing the choice stores null. Recurring breaks
-  continue to require a finite cutoff.
-- Open-ended lesson writes validate generated occurrences only up to the
-  exclusive one-calendar-year anniversary of the series start in its
+  Telegram, the teacher's inclusive last lesson or break date is resolved as
+  the following local midnight; clearing the choice stores null. Recurring
+  vacations continue to require a finite cutoff.
+- Open-ended lesson and break writes validate generated occurrences only up
+  to the exclusive one-calendar-year anniversary of the series start in its
   recurrence timezone. A February 29 anniversary clamps to February 28. This
   validation bound is calculated for the write and is never stored as
-  `interval_end`; it does not promise conflict-free scheduling forever. An
-  edit to an old series start can therefore validate a wholly historical
-  year, and conflicts beyond a new series' validation year are not guaranteed
-  to have been discovered. Existing open-ended series are still expanded
-  against the bounded ranges requested by later event writes and reads.
+  `interval_end`; it does not promise conflict-free scheduling forever. For
+  open-ended breaks, the displacement preview covers only affected lessons in
+  that window; existing lessons beyond it may overlap and are not cancelled
+  later automatically. An edit to an old series start can therefore validate
+  a wholly historical year, and conflicts beyond a new series' validation
+  year are not guaranteed to have been discovered. Existing open-ended series
+  are still expanded against the bounded ranges requested by later event
+  writes and reads.
 - Finite new or updated recurrences retain the existing ten-calendar-year
   maximum. Occurrence queries remain explicitly bounded and subject to their
   occurrence budget; open-ended recurrence does not authorize an unbounded
   scan.
 - Deploy in order: apply `uv run alembic upgrade head` (including
-  `2026-10-27_open_ended_weekly_lessons.py`), deploy the backend with nullable
+  `2026-10-27_open_ended_weekly_lessons.py` and
+  `2026-10-29_open_ended_weekly_breaks.py`), deploy the backend with nullable
   schema/service support, then deploy the compatible Telegram client and
-  enable open-ended lesson flows. Older clients may reject null cutoff
-  responses. The migration downgrade refuses before changing schema or data
-  while any null cutoff exists; assign explicit finite cutoffs through an
-  approved data change before retrying. It never invents cutoffs or deletes
-  open-ended rows.
+  enable open-ended lesson and break flows. Older clients may reject null
+  cutoff responses. Each migration downgrade refuses before changing schema
+  or data while its corresponding null cutoff remains; assign explicit finite
+  cutoffs through an approved data change before retrying. Migrations never
+  invent cutoffs or delete open-ended rows.
 
 #### Internal service handoff
 
@@ -595,9 +600,10 @@ break does not restore either.
 
 The schedule-range service accepts finite half-open ranges of at most 31 days.
 Occurrence expansion is capped at 10,000 per query. Finite new or updated
-recurrences are limited to ten calendar years. Open-ended weekly lessons use
-the one-calendar-year, start-based write-validation bound described above;
-this does not establish conflict-free scheduling beyond that bound.
+recurrences are limited to ten calendar years. Open-ended weekly lessons and
+manual breaks use the one-calendar-year, start-based write-validation bound
+described above; this does not establish conflict-free scheduling beyond that
+bound. Open-ended break displacement does not schedule future cancellation.
 Unsupported ranges, invalid recurrence/cancellation data, and budget exhaustion
 fail explicitly; callers must not convert these failures into an empty or
 partial schedule.

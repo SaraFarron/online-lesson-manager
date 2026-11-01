@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -20,6 +21,7 @@ from telegram.api import (
     BackendUnavailable,
     CircuitBreaker,
     EventCreatePayload,
+    EventManagementDetail,
     EventWriteResult,
     HomeworkAssignmentPayload,
     HomeworkAttachmentTooLarge,
@@ -404,15 +406,45 @@ async def test_typed_management_reads_writes_profiles_and_204_delete(
     )
     assert updated_open_series.interval_end is None
 
-    with pytest.raises(ValueError, match="Only weekly lessons"):
+    open_break = await api.write_management_event(
+        "POST",
+        "recurrent-breaks",
+        teacher_id,
+        teacher_id,
         RecurrentEventCreatePayload(
-            start="2035-03-05T10:00:00Z",
-            end="2035-03-05T11:00:00Z",
-            user_id=student.account.id,
+            start="2035-03-05T13:00:00Z",
+            end="2035-03-05T13:30:00Z",
+            user_id=teacher.account.id,
             event_type="BREAK",
             interval=7,
             interval_end=None,
-        )
+        ),
+        RecurrentEventWriteResult,
+    )
+    assert open_break.interval_end is None
+    open_break_detail = await api.read_management_detail(
+        teacher_id, teacher_id, "recurrent-breaks", open_break.id
+    )
+    assert open_break_detail.interval_end is None
+
+    updated_open_break = await api.write_management_event(
+        "PUT",
+        "recurrent-breaks",
+        teacher_id,
+        teacher_id,
+        RecurrentEventUpdatePayload(
+            start=open_break_detail.start,
+            end=open_break_detail.end,
+            user_id=open_break_detail.user_id,
+            event_type="BREAK",
+            interval=7,
+            interval_end=None,
+        ),
+        RecurrentEventWriteResult,
+        event_id=open_break_detail.id,
+        revision=open_break_detail.revision,
+    )
+    assert updated_open_break.interval_end is None
 
     teacher_profile = await api.update_teacher_profile(
         teacher_id,
@@ -435,6 +467,127 @@ async def test_typed_management_reads_writes_profiles_and_204_delete(
         StudentProfileUpdate(notification_lesson=None),
     )
     assert student_profile.notification_lesson is None
+
+
+async def test_typed_open_ended_break_writes_serialize_null_and_confirmation_headers() -> (
+    None
+):
+    event_id = uuid4()
+    user_id = uuid4()
+    revision = "b" * 64
+    token = "a" * 64
+    requests: list[httpx.Request] = []
+    response_body = {
+        "id": str(event_id),
+        "start": "2035-03-05T10:00:00Z",
+        "end": "2035-03-05T11:00:00Z",
+        "user_id": str(user_id),
+        "event_type": "BREAK",
+        "interval": 7,
+        "interval_end": None,
+    }
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        status = 201 if request.method == "POST" else 200
+        return httpx.Response(status, json=response_body)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[123] = "user-jwt"
+        created = await api.write_management_event(
+            "POST",
+            "recurrent-breaks",
+            123,
+            456,
+            RecurrentEventCreatePayload(
+                start="2035-03-05T10:00:00Z",
+                end="2035-03-05T11:00:00Z",
+                user_id=user_id,
+                event_type="BREAK",
+                interval=7,
+                interval_end=None,
+            ),
+            RecurrentEventWriteResult,
+            confirm_displacement=True,
+            displacement_token=token,
+        )
+        assert created.interval_end is None
+        assert json.loads(requests[0].content)["interval_end"] is None
+        assert requests[0].url.params["confirm_displacement"] == "true"
+        assert requests[0].headers["X-Displacement-Token"] == token
+
+        updated = await api.write_management_event(
+            "PUT",
+            "recurrent-breaks",
+            123,
+            456,
+            RecurrentEventUpdatePayload(
+                start=created.start,
+                end=created.end,
+                user_id=user_id,
+                event_type="BREAK",
+                interval=7,
+                interval_end=None,
+            ),
+            RecurrentEventWriteResult,
+            event_id=created.id,
+            revision=revision,
+        )
+        assert updated.interval_end is None
+        assert json.loads(requests[1].content)["interval_end"] is None
+        assert requests[1].headers["If-Match"] == revision
+
+
+@pytest.mark.parametrize(
+    ("event_type", "interval"),
+    [("BREAK", 1), ("VACATION", 7)],
+)
+def test_client_open_ended_guards_reject_nonweekly_breaks_and_vacations(
+    event_type: str, interval: int
+) -> None:
+    start = "2035-03-05T10:00:00Z"
+    end = "2035-03-05T11:00:00Z"
+    event_id = uuid4()
+    user_id = uuid4()
+    base = {
+        "id": event_id,
+        "start": start,
+        "end": end,
+        "user_id": user_id,
+        "event_type": event_type,
+        "interval": interval,
+        "interval_end": None,
+    }
+
+    for model, fields in (
+        (
+            RecurrentEventCreatePayload,
+            {key: value for key, value in base.items() if key != "id"},
+        ),
+        (
+            RecurrentEventUpdatePayload,
+            {key: value for key, value in base.items() if key != "id"},
+        ),
+        (RecurrentEventWriteResult, base),
+        (
+            EventManagementDetail,
+            {
+                **base,
+                "subject_label": "Managed event",
+                "is_recurrent": True,
+                "cancelled_occurrences": 0,
+                "post_break_minutes": 0,
+                "recurrence_mode": "TEACHER_LOCAL",
+                "recurrence_timezone": "UTC",
+                "revision": "c" * 64,
+            },
+        ),
+    ):
+        with pytest.raises(ValueError):
+            model.model_validate(fields)
 
 
 async def test_lost_event_create_response_is_reconciled_by_read_not_replayed(
