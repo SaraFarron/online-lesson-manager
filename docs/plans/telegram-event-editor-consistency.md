@@ -7,7 +7,8 @@ working lesson UX: accepted date/time input disappears, defaults avoid unnecessa
 steps, and focused edits preserve unrelated draft values.
 
 **Status:** In progress; original Tasks 01–03 are verified on SQLite and the
-typed client. PostgreSQL verification remains unavailable.
+typed client, and the break work in Tasks 04–06 is verified. Vacation cleanup
+for Task 04 and Tasks 07–09 remain. PostgreSQL verification remains unavailable.
 
 ## Scope (README.md sections covered)
 
@@ -365,6 +366,13 @@ Existing cleanup helper, lesson resolution/acceptance pattern, `ShowMode.EDIT`,
   tests assert message IDs and recorded calls, not just displayed text.
 - [ ] Common bot checks pass.
 
+**Execution (2026-11-01, break side):** Break create and focused-edit flows
+delete accepted start/end time messages exactly once; invalid and simulated
+backend-rejected times remain. An expected Telegram delete failure logs and
+shows attention without a write. `uv run pytest -q
+tests/test_bot_break_management.py` passed. Vacation time cleanup remains for
+Task 03.
+
 ### Out of scope
 
 Global middleware deletion, duration-input cleanup, homework, and file handling.
@@ -406,13 +414,19 @@ event-wizard framework.
 
 ### Acceptance Criteria
 
-- [ ] Weekly date → start time → end time → review needs no end-date entry;
+- [x] Weekly date → start time → end time → review needs no end-date entry;
   POST contains `interval=7` and `interval_end=null`.
-- [ ] Explicit finite end, clearing it, cancelling an edit, inferred dates,
+- [x] Explicit finite end, clearing it, cancelling an edit, inferred dates,
   and changing start/end all preserve the intended committed values.
-- [ ] Reviews/details render both shapes; invalid drafts cannot submit.
-- [ ] Displacement preview paging, token revalidation, Cancel, and unknown
+- [x] Reviews/details render both shapes; invalid drafts cannot submit.
+- [x] Displacement preview paging, token revalidation, Cancel, and unknown
   create-outcome handling remain intact; common bot checks pass.
+
+**Execution (2026-11-01):** Weekly creation now defaults to genuine null
+cutoff and opens review directly; optional finite cutoff, explicit No end,
+inferred-date Back, invalid-cutoff gating, and open-ended warnings are covered
+through the recording transport and SQLite. Existing preview/token, Cancel,
+and unknown-create recovery tests remain passing. See closeout Task 02.
 
 ### Out of scope
 
@@ -456,13 +470,20 @@ vacation review-based editing.
 
 ### Acceptance Criteria
 
-- [ ] One-time, finite weekly, open weekly, and legacy nonweekly break edits
+- [x] One-time, finite weekly, open weekly, and legacy nonweekly break edits
   begin at a populated review; only edited values change in PUT.
-- [ ] Date/time-only edits retain finite/null cutoff and actual recurrence
+- [x] Date/time-only edits retain finite/null cutoff and actual recurrence
   interval; cutoff-only edits retain original interval endpoints.
-- [ ] Back/Cancel, invalid cutoffs, timezone changes, stale revisions, changed
+- [x] Back/Cancel, invalid cutoffs, timezone changes, stale revisions, changed
   previews, and unknown outcomes retain safe behavior.
-- [ ] Existing displaced lessons are never restored; common bot checks pass.
+- [x] Existing displaced lessons are never restored; common bot checks pass.
+
+**Execution (2026-11-01):** `begin_edit` reloads fresh details and opens a
+populated review. Focused date/time/cutoff edits preserve unrelated values;
+Back restores pending cutoff edits; no-op updates preserve stored instants and
+seconds; legacy nonweekly interval, recurrence mode/timezone, and finite
+cutoff are retained. Invalid cutoffs block Save, and stale revisions require
+reload without replay. Break integration tests and common bot checks passed.
 
 ### Out of scope
 

@@ -1,4 +1,5 @@
-from datetime import UTC, datetime, time, timedelta
+import json
+from datetime import UTC, date, datetime, time, timedelta
 from itertools import count
 from uuid import UUID, uuid4
 
@@ -134,13 +135,45 @@ async def _make_bot(
     telegram_id: int,
     *,
     lose_create_response: bool = False,
+    resolution_failure_status: int | None = None,
+    stale_update_once: bool = False,
 ) -> tuple[BotDriver, BackendClient, httpx.AsyncClient, list[httpx.Request]]:
     requests: list[httpx.Request] = []
     lost_response = False
+    stale_response_sent = False
 
     async def forward(request: httpx.Request) -> httpx.Response:
-        nonlocal lost_response
+        nonlocal lost_response, stale_response_sent
         requests.append(request)
+        if (
+            resolution_failure_status is not None
+            and request.method == "POST"
+            and request.url.path == "/api/v1/events/resolve-local-time"
+        ):
+            return httpx.Response(
+                resolution_failure_status,
+                json={"detail": "Resolution rejected for this test."},
+                request=request,
+            )
+        if (
+            stale_update_once
+            and not stale_response_sent
+            and request.method == "PUT"
+            and request.url.path.startswith(
+                ("/api/v1/breaks/", "/api/v1/recurrent-breaks/")
+            )
+        ):
+            stale_response_sent = True
+            return httpx.Response(
+                409,
+                json={
+                    "detail": {
+                        "code": "stale_event_revision",
+                        "message": "stale test revision",
+                    }
+                },
+                request=request,
+            )
         response = await client.send(request)
         if (
             lose_create_response
@@ -193,15 +226,24 @@ async def _enter_break(
     start_message_id = driver.update_id + 1
     await driver.text(start_date)
     assert driver.deleted_message_ids()[-1] == start_message_id
+    assert driver.deleted_message_ids().count(start_message_id) == 1
     assert driver.session.last_message.message_id == screen_message_id
+    start_time_message_id = driver.update_id + 1
     await driver.text(start_time)
+    assert driver.deleted_message_ids()[-1] == start_time_message_id
+    assert driver.deleted_message_ids().count(start_time_message_id) == 1
+    end_time_message_id = driver.update_id + 1
     await driver.text(end_time)
+    assert driver.deleted_message_ids()[-1] == end_time_message_id
+    assert driver.deleted_message_ids().count(end_time_message_id) == 1
     if cutoff_date is not None:
+        await driver.click("Change series end")
         assert "Timezone:" not in driver.session.last_message.text
         assert "Asia/Bangkok" not in driver.session.last_message.text
         cutoff_message_id = driver.update_id + 1
         await driver.text(cutoff_date)
         assert driver.deleted_message_ids()[-1] == cutoff_message_id
+        assert driver.deleted_message_ids().count(cutoff_message_id) == 1
 
 
 def _event_button(driver: BotDriver) -> str:
@@ -271,6 +313,168 @@ async def test_teacher_creates_break_for_all_students_in_local_timezone(
             == 1
         )
         _assert_same_message(driver)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_weekly_break_defaults_open_ended_and_discloses_validation_bound(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    lesson = _lesson(teacher, student, datetime(2030, 11, 4, 10))
+    db_session.add(lesson)
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver, weekly=True)
+        await _enter_break(
+            driver,
+            start_date="04/11/2030",
+            start_time="10:00",
+            end_time="10:30",
+        )
+        assert "Last break date (inclusive): No end" in driver.session.last_message.text
+        assert "one calendar year" in driver.session.last_message.text
+
+        await driver.click("Save break")
+        assert "One-time lesson" in driver.session.last_message.text
+        assert "one calendar year" in driver.session.last_message.text
+        await driver.click("Confirm and displace lessons")
+
+        created = (
+            await db_session.execute(
+                select(RecurrentEvent).where(
+                    RecurrentEvent.event_type == EventType.BREAK.value
+                )
+            )
+        ).scalar_one()
+        assert created.start == datetime(2030, 11, 4, 10)
+        assert created.end == datetime(2030, 11, 4, 10, 30)
+        assert created.interval == 7
+        assert created.interval_end is None
+        assert not await _event_exists(db_session, lesson.id)
+
+        create_request = next(
+            request
+            for request in requests
+            if request.method == "POST"
+            and request.url.path == "/api/v1/recurrent-breaks/"
+        )
+        payload = json.loads(create_request.content)
+        assert payload["start"] == "2030-11-04T10:00:00Z"
+        assert payload["end"] == "2030-11-04T10:30:00Z"
+        assert payload["interval"] == 7
+        assert payload["interval_end"] is None
+
+        await driver.click(_event_button(driver))
+        assert "Last break date (inclusive): No end" in driver.session.last_message.text
+        assert "one calendar year" in driver.session.last_message.text
+        await driver.click("Edit break")
+        assert "Update weekly break" in driver.session.last_message.text
+        assert "Last break date (inclusive): No end" in driver.session.last_message.text
+        await driver.click("Save change")
+        unchanged = await db_session.get(RecurrentEvent, created.id)
+        assert unchanged is not None
+        assert unchanged.interval_end is None
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_break_time_input_cleanup_and_validation_failures(
+    client, db_session, bot_service_key, caplog
+) -> None:
+    teacher, _student = await _seed_accounts(db_session, timezone="America/New_York")
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver)
+        await driver.click("Add break")
+        await driver.text("10/03/2030")
+        initial_deletions = driver.deleted_message_ids()
+
+        invalid_message_id = driver.update_id + 1
+        screen_message_id = driver.session.last_message.message_id
+        await driver.text("25:61")
+        assert driver.deleted_message_ids() == initial_deletions
+        assert invalid_message_id not in driver.deleted_message_ids()
+        assert driver.session.last_message.message_id == screen_message_id
+        assert driver.session.last_message.text.startswith("<b>❌ Error</b>")
+
+        accepted_message_id = driver.update_id + 1
+        driver.session.delete_failure = "Bad Request: message to delete not found"
+        await driver.text("03:00")
+        assert accepted_message_id in driver.deleted_message_ids()
+        assert driver.deleted_message_ids().count(accepted_message_id) == 1
+        assert "Time accepted, but Telegram could not remove your message." in (
+            driver.session.last_message.text
+        )
+        assert driver.session.last_message.message_id == screen_message_id
+        assert not any(
+            request.method == "POST" and request.url.path == "/api/v1/recurrent-breaks/"
+            for request in requests
+        )
+
+        end_message_id = driver.update_id + 1
+        await driver.text("03:30")
+        assert driver.deleted_message_ids()[-1] == end_message_id
+        assert driver.deleted_message_ids().count(end_message_id) == 1
+        assert "Time accepted, but Telegram could not remove your message." in (
+            driver.session.last_message.text
+        )
+        assert not any(
+            request.method == "POST" and request.url.path == "/api/v1/breaks/"
+            for request in requests
+        )
+        assert "Could not delete accepted time input" in caplog.text
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_backend_rejected_break_times_are_not_deleted_on_create_or_edit(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    existing = _break(teacher, datetime(2030, 11, 4, 10), datetime(2030, 11, 4, 10, 30))
+    assert isinstance(existing, Event)
+    db_session.add(existing)
+    await db_session.commit()
+    driver, _api, http, _requests = await _make_bot(
+        client,
+        bot_service_key,
+        _telegram_id(teacher),
+        resolution_failure_status=422,
+    )
+    try:
+        await _open_break_list(driver)
+        await driver.click("Add break")
+        await driver.text("04/11/2030")
+        initial_deletions = driver.deleted_message_ids()
+        create_message_id = driver.update_id + 1
+        screen_message_id = driver.session.last_message.message_id
+        await driver.text("11:00")
+        assert driver.deleted_message_ids() == initial_deletions
+        assert create_message_id not in driver.deleted_message_ids()
+        assert driver.session.last_message.message_id == screen_message_id
+        assert "Check the date, time" in driver.session.last_message.text
+
+        await driver.click("Cancel")
+        await driver.click(_event_button(driver))
+        await driver.click("Edit break")
+        await driver.click("Change start")
+        edit_message_id = driver.update_id + 1
+        screen_message_id = driver.session.last_message.message_id
+        await driver.text("11:00")
+        assert driver.deleted_message_ids() == initial_deletions
+        assert edit_message_id not in driver.deleted_message_ids()
+        assert driver.session.last_message.message_id == screen_message_id
+        assert "Check the date, time" in driver.session.last_message.text
+        unchanged = await db_session.get(Event, existing.id)
+        assert unchanged is not None
+        assert unchanged.start == datetime(2030, 11, 4, 10)
+        assert unchanged.end == datetime(2030, 11, 4, 10, 30)
     finally:
         await _close_bot(driver, http)
 
@@ -628,9 +832,16 @@ async def test_editing_break_confirms_displacement_and_sends_revision(
         await _open_break_list(driver)
         await driver.click(_event_button(driver))
         await driver.click("Edit break")
-        await driver.text("04/11/2030")
+        await driver.click("Change start")
+        start_message_id = driver.update_id + 1
         await driver.text("10:00")
+        assert driver.deleted_message_ids()[-1] == start_message_id
+        assert driver.deleted_message_ids().count(start_message_id) == 1
+        await driver.click("Change end")
+        end_message_id = driver.update_id + 1
         await driver.text("10:30")
+        assert driver.deleted_message_ids()[-1] == end_message_id
+        assert driver.deleted_message_ids().count(end_message_id) == 1
         await driver.click("Save change")
         assert "One-time lesson" in driver.session.last_message.text
         assert await db_session.get(Event, lesson.id) is not None
@@ -684,9 +895,16 @@ async def test_weekly_break_edit_preserves_interval_and_delete_requires_confirma
         await _open_break_list(driver, weekly=True)
         await driver.click(_event_button(driver))
         await driver.click("Edit break")
-        await driver.text("05/11/2030")
+        await driver.click("Change start")
+        start_message_id = driver.update_id + 1
         await driver.text("11:00")
+        assert driver.deleted_message_ids()[-1] == start_message_id
+        assert driver.deleted_message_ids().count(start_message_id) == 1
+        end_message_id = driver.update_id + 1
         await driver.text("11:30")
+        assert driver.deleted_message_ids()[-1] == end_message_id
+        assert driver.deleted_message_ids().count(end_message_id) == 1
+        await driver.click("Change series end")
         await driver.text("26/11/2030")
         assert "does not restore lessons previously displaced" in (
             driver.session.last_message.text
@@ -726,6 +944,353 @@ async def test_weekly_break_edit_preserves_interval_and_delete_requires_confirma
         )
         assert exists.scalar_one_or_none() is None
         assert "Break deleted." in driver.session.last_message.text
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_weekly_break_can_clear_a_finite_cutoff(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    existing = _break(
+        teacher,
+        datetime(2030, 11, 5, 10),
+        datetime(2030, 11, 5, 10, 30),
+        interval=7,
+        interval_end=datetime(2030, 12, 1),
+    )
+    assert isinstance(existing, RecurrentEvent)
+    db_session.add(existing)
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Edit break")
+        await driver.click("Change series end")
+        await driver.click("No end")
+        assert "Last break date (inclusive): No end" in driver.session.last_message.text
+        assert "one calendar year" in driver.session.last_message.text
+        await driver.click("Save change")
+
+        updated = await db_session.execute(
+            select(
+                RecurrentEvent.start,
+                RecurrentEvent.end,
+                RecurrentEvent.interval,
+                RecurrentEvent.interval_end,
+            ).where(RecurrentEvent.id == existing.id)
+        )
+        assert updated.one() == (
+            datetime(2030, 11, 5, 10),
+            datetime(2030, 11, 5, 10, 30),
+            7,
+            None,
+        )
+        update_request = next(
+            request
+            for request in requests
+            if request.method == "PUT"
+            and request.url.path == f"/api/v1/recurrent-breaks/{existing.id}"
+        )
+        assert json.loads(update_request.content)["interval_end"] is None
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_cutoff_only_weekly_edit_preserves_interval_endpoints(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    existing = _break(
+        teacher,
+        datetime(2030, 11, 5, 10),
+        datetime(2030, 11, 5, 10, 30),
+        interval=7,
+        interval_end=datetime(2030, 12, 1),
+    )
+    assert isinstance(existing, RecurrentEvent)
+    db_session.add(existing)
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Edit break")
+        await driver.click("Change series end")
+        cutoff_message_id = driver.update_id + 1
+        await driver.text("15/12/2030")
+        assert driver.deleted_message_ids()[-1] == cutoff_message_id
+        assert driver.deleted_message_ids().count(cutoff_message_id) == 1
+        assert "10:00 - 10:30" in driver.session.last_message.text
+        await driver.click("Save change")
+
+        updated = await db_session.execute(
+            select(
+                RecurrentEvent.start,
+                RecurrentEvent.end,
+                RecurrentEvent.interval,
+                RecurrentEvent.interval_end,
+            ).where(RecurrentEvent.id == existing.id)
+        )
+        assert updated.one() == (
+            datetime(2030, 11, 5, 10),
+            datetime(2030, 11, 5, 10, 30),
+            7,
+            datetime(2030, 12, 16),
+        )
+        update_request = next(
+            request
+            for request in requests
+            if request.method == "PUT"
+            and request.url.path == f"/api/v1/recurrent-breaks/{existing.id}"
+        )
+        payload = json.loads(update_request.content)
+        assert payload["start"] == "2030-11-05T10:00:00Z"
+        assert payload["end"] == "2030-11-05T10:30:00Z"
+        assert payload["interval"] == 7
+        assert payload["interval_end"] == "2030-12-16T00:00:00Z"
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_new_start_after_finite_cutoff_blocks_save_until_cutoff_is_fixed(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    existing = _break(
+        teacher,
+        datetime(2030, 11, 5, 10),
+        datetime(2030, 11, 5, 10, 30),
+        interval=7,
+        interval_end=datetime(2030, 12, 1),
+    )
+    assert isinstance(existing, RecurrentEvent)
+    db_session.add(existing)
+    await db_session.commit()
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Edit break")
+        await driver.click("Change date")
+        await driver.text("02/12/2030")
+        assert "no longer includes the first break" in driver.session.last_message.text
+        markup = driver.session.last_message.reply_markup
+        assert markup is not None
+        assert all(
+            button.text != "Save change"
+            for row in markup.inline_keyboard
+            for button in row
+        )
+
+        await driver.click("Change series end")
+        await driver.text("20/12/2030")
+        assert driver.callback_data("Save change")
+        await driver.click("Save change")
+
+        updated = await db_session.execute(
+            select(
+                RecurrentEvent.start,
+                RecurrentEvent.end,
+                RecurrentEvent.interval,
+                RecurrentEvent.interval_end,
+            ).where(RecurrentEvent.id == existing.id)
+        )
+        assert updated.one() == (
+            datetime(2030, 12, 2, 10),
+            datetime(2030, 12, 2, 10, 30),
+            7,
+            datetime(2030, 12, 21),
+        )
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_canceling_a_changed_break_edit_does_not_write(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    existing = _break(teacher, datetime(2030, 11, 5, 12), datetime(2030, 11, 5, 12, 30))
+    assert isinstance(existing, Event)
+    db_session.add(existing)
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver)
+        await driver.click(_event_button(driver))
+        await driver.click("Edit break")
+        await driver.click("Change start")
+        await driver.text("10:00")
+        assert "10:00 - 12:30" in driver.session.last_message.text
+        await driver.click("Cancel")
+
+        unchanged = await db_session.execute(
+            select(Event.start, Event.end).where(Event.id == existing.id)
+        )
+        assert unchanged.one() == (
+            datetime(2030, 11, 5, 12),
+            datetime(2030, 11, 5, 12, 30),
+        )
+        assert not any(
+            request.method == "PUT"
+            and request.url.path == f"/api/v1/breaks/{existing.id}"
+            for request in requests
+        )
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_stale_break_edit_requires_reload_without_replaying_write(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    existing = _break(teacher, datetime(2030, 11, 5, 12), datetime(2030, 11, 5, 12, 30))
+    assert isinstance(existing, Event)
+    db_session.add(existing)
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client,
+        bot_service_key,
+        _telegram_id(teacher),
+        stale_update_once=True,
+    )
+    try:
+        await _open_break_list(driver)
+        await driver.click(_event_button(driver))
+        await driver.click("Edit break")
+        await driver.click("Change start")
+        await driver.text("10:00")
+        await driver.click("Save change")
+        assert "Reload" in [
+            button.text
+            for row in driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+        ]
+        assert "This event changed. Reload it before editing." in (
+            driver.session.last_message.text
+        )
+        await driver.click("Reload")
+        assert "Current break details were reloaded." in (
+            driver.session.last_message.text
+        )
+        assert "No write was repeated." in driver.session.last_message.text
+        assert (
+            sum(
+                request.method == "PUT"
+                and request.url.path == f"/api/v1/breaks/{existing.id}"
+                for request in requests
+            )
+            == 1
+        )
+        unchanged = await db_session.execute(
+            select(Event.start, Event.end).where(Event.id == existing.id)
+        )
+        assert unchanged.one() == (
+            datetime(2030, 11, 5, 12),
+            datetime(2030, 11, 5, 12, 30),
+        )
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_legacy_recurrent_break_edit_preserves_interval_timezone_and_cutoff(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session, timezone="America/Chicago")
+    original_day = date.today() + timedelta(days=1)
+    original_start = datetime.combine(original_day, time(16))
+    interval_end = datetime.combine(original_day + timedelta(days=80), time(6))
+    existing = _break(
+        teacher,
+        original_start,
+        original_start + timedelta(minutes=30),
+        interval=14,
+        interval_end=interval_end,
+    )
+    assert isinstance(existing, RecurrentEvent)
+    existing.recurrence_mode = "TEACHER_LOCAL"
+    existing.recurrence_timezone = "America/Chicago"
+    db_session.add(existing)
+    await db_session.commit()
+    teacher.timezone = "UTC"
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Edit break")
+        await driver.click("Change date")
+        start_message_id = driver.update_id + 1
+        new_start_day = original_day + timedelta(days=1)
+        await driver.text(
+            f"{new_start_day.day:02}/{new_start_day.month:02}/{new_start_day.year}"
+        )
+        assert driver.deleted_message_ids()[-1] == start_message_id
+        assert driver.deleted_message_ids().count(start_message_id) == 1
+        assert "16:00 - 16:30" in driver.session.last_message.text
+
+        await driver.click("Change series end")
+        markup = driver.session.last_message.reply_markup
+        assert markup is not None
+        assert all(
+            button.text != "No end" for row in markup.inline_keyboard for button in row
+        )
+        inferred_cutoff = date.today() - timedelta(days=60)
+        await driver.text(f"{inferred_cutoff.day:02}/{inferred_cutoff.month:02}")
+        assert "is in the next year" in driver.session.last_message.text
+        await driver.click("Back")
+        assert "16:00 - 16:30" in driver.session.last_message.text
+        assert "Last break date (inclusive):" in driver.session.last_message.text
+
+        await driver.click("Save change")
+        updated = (
+            await db_session.execute(
+                select(
+                    RecurrentEvent.start,
+                    RecurrentEvent.end,
+                    RecurrentEvent.interval,
+                    RecurrentEvent.interval_end,
+                    RecurrentEvent.recurrence_mode,
+                    RecurrentEvent.recurrence_timezone,
+                ).where(RecurrentEvent.id == existing.id)
+            )
+        ).one()
+        assert updated == (
+            datetime.combine(new_start_day, time(16)),
+            datetime.combine(new_start_day, time(16, 30)),
+            14,
+            interval_end,
+            "TEACHER_LOCAL",
+            "America/Chicago",
+        )
+        update_request = next(
+            request
+            for request in requests
+            if request.method == "PUT"
+            and request.url.path == f"/api/v1/recurrent-breaks/{existing.id}"
+        )
+        payload = json.loads(update_request.content)
+        assert payload["interval"] == 14
+        assert datetime.fromisoformat(payload["interval_end"]) == interval_end.replace(
+            tzinfo=UTC
+        )
+        assert datetime.fromisoformat(payload["start"]) == datetime.combine(
+            new_start_day, time(16), tzinfo=UTC
+        )
+        assert datetime.fromisoformat(payload["end"]) == datetime.combine(
+            new_start_day, time(16, 30), tzinfo=UTC
+        )
     finally:
         await _close_bot(driver, http)
 

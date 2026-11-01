@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from copy import deepcopy
 from datetime import date, datetime, time, timedelta
 from html import escape
 from typing import Any, Literal
@@ -31,7 +34,10 @@ from telegram.api import (
     SessionView,
 )
 from telegram.shared.access import backend
-from telegram.shared.date_cleanup import delete_accepted_date_message
+from telegram.shared.date_cleanup import (
+    delete_accepted_date_message,
+    delete_accepted_input_message,
+)
 from telegram.shared.feedback import feedback_block
 from telegram.shared.inputs import (
     ParsedScheduleDate,
@@ -47,6 +53,23 @@ from telegram.shared.inputs import (
 BREAK_PAGE_SIZE = 20
 DISPLACEMENT_PAGE_SIZE = 10
 BreakKind = Literal["once", "weekly"]
+OPEN_ENDED_BREAK_NOTE = (
+    "No end. Each write checks existing lessons for at most one calendar year "
+    "from the submitted start; later lessons may overlap, and no later "
+    "cancellations are scheduled."
+)
+_EDIT_FIELDS = (
+    "start_date",
+    "start_time",
+    "end_time",
+    "start_seconds",
+    "end_seconds",
+    "end_day_offset",
+    "resolution",
+    "cutoff_date",
+    "interval_end",
+    "cutoff_invalid",
+)
 
 
 class BreakScreens(StatesGroup):
@@ -94,6 +117,7 @@ async def open_break_management(
             "needs_reload": False,
             "outcome_unknown": False,
             "operation": None,
+            "field_snapshot": None,
         },
         mode=StartMode.NORMAL,
         show_mode=ShowMode.EDIT,
@@ -275,12 +299,26 @@ async def begin_create(
         form_action="create",
         start_date=None,
         start_time=None,
+        end_time=None,
+        start_seconds=0,
+        end_seconds=0,
+        end_day_offset=0,
         resolution=None,
         cutoff_date=None,
         interval_end=None,
+        cutoff_invalid=False,
+        pending_start_date=None,
+        field_snapshot=None,
+        field_edit=None,
+        start_date_confirmation="",
+        cutoff_date_confirmation="",
         error="",
         notice="",
+        warning="",
         preview=None,
+        pending_payload=None,
+        preview_skip=0,
+        submitting=False,
         needs_reload=False,
         outcome_unknown=False,
     )
@@ -293,6 +331,8 @@ async def start_date_input(
     manager: DialogManager,
     value: str,
 ) -> None:
+    if message.from_user is None:
+        raise ValueError("Break management requires a private chat")
     try:
         parsed = _parse_local_date(manager, value)
     except (OverflowError, ValueError) as exc:
@@ -300,7 +340,7 @@ async def start_date_input(
         await manager.show(show_mode=ShowMode.EDIT)
         return
     manager.dialog_data.update(
-        start_date=parsed.value.isoformat(),
+        pending_start_date=parsed.value.isoformat(),
         start_date_confirmation=(
             format_schedule_date_confirmation(parsed)
             if parsed.requires_confirmation
@@ -308,71 +348,321 @@ async def start_date_input(
         ),
         error="",
     )
-    await delete_accepted_date_message(message, manager)
-    await manager.switch_to(
-        BreakScreens.confirm_start_date
-        if parsed.requires_confirmation
-        else BreakScreens.start_time,
-        show_mode=ShowMode.EDIT,
-    )
+    if parsed.requires_confirmation:
+        await delete_accepted_date_message(message, manager)
+        await manager.switch_to(
+            BreakScreens.confirm_start_date, show_mode=ShowMode.EDIT
+        )
+        return
+    if await _accept_start_date(message.from_user.id, message.chat.id, manager):
+        await delete_accepted_date_message(message, manager)
 
 
 async def confirm_start_date(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
+    callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    await manager.switch_to(BreakScreens.start_time, show_mode=ShowMode.EDIT)
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
+    await _accept_start_date(callback.from_user.id, callback.message.chat.id, manager)
+
+
+async def _accept_start_date(
+    sender_id: int, chat_id: int, manager: DialogManager
+) -> bool:
+    data = manager.dialog_data
+    start_date = data.get("pending_start_date")
+    if not isinstance(start_date, str):
+        data["error"] = "Enter a valid break start date."
+        await manager.show(show_mode=ShowMode.EDIT)
+        return False
+
+    if data.get("field_snapshot") is None:
+        data.update(
+            start_date=start_date,
+            pending_start_date=None,
+            start_date_confirmation="",
+            resolution=None,
+            error="",
+        )
+        await manager.switch_to(BreakScreens.start_time, show_mode=ShowMode.EDIT)
+        return True
+
+    try:
+        resolution = await _resolve_draft_interval(
+            sender_id,
+            chat_id,
+            manager,
+            start_date=start_date,
+        )
+    except (BackendError, BackendUnavailable, OverflowError, ValueError) as exc:
+        data["error"] = str(exc)
+        await manager.show(show_mode=ShowMode.EDIT)
+        return False
+
+    data.update(
+        start_date=start_date,
+        pending_start_date=None,
+        start_date_confirmation="",
+        resolution=resolution.model_dump(mode="json"),
+        cutoff_invalid=_cutoff_excludes_start(data, resolution),
+        error="",
+    )
+    _finish_field_edit(data)
+    _invalidate_preview(data)
+    if data["cutoff_invalid"]:
+        data["error"] = (
+            "The current series end no longer includes the first break. "
+            "Change the series end before saving."
+        )
+    await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
+    return True
 
 
 async def change_start_date(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data.update(
-        start_date=None,
-        start_time=None,
-        resolution=None,
-        cutoff_date=None,
-        interval_end=None,
-        error="",
-    )
+    data = manager.dialog_data
+    if data.get("field_snapshot") is None:
+        data.update(
+            start_date=None,
+            start_time=None,
+            end_time=None,
+            start_seconds=0,
+            end_seconds=0,
+            end_day_offset=0,
+            resolution=None,
+            cutoff_date=None,
+            interval_end=None,
+            cutoff_invalid=False,
+        )
+    data.update(pending_start_date=None, error="")
+    data["notice"] = ""
     await manager.switch_to(BreakScreens.start_date, show_mode=ShowMode.EDIT)
 
 
 async def change_start_time(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data.update(start_time=None, resolution=None, error="")
+    manager.dialog_data.update(error="", notice="")
     await manager.switch_to(BreakScreens.start_time, show_mode=ShowMode.EDIT)
 
 
 async def change_end_time(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data.update(
-        resolution=None, cutoff_date=None, interval_end=None, error=""
-    )
+    manager.dialog_data.update(error="", notice="")
     await manager.switch_to(BreakScreens.end_time, show_mode=ShowMode.EDIT)
 
 
 async def change_cutoff_date(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data.update(cutoff_date=None, interval_end=None, error="")
+    data = manager.dialog_data
+    data["error"] = ""
     await manager.switch_to(BreakScreens.cutoff_date, show_mode=ShowMode.EDIT)
 
 
+def _begin_field_edit(manager: DialogManager, field: str) -> None:
+    data = manager.dialog_data
+    if data.get("field_snapshot") is None:
+        data["field_snapshot"] = {key: deepcopy(data.get(key)) for key in _EDIT_FIELDS}
+    data.update(field_edit=field, error="", notice="")
+
+
+async def edit_start_date(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    _begin_field_edit(manager, "start_date")
+    manager.dialog_data["pending_start_date"] = None
+    await manager.switch_to(BreakScreens.start_date, show_mode=ShowMode.EDIT)
+
+
+async def edit_start_time(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    _begin_field_edit(manager, "start_time")
+    await manager.switch_to(BreakScreens.start_time, show_mode=ShowMode.EDIT)
+
+
+async def edit_end_time(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    _begin_field_edit(manager, "end_time")
+    manager.dialog_data["notice"] = ""
+    await manager.switch_to(BreakScreens.end_time, show_mode=ShowMode.EDIT)
+
+
+async def edit_cutoff_date(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    _begin_field_edit(manager, "interval_end")
+    data = manager.dialog_data
+    cutoff = data.get("interval_end")
+    data["cutoff_date"] = _inclusive_cutoff_date(cutoff, data["viewer_timezone"])
+    await manager.switch_to(BreakScreens.cutoff_date, show_mode=ShowMode.EDIT)
+
+
+async def back_from_field_edit(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    data = manager.dialog_data
+    snapshot = data.get("field_snapshot")
+    if isinstance(snapshot, dict):
+        data.update(snapshot)
+    data.update(
+        field_snapshot=None,
+        field_edit=None,
+        pending_start_date=None,
+        start_date_confirmation="",
+        cutoff_date_confirmation="",
+        error="",
+    )
+    await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
+
+
+def _finish_field_edit(data: dict[str, Any]) -> None:
+    data.update(field_snapshot=None, field_edit=None)
+
+
+def _invalidate_preview(data: dict[str, Any]) -> None:
+    data.update(preview=None, pending_payload=None, preview_skip=0)
+
+
+def _inclusive_cutoff_date(
+    interval_end: str | datetime | None, timezone: str
+) -> str | None:
+    if interval_end is None:
+        return None
+    value = (
+        interval_end
+        if isinstance(interval_end, datetime)
+        else datetime.fromisoformat(interval_end)
+    )
+    return (value.astimezone(ZoneInfo(timezone)).date() - timedelta(days=1)).isoformat()
+
+
+def _draft_local_interval(
+    manager: DialogManager,
+    *,
+    start_date: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    start_seconds: int | None = None,
+    end_seconds: int | None = None,
+) -> tuple[datetime, datetime]:
+    data = manager.dialog_data
+    local_day = date.fromisoformat(start_date or data["start_date"])
+    start_clock = start_time or data["start_time"]
+    end_clock = end_time or data["end_time"]
+    start = combine_schedule_date_time(local_day, start_clock) + timedelta(
+        seconds=data.get("start_seconds", 0) if start_seconds is None else start_seconds
+    )
+    end_day = local_day + timedelta(days=int(data.get("end_day_offset", 0)))
+    end = combine_schedule_date_time(end_day, end_clock) + timedelta(
+        seconds=data.get("end_seconds", 0) if end_seconds is None else end_seconds
+    )
+    if end <= start:
+        raise ValueError("The break end time must be after its start time.")
+    return start, end
+
+
+async def _resolve_draft_interval(
+    sender_id: int,
+    chat_id: int,
+    manager: DialogManager,
+    *,
+    start_date: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    start_seconds: int | None = None,
+    end_seconds: int | None = None,
+) -> LocalIntervalResolution:
+    local_start, local_end = _draft_local_interval(
+        manager,
+        start_date=start_date,
+        start_time=start_time,
+        end_time=end_time,
+        start_seconds=start_seconds,
+        end_seconds=end_seconds,
+    )
+    return await backend(manager).resolve_local_interval(
+        sender_id, chat_id, local_start, local_end
+    )
+
+
+def _cutoff_excludes_start(
+    data: dict[str, Any], resolution: LocalIntervalResolution
+) -> bool:
+    cutoff = data.get("interval_end")
+    return cutoff is not None and datetime.fromisoformat(cutoff) <= resolution.start.utc
+
+
 async def start_time_input(
-    _message: Message,
+    message: Message,
     _widget: ManagedTextInput[str],
     manager: DialogManager,
     value: str,
 ) -> None:
+    if message.from_user is None:
+        raise ValueError("Break management requires a private chat")
     try:
         start_time = parse_schedule_time(value)
-        manager.dialog_data.update(
-            start_time=start_time,
-            error="",
+        data = manager.dialog_data
+        start_date = date.fromisoformat(data["start_date"])
+        local_start = combine_schedule_date_time(start_date, start_time)
+        await backend(manager).resolve_local_interval(
+            message.from_user.id,
+            message.chat.id,
+            local_start,
+            local_start + timedelta(minutes=1),
         )
-    except (OverflowError, ValueError) as exc:
+        if data.get("field_snapshot") is not None:
+            local_day = date.fromisoformat(data["start_date"])
+            local_interval_start = combine_schedule_date_time(local_day, start_time)
+            local_interval_end = combine_schedule_date_time(
+                local_day + timedelta(days=int(data.get("end_day_offset", 0))),
+                data["end_time"],
+            ) + timedelta(seconds=int(data.get("end_seconds", 0)))
+            if local_interval_end <= local_interval_start:
+                data.update(
+                    start_time=start_time,
+                    start_seconds=0,
+                    error="",
+                    notice="Enter an end time after the new start time.",
+                )
+                _invalidate_preview(data)
+                await delete_accepted_input_message(message, manager, "time")
+                await manager.switch_to(BreakScreens.end_time, show_mode=ShowMode.EDIT)
+                return
+            resolution = await _resolve_draft_interval(
+                message.from_user.id,
+                message.chat.id,
+                manager,
+                start_time=start_time,
+                start_seconds=0,
+            )
+            data.update(
+                start_time=start_time,
+                start_seconds=0,
+                resolution=resolution.model_dump(mode="json"),
+                cutoff_invalid=_cutoff_excludes_start(data, resolution),
+                notice="",
+            )
+            _finish_field_edit(data)
+            _invalidate_preview(data)
+            if data["cutoff_invalid"]:
+                data["error"] = (
+                    "The current series end no longer includes the first break. "
+                    "Change the series end before saving."
+                )
+            else:
+                data["error"] = ""
+            await delete_accepted_input_message(message, manager, "time")
+            await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
+            return
+        data.update(start_time=start_time, start_seconds=0, error="", notice="")
+        await delete_accepted_input_message(message, manager, "time")
+    except (BackendError, BackendUnavailable, OverflowError, ValueError) as exc:
         manager.dialog_data["error"] = str(exc)
         await manager.show(show_mode=ShowMode.EDIT)
         return
@@ -389,36 +679,30 @@ async def end_time_input(
         raise ValueError("Break management requires a private chat")
     try:
         end_time = parse_schedule_time(value)
-        local_date = date.fromisoformat(manager.dialog_data["start_date"])
-        local_start = combine_schedule_date_time(
-            local_date, manager.dialog_data["start_time"]
-        )
-        local_end = combine_schedule_date_time(local_date, end_time)
-        if local_end <= local_start:
-            raise ValueError("The break end time must be after its start time.")
-        resolution = await backend(manager).resolve_local_interval(
+        resolution = await _resolve_draft_interval(
             message.from_user.id,
             message.chat.id,
-            local_start,
-            local_end,
+            manager,
+            end_time=end_time,
+            end_seconds=0,
         )
     except (BackendError, BackendUnavailable, OverflowError, ValueError) as exc:
         manager.dialog_data["error"] = str(exc)
         await manager.show(show_mode=ShowMode.EDIT)
         return
-    manager.dialog_data.update(
+    data = manager.dialog_data
+    data.update(
+        end_time=end_time,
+        end_seconds=0,
         resolution=resolution.model_dump(mode="json"),
+        cutoff_invalid=_cutoff_excludes_start(data, resolution),
         error="",
+        notice="",
     )
-    if _kind(manager) == "weekly":
-        manager.dialog_data.update(
-            cutoff_date=None,
-            interval_end=None,
-            cutoff_date_confirmation="",
-        )
-        await manager.switch_to(BreakScreens.cutoff_date, show_mode=ShowMode.EDIT)
-    else:
-        await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
+    _finish_field_edit(data)
+    _invalidate_preview(data)
+    await delete_accepted_input_message(message, manager, "time")
+    await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
 
 
 async def cutoff_date_input(
@@ -437,7 +721,8 @@ async def cutoff_date_input(
         manager.dialog_data["error"] = str(exc)
         await manager.show(show_mode=ShowMode.EDIT)
         return
-    manager.dialog_data.update(
+    data = manager.dialog_data
+    data.update(
         cutoff_date=parsed.value.isoformat(),
         cutoff_date_confirmation=(
             format_schedule_date_confirmation(parsed)
@@ -446,13 +731,14 @@ async def cutoff_date_input(
         ),
         error="",
     )
-    await delete_accepted_date_message(message, manager)
     if parsed.requires_confirmation:
+        await delete_accepted_date_message(message, manager)
         await manager.switch_to(
             BreakScreens.confirm_cutoff_date, show_mode=ShowMode.EDIT
         )
         return
-    await _resolve_cutoff_date(message.from_user.id, message.chat.id, manager)
+    if await _resolve_cutoff_date(message.from_user.id, message.chat.id, manager):
+        await delete_accepted_date_message(message, manager)
 
 
 async def confirm_cutoff_date(
@@ -463,9 +749,28 @@ async def confirm_cutoff_date(
     await _resolve_cutoff_date(callback.from_user.id, callback.message.chat.id, manager)
 
 
+async def choose_no_end(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    data = manager.dialog_data
+    detail = _detail(manager) if data.get("form_action") == "edit" else None
+    if detail is not None and detail.interval != 7:
+        raise ValueError("Only weekly breaks can be open-ended.")
+    data.update(
+        interval_end=None,
+        cutoff_date=None,
+        cutoff_date_confirmation="",
+        cutoff_invalid=False,
+        error="",
+    )
+    _finish_field_edit(data)
+    _invalidate_preview(data)
+    await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
+
+
 async def _resolve_cutoff_date(
     sender_id: int, chat_id: int, manager: DialogManager
-) -> None:
+) -> bool:
     data = manager.dialog_data
     try:
         next_day = date.fromisoformat(data["cutoff_date"]) + timedelta(days=1)
@@ -483,28 +788,83 @@ async def _resolve_cutoff_date(
     except (BackendError, BackendUnavailable, OverflowError, ValueError) as exc:
         data["error"] = str(exc)
         await manager.show(show_mode=ShowMode.EDIT)
-        return
-    data.update(interval_end=cutoff.isoformat(), error="")
+        return False
+    data.update(
+        interval_end=cutoff.isoformat(),
+        cutoff_invalid=False,
+        error="",
+    )
+    _finish_field_edit(data)
+    _invalidate_preview(data)
     await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
+    return True
 
 
 async def begin_edit(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
+    callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data.update(
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
+    data = manager.dialog_data
+    try:
+        detail = await backend(manager).read_management_detail(
+            callback.from_user.id,
+            callback.message.chat.id,
+            _resource(manager),
+            _detail(manager).id,
+        )
+    except (BackendError, BackendUnavailable) as exc:
+        data["error"] = str(exc)
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+
+    timezone = data["viewer_timezone"]
+    zone = ZoneInfo(timezone)
+    local_start = detail.start.astimezone(zone)
+    local_end = detail.end.astimezone(zone)
+    resolution = LocalIntervalResolution.model_validate(
+        {
+            "timezone": timezone,
+            "start": _resolved_instant(detail.start, local_start),
+            "end": _resolved_instant(detail.end, local_end),
+        }
+    )
+    cutoff_date = _inclusive_cutoff_date(detail.interval_end, timezone)
+    data.update(
+        detail=detail.model_dump(mode="json"),
         form_action="edit",
-        start_date=None,
-        start_time=None,
-        resolution=None,
-        cutoff_date=None,
-        interval_end=None,
+        start_date=local_start.date().isoformat(),
+        start_time=f"{local_start.hour:02}:{local_start.minute:02}",
+        end_time=f"{local_end.hour:02}:{local_end.minute:02}",
+        start_seconds=local_start.second,
+        end_seconds=local_end.second,
+        end_day_offset=(local_end.date() - local_start.date()).days,
+        resolution=resolution.model_dump(mode="json"),
+        cutoff_date=cutoff_date,
+        interval_end=detail.interval_end.isoformat()
+        if detail.interval_end is not None
+        else None,
+        cutoff_invalid=False,
+        pending_start_date=None,
+        field_snapshot=None,
+        field_edit=None,
         error="",
         notice="",
         preview=None,
+        pending_payload=None,
         needs_reload=False,
         outcome_unknown=False,
     )
-    await manager.switch_to(BreakScreens.start_date, show_mode=ShowMode.EDIT)
+    await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
+
+
+def _resolved_instant(utc: datetime, local: datetime) -> dict[str, Any]:
+    offset = local.strftime("%z")
+    return {
+        "local": local.isoformat(),
+        "utc": utc.isoformat(),
+        "utc_offset": f"{offset[:3]}:{offset[3:]}",
+    }
 
 
 def _review_text(manager: DialogManager) -> str:
@@ -517,20 +877,30 @@ def _review_text(manager: DialogManager) -> str:
         f"Timezone: {resolution.timezone}"
     )
     if _kind(manager) == "weekly":
-        interval_end = datetime.fromisoformat(data["interval_end"])
-        inclusive_end = interval_end.astimezone(
-            ZoneInfo(data["viewer_timezone"])
-        ).date() - timedelta(days=1)
-        text += (
-            f"\nLast break date (inclusive): "
-            f"{_format_date(inclusive_end, data['viewer_timezone'])}"
-        )
+        interval_end = data.get("interval_end")
+        if interval_end is None:
+            text += f"\nLast break date (inclusive): No end\n{OPEN_ENDED_BREAK_NOTE}"
+        else:
+            inclusive_end = _inclusive_cutoff_date(
+                interval_end, data["viewer_timezone"]
+            )
+            if inclusive_end is None:
+                raise ValueError("The recurring break cutoff is unavailable.")
+            text += (
+                f"\nLast break date (inclusive): "
+                f"{_format_date(date.fromisoformat(inclusive_end), data['viewer_timezone'])}"
+            )
     if data.get("form_action") == "edit" and _kind(manager) == "weekly":
         detail = _detail(manager)
         if (
             resolution.start.utc != detail.start
             or resolution.end.utc != detail.end
-            or datetime.fromisoformat(data["interval_end"]) != detail.interval_end
+            or (
+                datetime.fromisoformat(data["interval_end"])
+                if data.get("interval_end") is not None
+                else None
+            )
+            != detail.interval_end
         ):
             text += (
                 "\nChanging the recurring break's date, time, or cutoff does not "
@@ -546,6 +916,8 @@ async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     except (KeyError, TypeError, ValueError, OverflowError) as exc:
         review = f"Review could not be displayed: {exc}"
     blocked = bool(data.get("needs_reload") or data.get("outcome_unknown"))
+    valid_resolution = data.get("resolution") is not None
+    cutoff_invalid = bool(data.get("cutoff_invalid"))
     return {
         "review": escape(review),
         "feedback": feedback_block(
@@ -556,11 +928,24 @@ async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "save_label": "Save break"
         if data.get("form_action") == "create"
         else "Save change",
-        "can_submit": not blocked and not data.get("submitting"),
+        "can_submit": (
+            valid_resolution
+            and not cutoff_invalid
+            and not blocked
+            and not data.get("submitting")
+        ),
         "can_edit": not blocked and not data.get("submitting"),
         "can_edit_cutoff": (
             not blocked and not data.get("submitting") and data.get("kind") == "weekly"
         ),
+        "can_clear_cutoff": (
+            data.get("kind") == "weekly"
+            and (
+                data.get("form_action") != "edit"
+                or _detail(dialog_manager).interval == 7
+            )
+        ),
+        "has_field_snapshot": isinstance(data.get("field_snapshot"), dict),
         "can_reload": blocked,
         "can_back_to_detail": data.get("form_action") == "edit",
     }
@@ -576,6 +961,7 @@ async def submit_review(
         data.get("submitting")
         or data.get("needs_reload")
         or data.get("outcome_unknown")
+        or data.get("cutoff_invalid")
     ):
         return
     try:
@@ -616,7 +1002,11 @@ def _build_payload(manager: DialogManager) -> BaseModel:
             user_id=user_id,
             event_type="BREAK",
             interval=interval,
-            interval_end=datetime.fromisoformat(data["interval_end"]),
+            interval_end=(
+                datetime.fromisoformat(data["interval_end"])
+                if data.get("interval_end") is not None
+                else None
+            ),
         )
     return RecurrentEventUpdatePayload(
         start=resolution.start.utc,
@@ -624,7 +1014,11 @@ def _build_payload(manager: DialogManager) -> BaseModel:
         user_id=user_id,
         event_type="BREAK",
         interval=interval,
-        interval_end=datetime.fromisoformat(data["interval_end"]),
+        interval_end=(
+            datetime.fromisoformat(data["interval_end"])
+            if data.get("interval_end") is not None
+            else None
+        ),
     )
 
 
@@ -770,6 +1164,18 @@ async def displacement_data(dialog_manager: DialogManager, **_: Any) -> dict[str
     skip = int(data.get("preview_skip", 0))
     items = preview.affected_occurrences[skip : skip + DISPLACEMENT_PAGE_SIZE]
     total = len(preview.affected_occurrences)
+    pending_payload = data.get("pending_payload", {})
+    warning = (
+        "Confirming permanently deletes overlapping one-time lessons and "
+        "cancels exact weekly occurrences. Deleting this break later will not "
+        "restore them."
+    )
+    if (
+        data.get("kind") == "weekly"
+        and isinstance(pending_payload, dict)
+        and pending_payload.get("interval_end") is None
+    ):
+        warning = f"{warning}\n{OPEN_ENDED_BREAK_NOTE}"
     return {
         "affected": "\n".join(
             escape(_occurrence_label(item, data["viewer_timezone"])) for item in items
@@ -778,11 +1184,7 @@ async def displacement_data(dialog_manager: DialogManager, **_: Any) -> dict[str
         "timezone": escape(data["viewer_timezone"]),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
-        "warning": (
-            "Confirming permanently deletes overlapping one-time lessons and "
-            "cancels exact weekly occurrences. Deleting this break later will not "
-            "restore them."
-        ),
+        "warning": warning,
         "feedback": feedback_block(
             error=str(data.get("error", "")),
             warning=str(data.get("warning", "")),
@@ -1040,14 +1442,14 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     )
     if detail.is_recurrent:
         assert detail.interval is not None
-        assert detail.interval_end is not None
-        last_day = detail.interval_end.astimezone(
-            ZoneInfo(timezone)
-        ).date() - timedelta(days=1)
-        text += (
-            f"\nRepeats every {detail.interval} days"
-            f"\nLast break date (inclusive): {_format_date(last_day, timezone)}"
-        )
+        text += f"\nRepeats every {detail.interval} days"
+        if detail.interval_end is None:
+            text += f"\nLast break date (inclusive): No end\n{OPEN_ENDED_BREAK_NOTE}"
+        else:
+            last_day = detail.interval_end.astimezone(
+                ZoneInfo(timezone)
+            ).date() - timedelta(days=1)
+            text += f"\nLast break date (inclusive): {_format_date(last_day, timezone)}"
     text += f"\nTimezone: {timezone}"
     blocked = bool(data.get("needs_reload") or data.get("outcome_unknown"))
     return {
@@ -1097,6 +1499,15 @@ async def management_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
         cutoff_date_confirmation=escape(str(data.get("cutoff_date_confirmation", ""))),
         viewer_timezone=data["viewer_timezone"],
         confirm_text=escape(str(data.get("confirm_text", ""))),
+        has_field_snapshot=isinstance(data.get("field_snapshot"), dict),
+        can_change_date=bool(data.get("start_date")),
+        can_clear_cutoff=(
+            data.get("kind") == "weekly"
+            and (
+                data.get("form_action") != "edit"
+                or _detail(dialog_manager).interval == 7
+            )
+        ),
     )
     if data.get("detail") is not None:
         result.update(await detail_data(dialog_manager))
@@ -1195,6 +1606,12 @@ def build_break_dialog() -> Dialog:
                 "optionally with a year."
             ),
             TextInput("start_date", on_success=start_date_input, on_error=break_error),
+            Button(
+                Const("Back"),
+                id="back",
+                on_click=back_from_field_edit,
+                when="has_field_snapshot",
+            ),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
             state=BreakScreens.start_date,
         ),
@@ -1205,6 +1622,12 @@ def build_break_dialog() -> Dialog:
             ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_start_date),
             Button(Const("Change date"), id="change", on_click=change_start_date),
+            Button(
+                Const("Back"),
+                id="back",
+                on_click=back_from_field_edit,
+                when="has_field_snapshot",
+            ),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
             state=BreakScreens.confirm_start_date,
         ),
@@ -1214,17 +1637,34 @@ def build_break_dialog() -> Dialog:
                 "Timezone: {viewer_timezone}"
             ),
             TextInput("start_time", on_success=start_time_input, on_error=break_error),
-            Button(Const("Change date"), id="date", on_click=change_start_date),
+            Button(
+                Const("Change date"),
+                id="date",
+                on_click=change_start_date,
+                when="can_change_date",
+            ),
+            Button(
+                Const("Back"),
+                id="back",
+                on_click=back_from_field_edit,
+                when="has_field_snapshot",
+            ),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
             state=BreakScreens.start_time,
         ),
         Window(
             Format(
-                "{feedback}Enter the break end time on the same local date.\n"
+                "{feedback}{notice}Enter the break end time on the same local date.\n"
                 "Timezone: {viewer_timezone}"
             ),
             TextInput("end_time", on_success=end_time_input, on_error=break_error),
             Button(Const("Change start time"), id="start", on_click=change_start_time),
+            Button(
+                Const("Back"),
+                id="back",
+                on_click=back_from_field_edit,
+                when="has_field_snapshot",
+            ),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
             state=BreakScreens.end_time,
         ),
@@ -1236,7 +1676,19 @@ def build_break_dialog() -> Dialog:
             TextInput(
                 "cutoff_date", on_success=cutoff_date_input, on_error=break_error
             ),
+            Button(
+                Const("No end"),
+                id="no_end",
+                on_click=choose_no_end,
+                when="can_clear_cutoff",
+            ),
             Button(Const("Change break time"), id="time", on_click=change_start_time),
+            Button(
+                Const("Back"),
+                id="back",
+                on_click=back_from_field_edit,
+                when="has_field_snapshot",
+            ),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
             state=BreakScreens.cutoff_date,
         ),
@@ -1247,6 +1699,18 @@ def build_break_dialog() -> Dialog:
             ),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_cutoff_date),
             Button(Const("Change date"), id="change", on_click=change_cutoff_date),
+            Button(
+                Const("No end"),
+                id="no_end",
+                on_click=choose_no_end,
+                when="can_clear_cutoff",
+            ),
+            Button(
+                Const("Back"),
+                id="back",
+                on_click=back_from_field_edit,
+                when="has_field_snapshot",
+            ),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
             state=BreakScreens.confirm_cutoff_date,
         ),
@@ -1268,25 +1732,25 @@ def build_break_dialog() -> Dialog:
                 Button(
                     Const("Change date"),
                     id="change_date",
-                    on_click=change_start_date,
+                    on_click=edit_start_date,
                     when="can_edit",
                 ),
                 Button(
                     Const("Change start"),
                     id="change_start",
-                    on_click=change_start_time,
+                    on_click=edit_start_time,
                     when="can_edit",
                 ),
                 Button(
                     Const("Change end"),
                     id="change_end",
-                    on_click=change_end_time,
+                    on_click=edit_end_time,
                     when="can_edit",
                 ),
                 Button(
-                    Const("Change last date"),
+                    Const("Change series end"),
                     id="change_cutoff",
-                    on_click=change_cutoff_date,
+                    on_click=edit_cutoff_date,
                     when="can_edit_cutoff",
                 ),
             ),
