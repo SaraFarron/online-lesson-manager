@@ -6,9 +6,9 @@ Make every implemented Telegram event creation and update flow follow the
 working lesson UX: accepted date/time input disappears, defaults avoid unnecessary
 steps, and focused edits preserve unrelated draft values.
 
-**Status:** In progress; original Tasks 01–03 are verified on SQLite and the
-typed client, and the break work in Tasks 04–06 is verified. Vacation cleanup
-for Task 04 and Tasks 07–09 remain. PostgreSQL verification remains unavailable.
+**Status:** In progress; original Tasks 01–08 are verified on SQLite and the
+typed client. Task 09 cross-flow handoff remains. PostgreSQL verification
+remains unavailable; no live Telegram actions were performed.
 
 ## Scope (README.md sections covered)
 
@@ -522,11 +522,11 @@ picker functions, authorized backend picker, and inclusive vacation interval.
 
 ### Acceptance Criteria
 
-- [ ] Teacher Add vacation → date without a roster fetch; student flow remains
+- [x] Teacher Add vacation → date without a roster fetch; student flow remains
   self-only. Both still require explicit inclusive last vacation date.
-- [ ] Optional assignee changes and Back preserve entered dates/time; failed
+- [x] Optional assignee changes and Back preserve entered dates/time; failed
   picker reads leave personal creation available.
-- [ ] A second creation after end-date editing cannot interpret the next start
+- [x] A second creation after end-date editing cannot interpret the next start
   date as `end_date`; common bot checks pass.
 
 ### Out of scope
@@ -569,11 +569,11 @@ cleanup, lesson editor return-state pattern, and current submit/reload logic.
 
 ### Acceptance Criteria
 
-- [ ] Teacher/student create-review and saved-update field edits change only
+- [x] Teacher/student create-review and saved-update field edits change only
   the selected field and return to review without replaying the wizard.
-- [ ] Back from date/time/confirmation restores previous values; Cancel makes
+- [x] Back from date/time/confirmation restores previous values; Cancel makes
   no write. Invalid ranges retain accepted draft fields.
-- [ ] Same-day vacations, cross-year end dates, DST, hidden lessons, and
+- [x] Same-day vacations, cross-year end dates, DST, hidden lessons, and
   unknown write outcomes preserve their contracts; common bot checks pass.
 
 ### Out of scope
@@ -584,6 +584,27 @@ to vacation visibility/conflict policy.
 ### Suitable for
 
 AI agent.
+
+## Execution evidence — closeout Task 03 (2026-11-01)
+
+- Teacher creation now starts with a personal vacation and does not request the
+  student roster; the optional picker retains the caller and draft through
+  selection, Back, and roster-read failure. Student creation remains self-only.
+- New drafts clear date/confirmation/picker/recovery state. Focused start date,
+  start time, and inclusive end-date edits return directly to review; Back
+  preserves stored values, including while an inferred-year confirmation is
+  pending. Accepted start-time input is deleted; invalid date/time input stays.
+- Real-dispatcher/SQLite verification:
+  `uv run pytest -q tests/test_bot_vacation_management.py tests/test_bot_cross_flow.py`
+  — **11 passed**. Coverage includes repeated drafts, same-day and cross-year
+  inclusive ends, New York DST-gap resolution, hidden lessons, student scope,
+  unknown create outcomes, no-write navigation, and cancellation.
+- `uv run ruff check backend telegram tests`, `uv run ruff format --check
+  telegram tests`, `uv run mypy backend`, and `uv run mypy telegram` passed.
+  Pytest reported existing `pytest-asyncio` event-loop-policy deprecation
+  warnings.
+- No live Telegram actions were performed. PostgreSQL remains unavailable for
+  the broader recurrence verification recorded under Task 01.
 
 ## Task 09: Verify cross-flow parity and publish the implementation handoff
 
@@ -684,11 +705,11 @@ closeout execution. It records source inspection, not new test results.
 | 01 — persisted weekly-break recurrence | `backend/events/models.py`, `backend/events/schemas.py`, `backend/breaks/schemas.py`, `alembic/versions/2026-10-29_open_ended_weekly_breaks.py`; `tests/test_open_ended_recurrence_schema.py`, `tests/test_open_ended_recurrence_migration.py` | Implemented; SQLite evidence is recorded above. PostgreSQL verification remains externally blocked. |
 | 02 — bounded break writes and conflicts | `backend/events/mutations/recurring.py`, `backend/events/conflicts.py`, `backend/events/occurrences.py`, `backend/events/management/`; `tests/test_event_conflicts.py`, `tests/test_recurrent_event_edits.py` | Verified in closeout Task 01 after fixing weekly-break null-cutoff guards; SQLite boundary, later-write, confirmation, and regression evidence is recorded above. PostgreSQL remains unavailable. |
 | 03 — typed client open-ended shapes | `telegram/api/models/events.py`, `telegram/api/client.py`; `tests/test_bot_client.py` | Verified in closeout Task 01; open/finite round-trips, exact null JSON, confirmation/revision headers, and malformed null shapes are covered. |
-| 04 — accepted-time cleanup | `telegram/dialogs/breaks.py`, `telegram/dialogs/vacations.py`, `telegram/shared/date_cleanup.py`; `tests/test_bot_break_management.py`, `tests/test_bot_vacation_management.py` | Date cleanup is present, but accepted break/vacation time messages are not deleted; focused verification and repair remain. |
+| 04 — accepted-time cleanup | `telegram/dialogs/breaks.py`, `telegram/dialogs/vacations.py`, `telegram/shared/date_cleanup.py`; `tests/test_bot_break_management.py`, `tests/test_bot_vacation_management.py` | Verified: accepted break start/end and vacation start-time messages are deleted; invalid input remains. Break and vacation test evidence is recorded in closeout Tasks 02–03. |
 | 05 — default-first weekly-break creation | `telegram/dialogs/breaks.py`; `tests/test_bot_break_management.py`, `tests/test_bot_client.py` | Defect found: weekly creation still requires a finite cutoff and review assumes one exists. |
 | 06 — focused break updates | `telegram/dialogs/breaks.py`; `tests/test_bot_break_management.py` | Defect found: edit entry clears the saved interval/cutoff and restarts date entry instead of opening a populated review. |
-| 07 — personal-first vacation creation | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Defect found: teacher creation fetches and requires a subject selection before date entry. |
-| 08 — focused vacation field edits | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Partially implemented: review edits exist, but creation still replays collection steps for some fields and field-level Back/restoration is absent; verify and repair only these gaps. |
+| 07 — personal-first vacation creation | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Verified in closeout Task 03: personal-first creation, requested-only roster loading, draft-preserving optional picker, and student self-only scope. |
+| 08 — focused vacation field edits | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Verified in closeout Task 03: focused date/time review edits, Back through inferred-year confirmation, accepted-time cleanup, interval ordering and recovery regressions. |
 | 09 — cross-flow parity and handoff | `tests/test_bot_lesson_creation.py`, `tests/test_bot_lesson_management.py`, `tests/test_bot_break_management.py`, `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py`, `tests/test_bot_client.py`, schema/conflict/migration tests, `README.md`, `AGENTS.md` | Verification and documentation task; run after Tasks 02–03, record automated versus unavailable PostgreSQL/live-Telegram evidence separately. |
 
 ## Out of scope for this release

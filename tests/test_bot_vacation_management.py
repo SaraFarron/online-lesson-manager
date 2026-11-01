@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime, time, timedelta
 from itertools import count
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -13,6 +14,7 @@ from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from telegram.api import (
     BackendClient,
     BackendError,
+    BackendUnavailable,
     EventCreatePayload,
     EventWriteResult,
 )
@@ -149,6 +151,7 @@ async def _create_vacation(
 ) -> None:
     await driver.click("Add vacation")
     if subject is not None:
+        await driver.click("Change assignee")
         await driver.click(subject)
     screen_message_id = driver.session.last_message.message_id
     assert "Timezone:" not in driver.session.last_message.text
@@ -157,7 +160,9 @@ async def _create_vacation(
     await driver.text(start_date)
     assert driver.deleted_message_ids()[-1] == start_message_id
     assert driver.session.last_message.message_id == screen_message_id
+    time_message_id = driver.update_id + 1
     await driver.text(start_time)
+    assert driver.deleted_message_ids()[-1] == time_message_id
     assert "Timezone:" not in driver.session.last_message.text
     assert "Asia/Bangkok" not in driver.session.last_message.text
     end_message_id = driver.update_id + 1
@@ -192,6 +197,7 @@ async def test_vacation_rejects_end_date_before_start_without_deleting_it(
     try:
         await _open_vacations(driver)
         await driver.click("Add vacation")
+        await driver.click("Change assignee")
         await driver.click("Personal vacation")
 
         screen_message_id = driver.session.last_message.message_id
@@ -199,13 +205,285 @@ async def test_vacation_rejects_end_date_before_start_without_deleting_it(
         await driver.text("05/11/2030")
         assert driver.deleted_message_ids() == [start_message_id]
         assert driver.session.last_message.message_id == screen_message_id
+        time_message_id = driver.update_id + 1
         await driver.text("10:00")
+        assert driver.deleted_message_ids()[-1] == time_message_id
 
         rejected_message_id = driver.update_id + 1
         await driver.text("04/11/2030")
         assert "cannot be before its start date" in driver.session.last_message.text
-        assert driver.deleted_message_ids() == [start_message_id]
+        assert driver.deleted_message_ids() == [start_message_id, time_message_id]
         assert rejected_message_id not in driver.deleted_message_ids()
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_personal_vacation_picker_is_optional_and_failure_keeps_draft(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _student, _other_student = await _seed_accounts(db_session)
+    driver, api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    picker_calls = 0
+
+    async def fail_picker(*_args, **_kwargs):
+        nonlocal picker_calls
+        picker_calls += 1
+        raise BackendUnavailable()
+
+    monkeypatch.setattr(api, "read_student_picker", fail_picker)
+    try:
+        await _open_vacations(driver)
+        await driver.click("Add vacation")
+        assert not any(
+            request.url.path == "/api/v1/auth/teacher/students" for request in requests
+        )
+
+        await driver.click("Change assignee")
+        assert picker_calls == 1
+        assert "Backend unavailable." in driver.session.last_message.text
+        assert "Enter the start date" in driver.session.last_message.text
+
+        await driver.text("04/11/2030")
+        await driver.text("10:00")
+        await driver.text("04/11/2030")
+        await driver.click("Save vacation")
+        vacation = (
+            await db_session.execute(
+                select(Event).where(Event.event_type == EventType.VACATION.value)
+            )
+        ).scalar_one()
+        assert vacation.user_id == teacher.id
+        assert vacation.start == datetime(2030, 11, 4, 3)
+        assert vacation.end == datetime(2030, 11, 4, 17)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_vacation_focused_edits_return_to_review_and_preserve_draft(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, student, _other_student = await _seed_accounts(db_session)
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_vacations(driver)
+        await driver.click("Add vacation")
+        await driver.text("04/11/2030")
+        await driver.text("10:00")
+        await driver.text("06/11/2030")
+        assert "November 4 at 10:00" in driver.session.last_message.text
+        assert "Last vacation date (inclusive): November 6" in (
+            driver.session.last_message.text
+        )
+
+        await driver.click("Change assignee")
+        await driver.click("Alice Learner")
+        assert "Review vacation for Alice Learner" in driver.session.last_message.text
+        assert "November 4 at 10:00" in driver.session.last_message.text
+        assert "Last vacation date (inclusive): November 6" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Change assignee")
+        await driver.click("Back")
+        assert "Review vacation for Alice Learner" in driver.session.last_message.text
+
+        await driver.click("Change last vacation date")
+        await driver.text("07/11/2030")
+        assert "Last vacation date (inclusive): November 7" in (
+            driver.session.last_message.text
+        )
+        await driver.click("Change start date")
+        await driver.text("05/11/2030")
+        assert "November 5 at 10:00" in driver.session.last_message.text
+        await driver.click("Change start time")
+        time_message_id = driver.update_id + 1
+        await driver.text("11:15")
+        assert driver.deleted_message_ids()[-1] == time_message_id
+        assert "November 5 at 11:15" in driver.session.last_message.text
+
+        await driver.click("Change start time")
+        await driver.click("Back")
+        assert "November 5 at 11:15" in driver.session.last_message.text
+
+        await driver.click("Change last vacation date")
+        await driver.click("Back")
+        assert "November 5 at 11:15" in driver.session.last_message.text
+        assert "Last vacation date (inclusive): November 7" in (
+            driver.session.last_message.text
+        )
+
+        await driver.click("Change start date")
+        rejected_message_id = driver.update_id + 1
+        await driver.text("08/11/2030")
+        assert "cannot be after its end date" in driver.session.last_message.text
+        assert rejected_message_id not in driver.deleted_message_ids()
+        await driver.click("Back")
+        assert "November 5 at 11:15" in driver.session.last_message.text
+        assert "Last vacation date (inclusive): November 7" in (
+            driver.session.last_message.text
+        )
+        assert not any(
+            request.url.path.startswith("/api/v1/vacations")
+            and request.method in {"POST", "PUT"}
+            for request in requests
+        )
+
+        await driver.click("Save vacation")
+        vacation = (
+            await db_session.execute(
+                select(Event).where(Event.event_type == EventType.VACATION.value)
+            )
+        ).scalar_one()
+        assert vacation.user_id == student.id
+        assert vacation.start == datetime(2030, 11, 5, 4, 15)
+        assert vacation.end == datetime(2030, 11, 7, 17)
+
+        await driver.click("Add vacation")
+        await driver.click("Cancel")
+        vacations = list(
+            (
+                await db_session.execute(
+                    select(Event).where(Event.event_type == EventType.VACATION.value)
+                )
+            ).scalars()
+        )
+        assert len(vacations) == 1
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_inferred_year_back_restores_existing_vacation_draft(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _student, _other_student = await _seed_accounts(db_session)
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        today = datetime.now(ZoneInfo("Asia/Bangkok")).date()
+        start = today + timedelta(days=400)
+        end = today + timedelta(days=420)
+        await _open_vacations(driver)
+        await driver.click("Add vacation")
+        await driver.text(start.strftime("%d/%m/%Y"))
+        await driver.text("10:00")
+        await driver.text(end.strftime("%d/%m/%Y"))
+        original_review = driver.session.last_message.text
+
+        await driver.click("Change start date")
+        await driver.text((today - timedelta(days=7)).strftime("%d/%m"))
+        assert "next year" in driver.session.last_message.text
+        await driver.click("Back")
+        assert driver.session.last_message.text == original_review
+        assert not any(
+            request.url.path.startswith("/api/v1/vacations")
+            and request.method in {"POST", "PUT"}
+            for request in requests
+        )
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_second_vacation_creation_does_not_reuse_previous_end_date(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _student, _other_student = await _seed_accounts(db_session)
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_vacations(driver)
+        await _create_vacation(
+            driver,
+            subject=None,
+            start_date="04/11/2030",
+            start_time="10:00",
+            end_date="04/11/2030",
+        )
+        await _create_vacation(
+            driver,
+            subject=None,
+            start_date="06/11/2030",
+            start_time="11:00",
+            end_date="06/11/2030",
+        )
+        vacations = list(
+            (
+                await db_session.execute(
+                    select(Event)
+                    .where(Event.event_type == EventType.VACATION.value)
+                    .order_by(Event.start)
+                )
+            ).scalars()
+        )
+        assert len(vacations) == 2
+        assert [vacation.start for vacation in vacations] == [
+            datetime(2030, 11, 4, 3),
+            datetime(2030, 11, 6, 4),
+        ]
+        assert [vacation.end for vacation in vacations] == [
+            datetime(2030, 11, 4, 17),
+            datetime(2030, 11, 6, 17),
+        ]
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_vacation_keeps_inclusive_end_across_calendar_year(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _student, _other_student = await _seed_accounts(db_session)
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_vacations(driver)
+        await _create_vacation(
+            driver,
+            subject=None,
+            start_date="31/12/2030",
+            start_time="10:00",
+            end_date="01/01/2031",
+        )
+        vacation = (
+            await db_session.execute(
+                select(Event).where(Event.event_type == EventType.VACATION.value)
+            )
+        ).scalar_one()
+        assert vacation.start == datetime(2030, 12, 31, 3)
+        assert vacation.end == datetime(2031, 1, 1, 17)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_vacation_keeps_backend_dst_gap_resolution(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _student, _other_student = await _seed_accounts(
+        db_session, timezone="America/New_York"
+    )
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_vacations(driver)
+        await _create_vacation(
+            driver,
+            subject=None,
+            start_date="10/03/2024",
+            start_time="02:30",
+            end_date="10/03/2024",
+        )
+        vacation = (
+            await db_session.execute(
+                select(Event).where(Event.event_type == EventType.VACATION.value)
+            )
+        ).scalar_one()
+        assert vacation.start == datetime(2024, 3, 10, 7, 30)
+        assert vacation.end == datetime(2024, 3, 11, 4)
     finally:
         await _close_bot(driver, http)
 
@@ -373,7 +651,7 @@ async def test_teacher_personal_vacation_hides_the_roster_and_students_cannot_ma
     db_session.add_all([first_lesson, second_lesson])
     await db_session.commit()
 
-    driver, api, http, _ = await _make_bot(
+    driver, api, http, requests = await _make_bot(
         client, bot_service_key, _telegram_id(teacher)
     )
     student_driver, student_api, student_http, _ = await _make_bot(
@@ -383,10 +661,13 @@ async def test_teacher_personal_vacation_hides_the_roster_and_students_cannot_ma
         await _open_vacations(driver)
         await _create_vacation(
             driver,
-            subject="Personal vacation",
+            subject=None,
             start_date="04/11/2030",
             start_time="10:00",
             end_date="04/11/2030",
+        )
+        assert not any(
+            request.url.path == "/api/v1/auth/teacher/students" for request in requests
         )
         teacher_vacation = (
             await db_session.execute(

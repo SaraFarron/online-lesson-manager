@@ -24,7 +24,10 @@ from telegram.api import (
     SessionView,
 )
 from telegram.shared.access import backend
-from telegram.shared.date_cleanup import delete_accepted_date_message
+from telegram.shared.date_cleanup import (
+    delete_accepted_date_message,
+    delete_accepted_input_message,
+)
 from telegram.shared.feedback import feedback_block
 from telegram.shared.inputs import (
     ParsedScheduleDate,
@@ -168,27 +171,31 @@ async def begin_create(
     data = manager.dialog_data
     data.update(
         form_action="create",
+        edit_flow="create",
         start_date=None,
         start_time=None,
         end_date=None,
         resolution=None,
         error="",
+        warning="",
         notice="",
         needs_reload=False,
         outcome_unknown=False,
         submitting=False,
-        subject_id=None,
-        subject_label=None,
+        subject_id=data["account_id"],
+        subject_label="Personal vacation",
+        date_field="start_date",
+        pending_date=None,
+        date_confirmation=None,
+        field_return_state="menu",
+        subject_return_state=None,
+        picker_skip=0,
+        picker_items=[],
+        picker_total=0,
     )
-    if data["is_teacher"]:
-        await _load_student_page(_callback, manager, 0)
-    else:
-        data.update(
-            subject_id=data["account_id"],
-            subject_label="My vacation",
-            edit_flow="create",
-        )
-        await manager.switch_to(VacationScreens.start_date, show_mode=ShowMode.EDIT)
+    if not data["is_teacher"]:
+        data["subject_label"] = "My vacation"
+    await manager.switch_to(VacationScreens.start_date, show_mode=ShowMode.EDIT)
 
 
 async def _load_student_page(
@@ -216,6 +223,72 @@ async def _load_student_page(
     await manager.switch_to(VacationScreens.subject, show_mode=ShowMode.EDIT)
 
 
+async def _open_subject_picker(
+    callback: CallbackQuery, manager: DialogManager, return_to: str
+) -> None:
+    if not manager.dialog_data.get("is_teacher"):
+        raise ValueError("Only teachers can change a vacation assignee.")
+    if callback.message is None:
+        raise ValueError("Vacation subject selection requires a private chat")
+    try:
+        page = await backend(manager).read_student_picker(
+            callback.from_user.id,
+            callback.message.chat.id,
+            limit=STUDENT_PAGE_SIZE,
+        )
+    except (BackendError, BackendUnavailable) as exc:
+        manager.dialog_data["error"] = str(exc)
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    data = manager.dialog_data
+    data.update(
+        picker_skip=0,
+        picker_items=[student.model_dump(mode="json") for student in page.items],
+        picker_total=page.total,
+        subject_return_state=return_to,
+        resolution=None,
+        error="",
+    )
+    await manager.switch_to(VacationScreens.subject, show_mode=ShowMode.EDIT)
+
+
+async def _return_from_subject_picker(manager: DialogManager) -> None:
+    return_to = manager.dialog_data.pop("subject_return_state", "start_date")
+    states = {
+        "start_date": VacationScreens.start_date,
+        "start_time": VacationScreens.start_time,
+        "end_date": VacationScreens.end_date,
+        "review": VacationScreens.review,
+    }
+    await manager.switch_to(
+        states.get(return_to, VacationScreens.start_date), show_mode=ShowMode.EDIT
+    )
+
+
+async def edit_subject_from_start_date(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _open_subject_picker(callback, manager, "start_date")
+
+
+async def edit_subject_from_start_time(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _open_subject_picker(callback, manager, "start_time")
+
+
+async def edit_subject_from_end_date(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _open_subject_picker(callback, manager, "end_date")
+
+
+async def edit_subject_from_review(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    await _open_subject_picker(callback, manager, "review")
+
+
 async def select_vacation_subject(
     _callback: CallbackQuery,
     _widget: Select[str],
@@ -238,9 +311,10 @@ async def select_vacation_subject(
         subject_id=item,
         subject_label=selected["display_label"],
         edit_flow="create",
+        resolution=None,
         error="",
     )
-    await manager.switch_to(VacationScreens.start_date, show_mode=ShowMode.EDIT)
+    await _return_from_subject_picker(manager)
 
 
 async def choose_personal_vacation(
@@ -249,10 +323,17 @@ async def choose_personal_vacation(
     manager.dialog_data.update(
         subject_id=manager.dialog_data["account_id"],
         subject_label="Personal vacation",
-        edit_flow="create",
+        resolution=None,
         error="",
     )
-    await manager.switch_to(VacationScreens.start_date, show_mode=ShowMode.EDIT)
+    await _return_from_subject_picker(manager)
+
+
+async def cancel_subject_picker(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await _return_from_subject_picker(manager)
 
 
 async def previous_students(
@@ -359,7 +440,12 @@ async def begin_edit(
             detail.end, manager.dialog_data["viewer_timezone"]
         ).isoformat(),
         resolution=None,
+        date_field=None,
+        pending_date=None,
+        date_confirmation=None,
+        field_return_state=None,
         error="",
+        warning="",
         notice="",
         needs_reload=False,
         outcome_unknown=False,
@@ -367,8 +453,13 @@ async def begin_edit(
     await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
 
 
-async def _begin_date_input(manager: DialogManager, field: str) -> None:
-    manager.dialog_data.update(date_field=field, error="")
+async def _begin_date_input(
+    manager: DialogManager, field: str, *, return_to: str | None = None
+) -> None:
+    updates: dict[str, Any] = {"date_field": field, "error": "", "resolution": None}
+    if return_to is not None:
+        updates["field_return_state"] = return_to
+    manager.dialog_data.update(updates)
     state = (
         VacationScreens.start_date
         if field == "start_date"
@@ -458,21 +549,48 @@ async def change_date(
     await _begin_date_input(manager, field)
 
 
+async def back_from_field_editor(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    data = manager.dialog_data
+    return_to = data.get("field_return_state")
+    states = {
+        "review": VacationScreens.review,
+        "start_date": VacationScreens.start_date,
+        "start_time": VacationScreens.start_time,
+        "end_date": VacationScreens.end_date,
+    }
+    state = states.get(str(return_to), VacationScreens.menu)
+    data.update(error="", pending_date=None, date_confirmation=None)
+    await manager.switch_to(state, show_mode=ShowMode.EDIT)
+
+
 async def _accept_date(manager: DialogManager, message: Message | None = None) -> None:
     field = manager.dialog_data["date_field"]
     manager.dialog_data.update(
-        {field: manager.dialog_data["pending_date"], "error": ""}
+        {
+            field: manager.dialog_data["pending_date"],
+            "error": "",
+            "resolution": None,
+            "pending_date": None,
+            "date_confirmation": None,
+        }
     )
     if message is not None:
         await delete_accepted_date_message(message, manager)
-    if field == "start_date" and manager.dialog_data.get("edit_flow") == "create":
+    if manager.dialog_data.get("field_return_state") == "review":
+        await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
+    elif field == "start_date" and manager.dialog_data.get("edit_flow") == "create":
+        manager.dialog_data["field_return_state"] = "start_date"
         await manager.switch_to(VacationScreens.start_time, show_mode=ShowMode.EDIT)
+    elif field == "end_date" and manager.dialog_data.get("edit_flow") == "create":
+        await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
     else:
         await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
 
 
 async def start_time_input(
-    _message: Message,
+    message: Message,
     _widget: ManagedTextInput[str],
     manager: DialogManager,
     value: str,
@@ -483,8 +601,12 @@ async def start_time_input(
         manager.dialog_data["error"] = str(exc)
         manager.show_mode = ShowMode.EDIT
         return
-    manager.dialog_data.update(start_time=parsed, error="")
-    if manager.dialog_data.get("edit_flow") == "create":
+    manager.dialog_data.update(start_time=parsed, error="", resolution=None)
+    await delete_accepted_input_message(message, manager, "time")
+    if manager.dialog_data.get("field_return_state") == "review":
+        await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
+    elif manager.dialog_data.get("edit_flow") == "create":
+        manager.dialog_data["field_return_state"] = "start_time"
         await manager.switch_to(VacationScreens.end_date, show_mode=ShowMode.EDIT)
     else:
         await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
@@ -503,20 +625,20 @@ async def start_time_error(
 async def edit_start_date(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    await _begin_date_input(manager, "start_date")
+    await _begin_date_input(manager, "start_date", return_to="review")
 
 
 async def edit_start_time(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    manager.dialog_data["error"] = ""
+    manager.dialog_data.update(error="", resolution=None, field_return_state="review")
     await manager.switch_to(VacationScreens.start_time, show_mode=ShowMode.EDIT)
 
 
 async def edit_end_date(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    await _begin_date_input(manager, "end_date")
+    await _begin_date_input(manager, "end_date", return_to="review")
 
 
 def _local_interval(data: dict[str, Any]) -> tuple[datetime, datetime]:
@@ -570,6 +692,11 @@ async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
             and not data.get("outcome_unknown")
         ),
         "can_edit": not data.get("submitting")
+        and not data.get("needs_reload")
+        and not data.get("outcome_unknown"),
+        "can_change_subject": bool(data.get("is_teacher"))
+        and data.get("form_action") == "create"
+        and not data.get("submitting")
         and not data.get("needs_reload")
         and not data.get("outcome_unknown"),
     }
@@ -885,6 +1012,7 @@ async def subject_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any
             error=str(data.get("error", "")),
             warning=str(data.get("warning", "")),
         ),
+        "subject_label": escape(str(data.get("subject_label") or "Personal vacation")),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
     }
@@ -932,6 +1060,7 @@ async def delete_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
 
 
 async def date_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
+    data = dialog_manager.dialog_data
     field = dialog_manager.dialog_data.get("date_field", "start_date")
     prompt = (
         "Enter the start date"
@@ -941,9 +1070,11 @@ async def date_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     return {
         "prompt": f"{prompt} as DD MM, DD:MM or DD/MM, optionally with a year.",
         "feedback": feedback_block(
-            error=str(dialog_manager.dialog_data.get("error", "")),
-            warning=str(dialog_manager.dialog_data.get("warning", "")),
+            error=str(data.get("error", "")),
+            warning=str(data.get("warning", "")),
         ),
+        "can_change_subject": bool(data.get("is_teacher"))
+        and data.get("form_action") == "create",
     }
 
 
@@ -952,6 +1083,8 @@ async def timezone_error_data(
 ) -> dict[str, Any]:
     return {
         "timezone": escape(dialog_manager.dialog_data["viewer_timezone"]),
+        "can_change_subject": bool(dialog_manager.dialog_data.get("is_teacher"))
+        and dialog_manager.dialog_data.get("form_action") == "create",
         "feedback": feedback_block(
             error=str(dialog_manager.dialog_data.get("error", "")),
             warning=str(dialog_manager.dialog_data.get("warning", "")),
@@ -984,7 +1117,7 @@ def build_vacation_dialog() -> Dialog:
             getter=menu_data,
         ),
         Window(
-            Format("{feedback}{page}"),
+            Format("{feedback}Current vacation: {subject_label}\n{page}"),
             Select(
                 Format("{item[0]}"),
                 id="student",
@@ -1011,7 +1144,7 @@ def build_vacation_dialog() -> Dialog:
                     when="has_next",
                 ),
             ),
-            Button(Const("Back"), id="back", on_click=back_to_menu),
+            Button(Const("Back"), id="back", on_click=cancel_subject_picker),
             state=VacationScreens.subject,
             getter=subject_data,
         ),
@@ -1083,6 +1216,13 @@ def build_vacation_dialog() -> Dialog:
                 on_success=start_date_input,
                 on_error=date_input_error,
             ),
+            Button(
+                Const("Change assignee"),
+                id="change_assignee",
+                on_click=edit_subject_from_start_date,
+                when="can_change_subject",
+            ),
+            Button(Const("Back"), id="back", on_click=back_from_field_editor),
             Button(Const("Cancel"), id="cancel", on_click=back_to_menu),
             state=VacationScreens.start_date,
             getter=date_data,
@@ -1091,6 +1231,7 @@ def build_vacation_dialog() -> Dialog:
             Format("{feedback}{confirmation}\nConfirm this inferred next-year date."),
             Button(Const("Confirm date"), id="confirm", on_click=confirm_date),
             Button(Const("Change date"), id="change", on_click=change_date),
+            Button(Const("Back"), id="back", on_click=back_from_field_editor),
             state=VacationScreens.confirm_date,
             getter=confirmation_data,
         ),
@@ -1104,6 +1245,13 @@ def build_vacation_dialog() -> Dialog:
                 on_success=start_time_input,
                 on_error=start_time_error,
             ),
+            Button(
+                Const("Change assignee"),
+                id="change_assignee",
+                on_click=edit_subject_from_start_time,
+                when="can_change_subject",
+            ),
+            Button(Const("Back"), id="back", on_click=back_from_field_editor),
             Button(Const("Cancel"), id="cancel", on_click=back_to_menu),
             state=VacationScreens.start_time,
             getter=timezone_error_data,
@@ -1114,6 +1262,13 @@ def build_vacation_dialog() -> Dialog:
                 "The vacation ends at local midnight after this date.\n"
             ),
             TextInput("end_date", on_success=end_date_input, on_error=date_input_error),
+            Button(
+                Const("Change assignee"),
+                id="change_assignee",
+                on_click=edit_subject_from_end_date,
+                when="can_change_subject",
+            ),
+            Button(Const("Back"), id="back", on_click=back_from_field_editor),
             Button(Const("Cancel"), id="cancel", on_click=back_to_menu),
             state=VacationScreens.end_date,
             getter=date_data,
@@ -1146,6 +1301,12 @@ def build_vacation_dialog() -> Dialog:
                 id="edit_end",
                 on_click=edit_end_date,
                 when="can_edit",
+            ),
+            Button(
+                Const("Change assignee"),
+                id="edit_subject",
+                on_click=edit_subject_from_review,
+                when="can_change_subject",
             ),
             Button(
                 Const("Reload vacation"),

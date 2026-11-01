@@ -125,6 +125,7 @@ async def _book_one_time(driver: BotDriver, student: str, start_time: str) -> No
 
 async def _create_student_vacation(driver: BotDriver) -> None:
     await driver.click("Add vacation")
+    await driver.click("Change assignee")
     await driver.click("Alice Learner")
     await driver.text(_LOCAL_DATE)
     await driver.text("09:00")
