@@ -635,6 +635,23 @@ Bot changes require `uv run ruff check telegram tests`,
 Inspect formatter/linter changes and retain only in-scope edits.
 Migration tests use disposable databases, never the developer's data.
 
+## Closeout task mapping (2026-11-01)
+
+This inventory maps the original task IDs to current owners and checks before
+closeout execution. It records source inspection, not new test results.
+
+| Original task | Current owner and focused checks | Initial disposition |
+|---|---|---|
+| 01 — persisted weekly-break recurrence | `backend/events/models.py`, `backend/events/schemas.py`, `backend/breaks/schemas.py`, `alembic/versions/2026-10-29_open_ended_weekly_breaks.py`; `tests/test_open_ended_recurrence_schema.py`, `tests/test_open_ended_recurrence_migration.py` | Implemented; SQLite evidence is recorded above. PostgreSQL verification remains externally blocked. |
+| 02 — bounded break writes and conflicts | `backend/events/mutations/recurring.py`, `backend/events/conflicts.py`, `backend/events/occurrences.py`, `backend/events/management/`; `tests/test_event_conflicts.py`, `tests/test_recurrent_event_edits.py` | Implemented by current code; rerun the focused boundary, preview, and mutation checks in closeout. |
+| 03 — typed client open-ended shapes | `telegram/api/models/events.py`, `telegram/api/client.py`; `tests/test_bot_client.py` | Defect found: the client validators currently admit null cutoffs only for weekly lessons, rejecting the approved weekly-break shape. |
+| 04 — accepted-time cleanup | `telegram/dialogs/breaks.py`, `telegram/dialogs/vacations.py`, `telegram/shared/date_cleanup.py`; `tests/test_bot_break_management.py`, `tests/test_bot_vacation_management.py` | Date cleanup is present, but accepted break/vacation time messages are not deleted; focused verification and repair remain. |
+| 05 — default-first weekly-break creation | `telegram/dialogs/breaks.py`; `tests/test_bot_break_management.py`, `tests/test_bot_client.py` | Defect found: weekly creation still requires a finite cutoff and review assumes one exists. |
+| 06 — focused break updates | `telegram/dialogs/breaks.py`; `tests/test_bot_break_management.py` | Defect found: edit entry clears the saved interval/cutoff and restarts date entry instead of opening a populated review. |
+| 07 — personal-first vacation creation | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Defect found: teacher creation fetches and requires a subject selection before date entry. |
+| 08 — focused vacation field edits | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Partially implemented: review edits exist, but creation still replays collection steps for some fields and field-level Back/restoration is absent; verify and repair only these gaps. |
+| 09 — cross-flow parity and handoff | `tests/test_bot_lesson_creation.py`, `tests/test_bot_lesson_management.py`, `tests/test_bot_break_management.py`, `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py`, `tests/test_bot_client.py`, schema/conflict/migration tests, `README.md`, `AGENTS.md` | Verification and documentation task; run after Tasks 02–03, record automated versus unavailable PostgreSQL/live-Telegram evidence separately. |
+
 ## Out of scope for this release
 
 - HTMX/frontend forms (scaffold only), new recurring-vacation screens,
