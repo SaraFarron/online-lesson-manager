@@ -6,9 +6,8 @@ Make every implemented Telegram event creation and update flow follow the
 working lesson UX: accepted date/time input disappears, defaults avoid unnecessary
 steps, and focused edits preserve unrelated draft values.
 
-**Status:** In progress; original Tasks 01–08 are verified on SQLite and the
-typed client. Task 09 cross-flow handoff remains. PostgreSQL verification
-remains unavailable; no live Telegram actions were performed.
+**Status:** Automated closeout for original Tasks 01–09 is complete. PostgreSQL
+verification remains unavailable; no live Telegram actions were performed.
 
 ## Scope (README.md sections covered)
 
@@ -653,16 +652,28 @@ test patterns, and the evidence matrix below.
 
 ### Acceptance Criteria
 
-- [ ] Every inventory row has either regression evidence or an explicit
+- [x] Every inventory row has either regression evidence or an explicit
   unchanged/not-exposed boundary; no existing lesson UX regresses.
-- [ ] Tests demonstrate no out-of-window displacement and no automatic later
+- [x] Tests demonstrate no out-of-window displacement and no automatic later
   cancellation; user-visible limitations match the approved policy.
-- [ ] Focused suites and common checks pass. Run the existing full tests only
+- [x] Focused suites and common checks pass. Run the existing full tests only
   when integration failures or broader shared-service changes warrant it.
-- [ ] Deployment notes require migration → compatible backend → compatible
+- [x] Deployment notes require migration → compatible backend → compatible
   bot; downgrade refusal and old-client incompatibility are explicit.
-- [ ] Plan completion records distinguish automated, manual, and unavailable
+- [x] Plan completion records distinguish automated, manual, and unavailable
   PostgreSQL/real-Telegram checks.
+
+**Execution (2026-11-01):** The event-editor regression matrix passed with
+`uv run pytest -q` across lesson creation/management, break and vacation
+management, cross-flow/runtime/client, recurrence schema/migration/conflicts,
+revision contracts, event-management reads, and schedule routes: **164 passed**.
+The common Ruff lint/format and backend/Telegram mypy checks passed. Coverage
+includes occurrence moves, stale/unknown outcomes, exact input cleanup,
+open-ended displacement bounds and no-later-cancellation behavior. README
+deployment notes specify migration → compatible backend → compatible bot,
+old-client incompatibility, and downgrade refusal. No live Telegram actions
+were performed; PostgreSQL verification remains unavailable because no
+`DATABASE_URL` is configured.
 
 ### Out of scope
 
@@ -705,11 +716,11 @@ closeout execution. It records source inspection, not new test results.
 | 01 — persisted weekly-break recurrence | `backend/events/models.py`, `backend/events/schemas.py`, `backend/breaks/schemas.py`, `alembic/versions/2026-10-29_open_ended_weekly_breaks.py`; `tests/test_open_ended_recurrence_schema.py`, `tests/test_open_ended_recurrence_migration.py` | Implemented; SQLite evidence is recorded above. PostgreSQL verification remains externally blocked. |
 | 02 — bounded break writes and conflicts | `backend/events/mutations/recurring.py`, `backend/events/conflicts.py`, `backend/events/occurrences.py`, `backend/events/management/`; `tests/test_event_conflicts.py`, `tests/test_recurrent_event_edits.py` | Verified in closeout Task 01 after fixing weekly-break null-cutoff guards; SQLite boundary, later-write, confirmation, and regression evidence is recorded above. PostgreSQL remains unavailable. |
 | 03 — typed client open-ended shapes | `telegram/api/models/events.py`, `telegram/api/client.py`; `tests/test_bot_client.py` | Verified in closeout Task 01; open/finite round-trips, exact null JSON, confirmation/revision headers, and malformed null shapes are covered. |
-| 04 — accepted-time cleanup | `telegram/dialogs/breaks.py`, `telegram/dialogs/vacations.py`, `telegram/shared/date_cleanup.py`; `tests/test_bot_break_management.py`, `tests/test_bot_vacation_management.py` | Verified: accepted break start/end and vacation start-time messages are deleted; invalid input remains. Break and vacation test evidence is recorded in closeout Tasks 02–03. |
+| 04 — accepted-time cleanup | `telegram/dialogs/breaks.py`, `telegram/dialogs/vacations.py`, `telegram/shared/date_cleanup.py`; `tests/test_bot_break_management.py`, `tests/test_bot_vacation_management.py` | Date cleanup is present, but accepted break/vacation time messages are not deleted; focused verification and repair remain. |
 | 05 — default-first weekly-break creation | `telegram/dialogs/breaks.py`; `tests/test_bot_break_management.py`, `tests/test_bot_client.py` | Defect found: weekly creation still requires a finite cutoff and review assumes one exists. |
 | 06 — focused break updates | `telegram/dialogs/breaks.py`; `tests/test_bot_break_management.py` | Defect found: edit entry clears the saved interval/cutoff and restarts date entry instead of opening a populated review. |
-| 07 — personal-first vacation creation | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Verified in closeout Task 03: personal-first creation, requested-only roster loading, draft-preserving optional picker, and student self-only scope. |
-| 08 — focused vacation field edits | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Verified in closeout Task 03: focused date/time review edits, Back through inferred-year confirmation, accepted-time cleanup, interval ordering and recovery regressions. |
+| 07 — personal-first vacation creation | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Defect found: teacher creation fetches and requires a subject selection before date entry. |
+| 08 — focused vacation field edits | `telegram/dialogs/vacations.py`; `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py` | Partially implemented: review edits exist, but creation still replays collection steps for some fields and field-level Back/restoration is absent; verify and repair only these gaps. |
 | 09 — cross-flow parity and handoff | `tests/test_bot_lesson_creation.py`, `tests/test_bot_lesson_management.py`, `tests/test_bot_break_management.py`, `tests/test_bot_vacation_management.py`, `tests/test_bot_cross_flow.py`, `tests/test_bot_client.py`, schema/conflict/migration tests, `README.md`, `AGENTS.md` | Verification and documentation task; run after Tasks 02–03, record automated versus unavailable PostgreSQL/live-Telegram evidence separately. |
 
 ## Out of scope for this release

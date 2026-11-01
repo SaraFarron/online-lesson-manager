@@ -138,10 +138,10 @@ not API timestamp formats, scheduling rules, or authorization.
 The [Telegram UI refinements plan](docs/plans/telegram-ui-refinements.md)
 records the nullable weekly-lesson cutoff contract; the
 [event-editor consistency plan](docs/plans/telegram-event-editor-consistency.md)
-extends the same bounded recurrence contract to manual breaks and owns the
-remaining editor consistency work. The one-year validation limit, date/time
-prompt behavior, schedule labels, and this release's verification are recorded
-in the linked handoffs.
+extends the same bounded recurrence contract to manual breaks and records
+completed automated editor and cross-flow verification. The one-year
+validation limit, date/time prompt behavior, schedule labels, and release
+evidence are recorded in the linked handoffs.
 [Automatic between-lesson breaks](docs/plans/automatic-between-lesson-breaks.md)
 are implemented and verified; [homework](docs/plans/homework-backend-and-telegram-ui.md)
 teacher and student Telegram actions are implemented. Homework Task 11's
@@ -150,8 +150,9 @@ cross-flow/restart/storage verification is recorded as complete; the focused
 restart/recovery, authorization, deletion cleanup, and staging cleanup.
 Notification delivery is not implemented.
 [Event-editor consistency](docs/plans/telegram-event-editor-consistency.md)
-owns the remaining form-consistency criteria; PostgreSQL verification remains
-unavailable. Do not infer its completion from the scheduling/settings UI plan.
+records completed automated Tasks 01–09. PostgreSQL verification remains
+unavailable and no live Telegram actions were performed; do not infer those
+external checks from automated test results.
 [Completion-record reconciliation](docs/plans/completion-record-reconciliation.md)
 records current evidence; the disposable local Compose stack was verified,
 while separate-server HTTPS and narrow-screen Telegram checks remain blocked.
