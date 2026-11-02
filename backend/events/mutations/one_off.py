@@ -3,6 +3,9 @@ import uuid
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.activity import service as activity_service
+from backend.activity.constants import ScheduleMutation
+from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.constants import EventType
 from backend.events.booking_policy import prepare_lesson_write
@@ -29,6 +32,7 @@ async def create_event(
     confirm_displacement: bool = False,
     displacement_token: str | None = None,
     actor_is_teacher: bool = False,
+    actor: User | None = None,
 ) -> Event:
     return await run_serialized_schedule_mutation(
         session,
@@ -41,6 +45,7 @@ async def create_event(
             confirm_displacement=confirm_displacement,
             displacement_token=displacement_token,
             actor_is_teacher=actor_is_teacher,
+            actor=actor,
         ),
     )
 
@@ -56,6 +61,7 @@ async def create_event_in_transaction(
     actor_is_teacher: bool = False,
     commit: bool = True,
     post_break_minutes: int | None = None,
+    actor: User | None = None,
 ) -> Event:
     teacher_profile = None
     teacher_timezone = None
@@ -97,6 +103,15 @@ async def create_event_in_transaction(
     )
     session.add(event)
     if commit:
+        if actor is not None and actor.role == Roles.STUDENT:
+            await session.flush()
+            await activity_service.record_schedule_action(
+                session,
+                actor,
+                event_type=EventType(event.event_type),
+                mutation=ScheduleMutation.CREATE,
+                resource_id=event.id,
+            )
         await session.commit()
         await session.refresh(event)
     else:
@@ -184,11 +199,24 @@ async def _update_event(
     )
     await apply_displacements(session, displaced, teacher_id)
 
+    changed = (
+        event.start != to_storage_utc(event_data.start)
+        or event.end != to_storage_utc(event_data.end)
+        or event.user_id != event_data.user_id
+    )
     event.start = to_storage_utc(event_data.start)
     event.end = to_storage_utc(event_data.end)
     event.user_id = event_data.user_id
     event.teacher_id = teacher_id
     session.add(event)
+    if changed and actor is not None:
+        await activity_service.record_schedule_action(
+            session,
+            actor,
+            event_type=EventType(event.event_type),
+            mutation=ScheduleMutation.UPDATE,
+            resource_id=event.id,
+        )
     await session.commit()
     await session.refresh(event)
     return event
@@ -237,6 +265,15 @@ async def _delete_event(
                 expected_revision,
                 build_event_revision(fresh_recurrent, cancellations),
             )
+        if actor is not None:
+            await activity_service.record_schedule_action(
+                session,
+                actor,
+                event_type=EventType(fresh_recurrent.event_type),
+                mutation=ScheduleMutation.DELETE,
+                resource_id=fresh_recurrent.id,
+                recurrent=True,
+            )
         await session.execute(
             delete(RecurrentCancels).where(
                 RecurrentCancels.recurrent_event_id == fresh_recurrent.id
@@ -252,6 +289,14 @@ async def _delete_event(
         if expected_revision is not None:
             _assert_expected_revision(
                 expected_revision, build_event_revision(fresh_one_off, ())
+            )
+        if actor is not None:
+            await activity_service.record_schedule_action(
+                session,
+                actor,
+                event_type=EventType(fresh_one_off.event_type),
+                mutation=ScheduleMutation.DELETE,
+                resource_id=fresh_one_off.id,
             )
         await session.delete(fresh_one_off)
     await session.commit()

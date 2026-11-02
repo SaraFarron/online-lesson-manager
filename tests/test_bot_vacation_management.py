@@ -8,7 +8,12 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import StudentProfile, TeacherProfile, User
+from backend.auth.models import (
+    StudentProfile,
+    StudentTeacherRelationship,
+    TeacherProfile,
+    User,
+)
 from backend.constants import EventType
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from telegram.api import (
@@ -75,6 +80,16 @@ async def _seed_accounts(
             ),
             StudentProfile(student_id=student.id),
             StudentProfile(student_id=other_student.id),
+            StudentTeacherRelationship(
+                student_id=student.id,
+                teacher_id=teacher.id,
+                linked_at=datetime.now(UTC),
+            ),
+            StudentTeacherRelationship(
+                student_id=other_student.id,
+                teacher_id=teacher.id,
+                linked_at=datetime.now(UTC),
+            ),
         ]
     )
     await session.commit()

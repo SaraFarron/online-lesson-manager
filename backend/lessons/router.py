@@ -83,6 +83,7 @@ async def create_lesson(
         validator,
         teacher_id=teacher_id,
         actor_is_teacher=user.role == Roles.TEACHER,
+        actor=user,
     )
     return LessonPublic.model_validate(lesson)
 
@@ -262,6 +263,7 @@ async def create_recurrent_lesson(
         validator,
         teacher_id=teacher_id,
         actor_is_teacher=user.role == Roles.TEACHER,
+        actor=user,
     )
     return RecurrentLessonPublic.model_validate(lesson)
 

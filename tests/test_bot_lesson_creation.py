@@ -10,7 +10,12 @@ from aiogram.exceptions import TelegramBadRequest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import StudentProfile, TeacherProfile, User
+from backend.auth.models import (
+    StudentProfile,
+    StudentTeacherRelationship,
+    TeacherProfile,
+    User,
+)
 from backend.events.models import Event, RecurrentEvent
 from backend.main import app
 from backend.schedule.router import get_schedule_clock
@@ -69,6 +74,13 @@ async def _seed_accounts(
         )
     )
     session.add(StudentProfile(student_id=student.id))
+    session.add(
+        StudentTeacherRelationship(
+            student_id=student.id,
+            teacher_id=teacher.id,
+            linked_at=datetime.now(UTC),
+        )
+    )
     await session.commit()
     return teacher, student
 

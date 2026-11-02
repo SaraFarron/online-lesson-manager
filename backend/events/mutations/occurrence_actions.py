@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.activity import service as activity_service
+from backend.activity.constants import ScheduleMutation
 from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.constants import EventType
@@ -55,6 +57,15 @@ async def cancel_recurrent_lesson_occurrence(
         await session.flush()
         cancellations.append(cancellation)
         revision = build_event_revision(recurrent_event, cancellations)
+        await activity_service.record_schedule_action(
+            session,
+            actor,
+            event_type=EventType.LESSON,
+            mutation=ScheduleMutation.CANCEL_OCCURRENCE,
+            resource_id=recurrent_event.id,
+            recurrent=True,
+            occurrence_start=occurrence.start,
+        )
         await session.commit()
         return cancellation, revision
 
@@ -104,6 +115,15 @@ async def move_recurrent_lesson_occurrence(
         )
         cancellations.append(cancellation)
         revision = build_event_revision(recurrent_event, cancellations)
+        await activity_service.record_schedule_action(
+            session,
+            actor,
+            event_type=EventType.LESSON,
+            mutation=ScheduleMutation.MOVE_OCCURRENCE,
+            resource_id=recurrent_event.id,
+            recurrent=True,
+            occurrence_start=occurrence.start,
+        )
         await session.commit()
         await session.refresh(replacement)
         return cancellation, replacement, revision

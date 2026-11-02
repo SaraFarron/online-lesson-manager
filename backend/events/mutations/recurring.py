@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.activity import service as activity_service
+from backend.activity.constants import ScheduleMutation
+from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.auth.service import get_user_by_id
 from backend.breaks.schemas import RecurrentBreakCreate
@@ -39,6 +42,7 @@ async def create_recurrent_event(
     confirm_displacement: bool = False,
     displacement_token: str | None = None,
     actor_is_teacher: bool = False,
+    actor: User | None = None,
 ) -> RecurrentEvent:
     return await run_serialized_schedule_mutation(
         session,
@@ -51,6 +55,7 @@ async def create_recurrent_event(
             confirm_displacement=confirm_displacement,
             displacement_token=displacement_token,
             actor_is_teacher=actor_is_teacher,
+            actor=actor,
         ),
     )
 
@@ -64,6 +69,7 @@ async def _create_recurrent_event(
     confirm_displacement: bool = False,
     displacement_token: str | None = None,
     actor_is_teacher: bool = False,
+    actor: User | None = None,
 ) -> RecurrentEvent:
     interval_end = event_data.interval_end
     if interval_end is None and (
@@ -126,6 +132,16 @@ async def _create_recurrent_event(
         ),
     )
     session.add(recurrent_event)
+    if actor is not None and actor.role == Roles.STUDENT:
+        await session.flush()
+        await activity_service.record_schedule_action(
+            session,
+            actor,
+            event_type=EventType(recurrent_event.event_type),
+            mutation=ScheduleMutation.CREATE,
+            resource_id=recurrent_event.id,
+            recurrent=True,
+        )
     await session.commit()
     await session.refresh(recurrent_event)
     return recurrent_event
@@ -244,6 +260,21 @@ async def _update_recurrent_event(
             from_storage_utc(cancellation.start)
             for cancellation in existing_cancellations
         ]
+    cancellations_changed = replacement_cancellations is not None and {
+        (from_storage_utc(start), from_storage_utc(end))
+        for start, end in replacement_cancellations
+    } != {
+        (
+            from_storage_utc(cancellation.start),
+            from_storage_utc(cancellation.end),
+        )
+        for cancellation in existing_cancellations
+    }
+    changed = (
+        recurrence_changed
+        or recurrent_event.user_id != event_data.user_id
+        or cancellations_changed
+    )
 
     displaced = await validator.validate_all(
         session,
@@ -288,6 +319,15 @@ async def _update_recurrent_event(
             )
 
     session.add(recurrent_event)
+    if changed and actor is not None:
+        await activity_service.record_schedule_action(
+            session,
+            actor,
+            event_type=EventType(recurrent_event.event_type),
+            mutation=ScheduleMutation.UPDATE,
+            resource_id=recurrent_event.id,
+            recurrent=True,
+        )
     await session.commit()
     await session.refresh(recurrent_event)
     return recurrent_event

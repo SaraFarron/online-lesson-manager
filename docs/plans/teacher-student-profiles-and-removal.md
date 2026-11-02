@@ -4,7 +4,7 @@
 
 Teachers can view their own students' identity, association date, homework status and last ten actions, then explicitly confirm safe student removal from Telegram.
 
-**Status:** Policy approved 2026-11-03; implementation pending.
+**Status:** Policy approved 2026-11-03; implementation in progress.
 
 ## Scope (README.md sections covered)
 
@@ -138,9 +138,11 @@ Define ten-action scope: proposed scheduling creates/moves/cancels/deletes, home
 
 **Reuse:** History writer and existing serialized event mutations.
 
-**Acceptance Criteria:** [ ] Student-initiated one-off/series/occurrence successes and rollbacks have exact history assertions; teacher displacement creates no student action. [ ] No extra commit, duplicate action or changed booking behavior; common checks pass.
+**Acceptance Criteria:** [x] Student-initiated one-off/series/occurrence successes and rollbacks have exact history assertions; teacher displacement creates no student action. [x] No extra commit, duplicate action or changed booking behavior; common checks pass.
 
 **Out of scope:** New schedule semantics. **Suitable for:** AI agent.
+
+**Execution (2026-11-03):** Added transaction-bound history for student-initiated one-off lessons, recurring lessons, exact occurrence cancellation/moves, and vacations. Teacher/system operations, including confirmed break displacement, are excluded; failed mutations and no-op/replayed updates do not add actions. Focused schedule/history and Telegram regression tests passed; the full suite passed (573 passed, 10 skipped). Ruff check/format and backend mypy passed.
 
 ## Task 04: Record homework actions in owning transactions
 

@@ -4,9 +4,59 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.activity.constants import (
+    SCHEDULE_ACTION_TYPES,
+    ScheduleMutation,
+)
 from backend.activity.models import StudentAction
 from backend.auth.constants import Roles
 from backend.auth.models import StudentTeacherRelationship, User
+from backend.constants import EventType
+
+
+async def record_schedule_action(
+    session: AsyncSession,
+    actor: User,
+    *,
+    event_type: EventType,
+    mutation: ScheduleMutation,
+    resource_id: uuid.UUID,
+    recurrent: bool = False,
+    occurrence_start: datetime | None = None,
+) -> StudentAction | None:
+    if actor.role != Roles.STUDENT:
+        return None
+    action_type = SCHEDULE_ACTION_TYPES.get((event_type, mutation, recurrent))
+    if action_type is None:
+        return None
+
+    if (
+        mutation
+        in {
+            ScheduleMutation.CANCEL_OCCURRENCE,
+            ScheduleMutation.MOVE_OCCURRENCE,
+        }
+        and occurrence_start is None
+    ):
+        raise ValueError("Occurrence actions require an occurrence start")
+    if event_type == EventType.LESSON:
+        resource_type = (
+            "lesson_occurrence"
+            if occurrence_start is not None
+            else "lesson_series"
+            if recurrent
+            else "lesson"
+        )
+    else:
+        resource_type = "vacation"
+    return await record_student_action(
+        session,
+        actor,
+        action_type,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        resource_occurrence_at=occurrence_start,
+    )
 
 
 async def record_student_action(

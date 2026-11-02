@@ -67,7 +67,7 @@ async def create_vacation(
     teacher_id = resolve_teacher_id(user)
     await assert_can_assign_user(session, user, data.user_id)
     vacation = await service.create_event(
-        session, data, validator, teacher_id=teacher_id
+        session, data, validator, teacher_id=teacher_id, actor=user
     )
     return VacationPublic.model_validate(vacation)
 

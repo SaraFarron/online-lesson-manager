@@ -7,7 +7,12 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import StudentProfile, TeacherProfile, User
+from backend.auth.models import (
+    StudentProfile,
+    StudentTeacherRelationship,
+    TeacherProfile,
+    User,
+)
 from backend.constants import EventType
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from backend.main import app
@@ -57,6 +62,11 @@ async def _seed_accounts(session: AsyncSession) -> tuple[User, User]:
                 max_lessons_per_day=6,
             ),
             StudentProfile(student_id=student.id),
+            StudentTeacherRelationship(
+                student_id=student.id,
+                teacher_id=teacher.id,
+                linked_at=datetime.now(UTC),
+            ),
         ]
     )
     await session.commit()
