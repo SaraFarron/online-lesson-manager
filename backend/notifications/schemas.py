@@ -2,8 +2,9 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
+from backend.events.time_utils import normalize_utc
 from backend.notifications.constants import (
     MAX_CLAIM_BATCH,
     AcknowledgementOutcome,
@@ -33,6 +34,15 @@ class ClaimedNotification(BaseModel):
     scheduled_at: datetime
     lease_token: UUID
     lease_expires_at: datetime
+
+    @field_serializer(
+        "occurrence_start_at",
+        "scheduled_at",
+        "lease_expires_at",
+        when_used="json",
+    )
+    def serialize_utc_datetimes(self, value: datetime | None) -> str | None:
+        return normalize_utc(value).isoformat() if value is not None else None
 
 
 class ClaimResponse(BaseModel):
@@ -67,6 +77,10 @@ class AcknowledgeResponse(BaseModel):
     state: NotificationState
     last_outcome: AcknowledgementOutcome
     available_at: datetime
+
+    @field_serializer("available_at", when_used="json")
+    def serialize_available_at(self, value: datetime) -> str:
+        return normalize_utc(value).isoformat()
 
 
 class NotificationHealth(BaseModel):

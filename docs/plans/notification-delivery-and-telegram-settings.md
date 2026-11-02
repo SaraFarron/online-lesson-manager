@@ -169,9 +169,13 @@ Focused worker/backend tests passed (36 passed, 2 skipped), and the full reposit
 
 **Reuse:** Existing dispatcher/ASGI fixtures, fake clocks and isolated homework storage.
 
-**Acceptance Criteria:** [ ] All five notification types have exact recipient/content/time assertions. [ ] Claimed guarantees and known duplicate/loss windows match tested behavior. [ ] Broadcast can reuse public domain operations without its own sender.
+**Acceptance Criteria:** [x] All five notification types have exact recipient/content/time assertions. [x] Claimed guarantees and known duplicate/loss windows match tested behavior. [x] Broadcast can reuse public domain operations without its own sender.
 
 **Out of scope:** HTMX or real-user messaging without consent. **Suitable for:** AI agent; human for approved live acceptance.
+
+**Execution (2026-11-02):** Added a real ASGI/domain-to-recorded-Telegram integration test covering saved preferences, due schedule/homework intents, assignment publication and submission, the protected claim API, Telegram worker send, and persisted acknowledgement. It asserts exact recipients, scheduled times, and source-rich content for all five notification types; repeated producer runs deduplicate, and changed student linkage suppresses before send. Existing delivery/worker coverage exercises backend downtime, retry/unknown send outcomes, lease recovery, and concurrent SQLite/PostgreSQL claimers. The integrated path exposed and fixed mixed-shape producer inserts (explicit nulls for optional columns) and UTC offset serialization on claim/ack responses.
+
+The full repository suite passed (541 passed, 9 skipped). Focused notification/homework regression tests passed (65 passed, 4 PostgreSQL-only skipped); with a disposable PostgreSQL database configured, the delivery, schedule-producer, and homework-producer suites passed (28 passed). `ruff check backend telegram tests`, `ruff format --check backend telegram tests`, and `mypy backend telegram` passed. Compose configuration validated with disposable credentials; the isolated PostgreSQL app and producer reached healthy/running states, the producer started, `/health` and protected queue counts responded, and the stack was removed. The Telegram worker was exercised with the recording Bot API transport; no live poller or unsolicited messages were used.
 
 ## Open questions
 

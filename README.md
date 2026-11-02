@@ -30,8 +30,9 @@ are 540 / 15 / 2. The owner-approved onboarding migration resets existing
 notification preferences to these values; downgrade removes new schema fields
 but does not restore the former notification values. Preferences are saved
 through partial profile updates. Durable notification producers and a Telegram
-delivery worker are implemented; configurable notification settings and
-source-rich notification text are still being completed.
+delivery worker are implemented, including Telegram settings and claim-time
+source-rich text. Teacher broadcasts remain planned and reuse this delivery
+foundation rather than adding a second sender.
 
 Profile PUT endpoints use partial-update semantics: omitted fields preserve saved
 values and invitation codes; explicit null disables notification preferences only.
@@ -133,8 +134,30 @@ second poller. Backend health is available at `/health`; protected
 `GET /api/v1/notifications/service/health` exposes queue counts only and
 requires `X-Notification-Service-Key`. The bot logs claim/ack outcomes without
 logging chat IDs or message contents. Unacknowledged sends recover when their
-60-second lease expires; an ambiguous Telegram send may therefore be delivered
-again.
+60-second lease expires. Rate limits use Telegram's retry-after value; blocked
+or invalid chats are terminal, and retryable outcomes are bounded to eight
+attempts. A network failure, process crash, or lost acknowledgement can leave
+the send outcome ambiguous and cause a duplicate after retry/lease recovery.
+Delivery is durable but not exactly-once, and queue health counts do not expose
+message contents or routing IDs. Apply `uv run alembic upgrade head` before
+starting the producer or bot. Keep the notification-service credential separate
+from the registration credential and the Bot API token.
+
+The current notification types are viewer-scoped daily digests, exact-occurrence
+student lesson reminders, due incomplete-homework reminders, assignment-created
+pushes, and submission-received pushes. Their preferences are owner-editable in
+Telegram Settings; disabled preferences, missing private-chat routing, changed
+student linkage, completed/deleted homework, or stale lesson occurrences
+suppress a send at claim time. The bot formats content from the currently
+authorized source records and sends through the same serial worker.
+
+Teacher broadcasts are not implemented. Future broadcast work must persist
+deduplicated per-recipient intents through the notifications domain and reuse
+the protected claim/ack API, existing Telegram worker, and its retry/lease
+semantics. Keep roster authorization and recipient revalidation in the backend;
+do not send from the dialog, loop over chat IDs in the bot, or add a parallel
+poller/sender. Broadcast confirmation, opt-out, and recipient-snapshot rules
+require their own approved contract.
 
 ### Implemented Telegram flows and limits
 
@@ -173,8 +196,8 @@ write outcomes, accepted input that Telegram could not remove, and committed
 writes whose refresh failed. Drafts and recovery controls remain available;
 ordinary errors do not create extra messages or callback popups.
 Long homework text is paginated in the existing screen without truncation.
-Notification delivery, free-slot selection, offline schedule cache, and
-account linking/transfers remain unimplemented. Teachers can create text,
+Teacher broadcasts, free-slot selection, offline schedule cache, and account
+linking/transfers remain unimplemented. Teachers can create text,
 file, or mixed assignments for their own students through Telegram and
 optionally link an exact upcoming lesson occurrence. Students can browse
 authorized assignments, view their text, download materials as separate
@@ -471,18 +494,20 @@ read-only просмотр не означает, что все ограниче
 
 ### Передача для будущих уведомлений
 
-Для доставки уведомлений о домашних заданиях реализованы durable intents,
-producer и serial Telegram worker; подробное форматирование и настройки
-получателя остаются отдельным завершением. При развитии следует сохранять
-следующие переходы и границы:
+Реализованы durable intents и Telegram worker для всех пяти текущих типов:
+расписание на сегодня, напоминание ученику об уроке, напоминание о
+невыполненном задании, публикация задания и новая версия решения. Producer
+расписания запускается раз в 30 секунд; настройки доступны владельцу через
+Telegram Settings. Текст строится при claim из повторно авторизованных данных,
+а не сохраняется в очереди. Сохраняйте следующие переходы и границы:
 
 - Уведомление ученику о задании может возникать только после успешной публикации
   записи `Homework`; получатель — именно назначенный ученик. Уведомление учителю
   может возникать только после финализации новой версии `HomeworkSubmission`;
   получатель — учитель этого задания.
-- Повтор запроса с тем же ключом операции не является новым событием. Будущий
-  потребитель должен дедуплицировать публикацию по устойчивому ID задания или
-  версии решения и учитывать только зафиксированные переходы состояния.
+- Повтор запроса с тем же ключом операции не является новым событием.
+  Публикация задания и каждая финализированная версия решения создают одну
+  intent в той же транзакции; повторное согласование не создает вторую.
 - Состояние и происхождение завершения хранятся отдельно: `status`,
   `completion_source` (`STUDENT_SUBMISSION` или `TEACHER`) и `completed_at`.
   Отправка решения завершает задание автоматически; ручное завершение учителем
@@ -494,15 +519,21 @@ producer и serial Telegram worker; подробное форматирован�
   видимости.
 - Связь с уроком — точное вхождение `(kind, source_id, starts_at UTC)`.
   Отмена, перенос или удаление урока не удаляют и не переназначают задание.
-  Для будущих напоминаний следует заново проверить активность этого вхождения,
-  его отмену и видимость с учётом каникул; неактивное вхождение не должно
-  запускать напоминание о предстоящем уроке.
-- Существующая настройка `notification_homework` задаёт срок напоминания о
-  невыполненном задании перед уроком, но не является переключателем уведомлений
-  о создании задания или отправке решения. Эти два переключателя, надёжная
-  доставка, повторные попытки и ключи идемпотентности нужно определить в
-  отдельном milestone. Существующая таблица `Notification` не является
-  реализованным outbox.
+  Producer и claim повторно проверяют активность этого вхождения, его отмену
+  и видимость с учётом каникул; неактивное вхождение не запускает напоминание.
+- `notification_homework` задаёт срок напоминания о невыполненном задании;
+  отдельные переключатели управляют push о создании задания и новой версии
+  решения. Учительские разовые рассылки остаются отдельным этапом. Они должны
+  сохранять intent на каждого подтвержденного получателя в notifications
+  domain и использовать тот же claim/ack API и Telegram worker — без отправки
+  из UI, обхода очереди или собственного sender. До реализации требуют
+  отдельного одобрения opt-out, границы состава получателей и операции
+  подтверждения.
+- Очередь гарантирует сохранение intent и восстановление незавершённых leases,
+  но не exactly-once доставку. Telegram может принять сообщение до потери
+  ответа или acknowledgement, поэтому retry после неизвестного исхода может
+  создать дубль; получатели и актуальность источника повторно проверяются при
+  claim.
 
 ## Профиль ученика
 Доступ только у учителя. Предоставляет информацию о:
@@ -649,7 +680,7 @@ zero-minute snapshot; preference changes apply to future writes only. A
 reservation may extend beyond work hours or local midnight, follows its parent
 lesson's cancellation and visibility, and does not count as a lesson.
 Free-slot selection, an arbitrary-date picker, an HTMX schedule UI, offline
-schedule caching, notification settings in Telegram, and source-rich message
-formatting remain pending. Durable notification production and serial Telegram
-delivery are implemented. Telegram week navigation is available for earlier
-and later Monday–Sunday weeks.
+schedule caching, and teacher broadcasts remain pending. Durable notification
+production, owner-editable Telegram settings, claim-time source-rich message
+formatting, and serial Telegram delivery are implemented. Telegram week
+navigation is available for earlier and later Monday–Sunday weeks.
