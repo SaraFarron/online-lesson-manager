@@ -45,6 +45,7 @@ services:
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Set AUTH_JWT_SECRET}
       AUTH_JWT_EXP_MINUTES: ${AUTH_JWT_EXP_MINUTES:-30}
       TELEGRAM_SERVICE_CREDENTIAL: ${TELEGRAM_SERVICE_CREDENTIAL:?Set TELEGRAM_SERVICE_CREDENTIAL}
+      NOTIFICATIONS_SERVICE_CREDENTIAL: ${NOTIFICATIONS_SERVICE_CREDENTIAL:?Set NOTIFICATIONS_SERVICE_CREDENTIAL}
       HOMEWORK_STORAGE_PATH: /var/lib/olm/homework
     volumes:
       - ./backend:/app/backend
@@ -57,6 +58,30 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  notification-producer:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "backend.notifications"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app}
+      NOTIFICATIONS_PRODUCER_POLL_SECONDS: ${NOTIFICATIONS_PRODUCER_POLL_SECONDS:-30}
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      app:
+        condition: service_healthy
 
   bot:
     build: .
@@ -67,6 +92,7 @@ services:
       BOT_TOKEN: ${BOT_TOKEN:?Set BOT_TOKEN}
       BOT_BACKEND_URL: ${BOT_COMPOSE_BACKEND_URL:-http://app:8000}
       BOT_SERVICE_CREDENTIAL: ${TELEGRAM_SERVICE_CREDENTIAL:?Set TELEGRAM_SERVICE_CREDENTIAL}
+      BOT_NOTIFICATION_SERVICE_CREDENTIAL: ${NOTIFICATIONS_SERVICE_CREDENTIAL:?Set NOTIFICATIONS_SERVICE_CREDENTIAL}
       BOT_REQUEST_TIMEOUT: ${BOT_REQUEST_TIMEOUT:-10}
       BOT_RECOVERY_SECONDS: ${BOT_RECOVERY_SECONDS:-15}
       BOT_FAILURE_THRESHOLD: ${BOT_FAILURE_THRESHOLD:-3}

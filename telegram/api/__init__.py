@@ -70,6 +70,7 @@ from .models import (
     TeacherProfileUpdate,
     Token,
 )
+from .notifications import NotificationClient, NotificationProtocolError
 from .transfer import (
     HOMEWORK_TRANSFER_TIMEOUT_SECONDS,
     MAX_HOMEWORK_ATTACHMENT_BYTES,
@@ -80,6 +81,8 @@ from .transfer import (
 
 __all__ = [
     "BackendClient",
+    "NotificationClient",
+    "NotificationProtocolError",
     "CircuitBreaker",
     "BackendError",
     "BackendOutcomeUnknown",

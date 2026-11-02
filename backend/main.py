@@ -41,6 +41,13 @@ app_kwargs: dict[str, Any] = {
 }
 
 app = FastAPI(**app_kwargs)
+
+
+@app.get("/health", include_in_schema=False)
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 app.add_middleware(
     HomeworkUploadLimitMiddleware,
     upload_path=f"{settings.API_V1_STR}/homework/attachments",

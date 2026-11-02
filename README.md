@@ -28,8 +28,10 @@ lesson reminder = minutes before lesson (1–600), homework = positive days
 before lesson; null disables any notification. Telegram onboarding defaults
 are 540 / 15 / 2. The owner-approved onboarding migration resets existing
 notification preferences to these values; downgrade removes new schema fields
-but does not restore the former notification values. Preferences are saved only:
-notification delivery and scheduling enforcement are not implemented here.
+but does not restore the former notification values. Preferences are saved
+through partial profile updates. Durable notification producers and a Telegram
+delivery worker are implemented; configurable notification settings and
+source-rich notification text are still being completed.
 
 Profile PUT endpoints use partial-update semantics: omitted fields preserve saved
 values and invitation codes; explicit null disables notification preferences only.
@@ -116,10 +118,23 @@ and inline editing. Initial screens send a message; normal callback/text input
 transitions edit it. A deleted/uneditable screen permits one replacement.
 Other Telegram errors are not converted into new sends.
 
-Bot settings use `BOT_TOKEN`, `BOT_BACKEND_URL` and `BOT_SERVICE_CREDENTIAL`;
-the last must match backend `TELEGRAM_SERVICE_CREDENTIAL`. Incomplete drafts
-restart after process restart; completed accounts remain in the backend.
+Bot settings use `BOT_TOKEN`, `BOT_BACKEND_URL`, `BOT_SERVICE_CREDENTIAL` and
+`BOT_NOTIFICATION_SERVICE_CREDENTIAL`. The service keys must match backend
+`TELEGRAM_SERVICE_CREDENTIAL` and `NOTIFICATIONS_SERVICE_CREDENTIAL`
+respectively, and must be different secrets. Incomplete drafts restart after
+process restart; completed accounts remain in the backend.
 Run a single polling process per Bot API token.
+
+The backend notification producer runs every 30 seconds as a separate process:
+`uv run python -m backend.notifications`. Compose starts one producer after the
+backend is healthy. The bot process runs one serial notification sender beside
+the poller and shares a rate-limited Bot API session; delivery does not start a
+second poller. Backend health is available at `/health`; protected
+`GET /api/v1/notifications/service/health` exposes queue counts only and
+requires `X-Notification-Service-Key`. The bot logs claim/ack outcomes without
+logging chat IDs or message contents. Unacknowledged sends recover when their
+60-second lease expires; an ambiguous Telegram send may therefore be delivered
+again.
 
 ### Implemented Telegram flows and limits
 
@@ -231,6 +246,7 @@ bot poller before starting a debug session with the same token.
 Local development Compose (PostgreSQL + hot-reloading backend + opt-in bot):
 ```shell
 docker compose up -d --build
+# The backend notification producer starts with the default stack.
 # Optional Telegram bot:
 docker compose --profile bot up -d --build
 ```
@@ -257,11 +273,12 @@ Back up the homework volume together with the database. The bot transfers files
 through authenticated backend endpoints and does not mount this storage.
 
 To use another interpolation file, add `--env-file .env.docker`. Compose passes
-only explicitly listed settings to each service: only backend gets the database
-URL/JWT signing secret, only bot gets `BOT_TOKEN`, and both get the service
-credential. `.env` is excluded from image builds and is never copied into images.
-The bot has no database volume/access and runs no migrations; it can start while
-the backend is unavailable. Send `/start` to retry after recovery.
+only explicitly listed settings to each service: the backend gets the database
+URL, JWT signing secret and both service credentials; the notification producer
+gets database access only; the bot gets `BOT_TOKEN` and the two distinct service
+credentials. `.env` is excluded from image builds and is never copied into
+images. The bot has no database volume/access and runs no migrations; it can
+start while the backend is unavailable. Send `/start` to retry after recovery.
 
 For separate servers, set `BOT_BACKEND_URL=https://your-backend.example` for a
 local bot process, or `BOT_COMPOSE_BACKEND_URL=https://your-backend.example` for
@@ -269,8 +286,12 @@ the bot container. Start only the bot remotely with `docker compose --profile bo
 up -d --no-deps bot`; it does not require the backend/database containers locally.
 Plain HTTP is allowed only for localhost or the private Compose `app` hostname.
 
-Keep exactly one poller per bot token across machines/containers. Stop with Ctrl+C
-or `docker compose stop bot` before launching a replacement; do not scale the bot.
+Keep exactly one poller per bot token across machines/containers. The delivery
+sender runs in this same process to share its outbound rate limiter; do not
+scale or separately duplicate the bot service. The backend producer is not a
+Telegram poller and can be restarted independently; database deduplication
+protects its intents. Stop with Ctrl+C or `docker compose stop bot` before
+launching a replacement.
 Drafts and JWT cache are memory-only. After restart, `/start` verifies completed
 accounts against the backend; incomplete wizards restart. To rotate the service
 credential, generate a new value, update both services and restart both; an
@@ -450,8 +471,10 @@ read-only просмотр не означает, что все ограниче
 
 ### Передача для будущих уведомлений
 
-Доставка уведомлений о домашних заданиях пока не реализована. При проектировании
-отдельного сервиса уведомлений следует учитывать следующие переходы и границы:
+Для доставки уведомлений о домашних заданиях реализованы durable intents,
+producer и serial Telegram worker; подробное форматирование и настройки
+получателя остаются отдельным завершением. При развитии следует сохранять
+следующие переходы и границы:
 
 - Уведомление ученику о задании может возникать только после успешной публикации
   записи `Homework`; получатель — именно назначенный ученик. Уведомление учителю
@@ -626,5 +649,7 @@ zero-minute snapshot; preference changes apply to future writes only. A
 reservation may extend beyond work hours or local midnight, follows its parent
 lesson's cancellation and visibility, and does not count as a lesson.
 Free-slot selection, an arbitrary-date picker, an HTMX schedule UI, offline
-schedule caching, and notification delivery remain pending. Telegram week
-navigation is available for earlier and later Monday–Sunday weeks.
+schedule caching, notification settings in Telegram, and source-rich message
+formatting remain pending. Durable notification production and serial Telegram
+delivery are implemented. Telegram week navigation is available for earlier
+and later Monday–Sunday weeks.

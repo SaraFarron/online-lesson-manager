@@ -135,9 +135,13 @@ The full repository suite passed (518 passed, 9 skipped); focused PostgreSQL pro
 
 **Reuse:** Existing bot HTTP/config/runtime lifecycle and recording Bot API transport; no backend imports.
 
-**Acceptance Criteria:** [ ] Sends/acks/retries are measured under failures and restart. [ ] Empty queue and shutdown do not busy-loop or drop unacknowledged claims. [ ] Worker is responsive in approved disposable startup checks; no live unsolicited messages.
+**Acceptance Criteria:** [x] Sends/acks/retries are measured under failures and restart. [x] Empty queue and shutdown do not busy-loop or drop unacknowledged claims. [x] Worker is responsive in approved disposable startup checks; no live unsolicited messages.
 
 **Out of scope:** Webhooks or scaling polling bots. **Suitable for:** AI agent.
+
+**Execution (2026-11-03):** Added a separately typed notification claim/ack client using `X-Notification-Service-Key`; bot startup rejects reuse of the registration credential. The serial sender runs beside the sole poller and shares a 25-request/second outbound Bot-session limiter. It maps Telegram 429s to bounded retry deadlines, blocked/invalid chats to distinct terminal outcomes, and network/server ambiguity to `unknown`; backend errors back off without terminating polling. Empty claims wait five seconds, readiness follows successful claims, and shutdown leaves unacknowledged leases for expiry recovery. Compose now starts the 30-second backend producer only after the backend health endpoint is ready; bot delivery does not start another poller.
+
+Focused worker/backend tests passed (36 passed, 2 skipped), and the full repository suite passed (534 passed, 9 skipped; the PostgreSQL-only tests were not run because `SCHEDULE_TEST_DATABASE_URL` was unset). `ruff check backend telegram tests`, `ruff format --check backend telegram tests`, and `mypy backend telegram` passed. Both Compose manifests validated. A disposable PostgreSQL Compose stack reached healthy app/producer states and was stopped/removed; the bot was exercised with the recording Bot API transport and no live Telegram messages were sent.
 
 ## Task 06: Expose Telegram settings and safe notification text
 

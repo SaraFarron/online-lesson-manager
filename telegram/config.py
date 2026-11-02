@@ -1,4 +1,4 @@
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,9 +10,21 @@ class BotConfig(BaseSettings):
     TOKEN: SecretStr
     BACKEND_URL: str = "http://127.0.0.1:8000"
     SERVICE_CREDENTIAL: SecretStr = Field(min_length=32)
+    NOTIFICATION_SERVICE_CREDENTIAL: SecretStr = Field(min_length=32)
     REQUEST_TIMEOUT: float = Field(default=10, ge=1, le=60)
     RECOVERY_SECONDS: float = Field(default=15, ge=1, le=300)
     FAILURE_THRESHOLD: int = Field(default=3, ge=1, le=10)
+
+    @model_validator(mode="after")
+    def validate_service_credentials(self) -> BotConfig:
+        if (
+            self.SERVICE_CREDENTIAL.get_secret_value()
+            == self.NOTIFICATION_SERVICE_CREDENTIAL.get_secret_value()
+        ):
+            raise ValueError(
+                "Bot registration and notification service credentials must differ"
+            )
+        return self
 
     @field_validator("BACKEND_URL")
     @classmethod
