@@ -3,6 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.activity import service as activity_service
+from backend.activity.constants import StudentActionType
 from backend.auth import service as auth_service
 from backend.auth.exceptions import InactiveUser
 from backend.auth.models import User
@@ -92,10 +94,22 @@ async def register(session: AsyncSession, data: TelegramRegistration) -> User:
             else:
                 if teacher is None:
                     raise RuntimeError("Student registration requires a teacher")
-                await auth_service.record_student_teacher_link(
+                relationship = await auth_service.record_student_teacher_link(
                     session, user, teacher.id
                 )
                 await auth_service.add_student_profile(session, data.profile, user)
+                await activity_service.record_student_action(
+                    session,
+                    user,
+                    StudentActionType.ACCOUNT_REGISTERED,
+                    relationship=relationship,
+                )
+                await activity_service.record_student_action(
+                    session,
+                    user,
+                    StudentActionType.TEACHER_LINKED,
+                    relationship=relationship,
+                )
     except IntegrityError as exc:
         if is_telegram_identity_conflict(exc):
             raise already_registered() from exc

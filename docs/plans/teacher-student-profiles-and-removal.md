@@ -122,9 +122,11 @@ Define ten-action scope: proposed scheduling creates/moves/cancels/deletes, home
 
 **Reuse:** Existing operation-key reconciliation and guarded event writes; explicit cross-domain module imports.
 
-**Acceptance Criteria:** [ ] Approved auth actions map to use cases/tests. [ ] Rollback and duplicate requests yield correct history without changing registration/settings behavior.
+**Acceptance Criteria:** [x] Approved auth actions map to use cases/tests. [x] Rollback and duplicate requests yield correct history without changing registration/settings behavior.
 
 **Out of scope:** Event/homework wiring, logging reads or retrospective history reconstruction. **Suitable for:** AI agent.
+
+**Execution (2026-11-03):** Added a flush-only history writer and recorded linked student account/profile edits, student preference creation and updates, invitation linking, and Telegram student registration/linking. The self-service password-change operation does not exist; admin credential changes remain excluded. History stores action/resource references only, never submitted values. No-op profile/settings replays, reads, unlinked changes, teacher/admin changes, duplicate linking/registration, and rollback do not leave extra actions. Verified with 13 passing focused/regression tests, Ruff, formatting, and mypy.
 
 ## Task 03: Record student-initiated scheduling actions
 

@@ -13,6 +13,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.activity import service as activity_service
+from backend.activity.constants import StudentActionType
 from backend.auth.constants import Roles
 from backend.auth.exceptions import (
     NotAStudent,
@@ -81,7 +83,13 @@ async def link_student_to_teacher(
     student.teacher_id = teacher.id
     session.add(student)
     try:
-        await record_student_teacher_link(session, student, teacher.id)
+        relationship = await record_student_teacher_link(session, student, teacher.id)
+        await activity_service.record_student_action(
+            session,
+            student,
+            StudentActionType.TEACHER_LINKED,
+            relationship=relationship,
+        )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
@@ -215,12 +223,29 @@ async def create_user(session: AsyncSession, data: UserCreate) -> User:
     return user
 
 
-async def update_user(session: AsyncSession, user: User, data: dict[str, Any]) -> User:
+async def update_user(
+    session: AsyncSession,
+    user: User,
+    data: dict[str, Any],
+    *,
+    actor: User | None = None,
+) -> User:
+    changed = any(
+        value != getattr(user, key)
+        for key, value in data.items()
+        if key != "password" and hasattr(user, key)
+    )
     if "password" in data and data["password"] is not None:
         if user.telegram_user_id is not None and user.hashed_password is None:
             raise HTTPException(
                 status_code=400,
                 detail="Password credentials are not supported for Telegram-only accounts",
+            )
+        if actor is not None and actor.id == user.id and user.role == Roles.STUDENT:
+            changed = (
+                changed
+                or user.hashed_password is None
+                or not verify_password(data["password"], user.hashed_password)
             )
         data["hashed_password"] = hash_password(data.pop("password"))
     else:
@@ -248,6 +273,15 @@ async def update_user(session: AsyncSession, user: User, data: dict[str, Any]) -
             setattr(user, key, value)
 
     session.add(user)
+    if (
+        changed
+        and actor is not None
+        and actor.id == user.id
+        and user.role == Roles.STUDENT
+    ):
+        await activity_service.record_student_action(
+            session, user, StudentActionType.ACCOUNT_PROFILE_UPDATED
+        )
     await session.commit()
     await session.refresh(user)
     return user
@@ -277,9 +311,17 @@ async def authenticate(session: AsyncSession, email: str, password: str) -> User
 
 
 async def create_student_profile(
-    session: AsyncSession, student_profile_data: StudentProfileCreate, user: User
+    session: AsyncSession,
+    student_profile_data: StudentProfileCreate,
+    user: User,
+    *,
+    actor: User | None = None,
 ) -> StudentProfilePublic:
     profile = await add_student_profile(session, student_profile_data, user)
+    if actor is not None and actor.id == user.id and user.role == Roles.STUDENT:
+        await activity_service.record_student_action(
+            session, user, StudentActionType.STUDENT_PROFILE_CREATED
+        )
     await session.commit()
     await session.refresh(profile)
     return StudentProfilePublic.model_validate(profile)
@@ -295,11 +337,18 @@ async def add_student_profile(
 
 
 async def update_student_profile(
-    session: AsyncSession, student_profile_data: StudentProfileUpdate, user: User
+    session: AsyncSession,
+    student_profile_data: StudentProfileUpdate,
+    user: User,
+    *,
+    actor: User | None = None,
 ) -> StudentProfilePublic:
     if not user.student_profile:
         raise ValueError("User does not have a student profile")
     updates = student_profile_data.model_dump(exclude_unset=True)
+    changed = any(
+        value != getattr(user.student_profile, key) for key, value in updates.items()
+    )
     if (
         "notification_lesson" in updates
         and updates["notification_lesson"] != user.student_profile.notification_lesson
@@ -314,6 +363,15 @@ async def update_student_profile(
     for key, value in updates.items():
         setattr(user.student_profile, key, value)
     session.add(user)
+    if (
+        changed
+        and actor is not None
+        and actor.id == user.id
+        and user.role == Roles.STUDENT
+    ):
+        await activity_service.record_student_action(
+            session, user, StudentActionType.STUDENT_SETTINGS_UPDATED
+        )
     await session.commit()
     await session.refresh(user)
     return StudentProfilePublic.model_validate(user.student_profile)

@@ -155,7 +155,10 @@ async def update_me(
         if await service.get_user_by_email(session, data.email):
             raise EmailAlreadyExists()
     return await service.update_user(
-        session, current_user, data.model_dump(exclude_unset=True)
+        session,
+        current_user,
+        data.model_dump(exclude_unset=True),
+        actor=current_user,
     )
 
 
@@ -285,6 +288,7 @@ async def delete_user_admin(
 )
 async def create_student_profile(
     session: SessionDep,
+    current_user: CurrentUser,
     user: OwnedProfileUser,
     data: StudentProfileCreate,
 ) -> Any:
@@ -299,7 +303,7 @@ async def create_student_profile(
             detail="User is not a student",
         )
     return await service.create_student_profile(
-        session, student_profile_data=data, user=user
+        session, student_profile_data=data, user=user, actor=current_user
     )
 
 
@@ -324,6 +328,7 @@ async def get_student_profile(
 )
 async def update_student_profile(
     session: SessionDep,
+    current_user: CurrentUser,
     user: OwnedProfileUser,
     data: StudentProfileUpdate,
 ) -> Any:
@@ -333,7 +338,7 @@ async def update_student_profile(
             detail="Student profile does not exist for this user",
         )
     return await service.update_student_profile(
-        session, student_profile_data=data, user=user
+        session, student_profile_data=data, user=user, actor=current_user
     )
 
 
