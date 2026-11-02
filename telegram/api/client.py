@@ -15,10 +15,13 @@ from .errors import (
     BackendError,
     BackendOutcomeUnknown,
     BackendUnavailable,
+    BroadcastOutcomeUnknown,
+    BroadcastPreviewStale,
     HomeworkAttachmentTooLarge,
     HomeworkOutcomeUnknown,
 )
 from .messages import (
+    BROADCAST_ERROR_MESSAGES,
     DEFAULT_ERROR_MESSAGES,
     HOMEWORK_ERROR_MESSAGES,
     POLICY_ERROR_MESSAGES,
@@ -56,6 +59,11 @@ from .models import (
     StudentProfile,
     StudentProfileUpdate,
     TeacherBookingContext,
+    TeacherBroadcastPreview,
+    TeacherBroadcastPreviewRequest,
+    TeacherBroadcastPublication,
+    TeacherBroadcastPublishRequest,
+    TeacherBroadcastResults,
     TeacherConfirmation,
     TeacherProfile,
     TeacherProfileUpdate,
@@ -77,6 +85,9 @@ class BackendClient:
         self.breaker = breaker or CircuitBreaker()
         self.tokens: dict[int, str] = {}
         self.pending_registrations: set[int] = set()
+        self.pending_broadcast_operations: dict[
+            int, tuple[uuid.UUID, TeacherBroadcastPublishRequest]
+        ] = {}
 
     async def request(
         self,
@@ -183,6 +194,8 @@ class BackendClient:
                     displacement_preview=preview,
                 )
 
+        if response.status_code == 409 and detail == "broadcast_preview_stale":
+            return BroadcastPreviewStale()
         if code == "stale_event_revision":
             message = "This event changed. Reload it before editing."
         elif code == "occurrence_already_cancelled":
@@ -219,6 +232,7 @@ class BackendClient:
                 "scheduling": SCHEDULING_ERROR_MESSAGES,
                 "settings": SETTINGS_ERROR_MESSAGES,
                 "homework": HOMEWORK_ERROR_MESSAGES,
+                "broadcast": BROADCAST_ERROR_MESSAGES,
             }[error_context]
             message = messages.get(
                 response.status_code, "Backend rejected the request."
@@ -230,7 +244,12 @@ class BackendClient:
             code=(
                 code
                 if isinstance(code, str)
-                and code in {"stale_event_revision", "occurrence_already_cancelled"}
+                and code
+                in {
+                    "stale_event_revision",
+                    "occurrence_already_cancelled",
+                    "broadcast_preview_stale",
+                }
                 else None
             ),
         )
@@ -342,6 +361,7 @@ class BackendClient:
         confirm_displacement: bool = False,
         displacement_token: str | None = None,
         error_context: ErrorContext = "scheduling",
+        ambiguous_write: bool = True,
     ) -> Model:
         if sender_id not in self.tokens:
             await self.session(sender_id, chat_id, error_context=error_context)
@@ -363,7 +383,7 @@ class BackendClient:
                 params=params,
                 headers=request_headers,
                 error_context=error_context,
-                _ambiguous_write=True,
+                _ambiguous_write=ambiguous_write,
             )
 
         try:
@@ -430,6 +450,108 @@ class BackendClient:
             chat_id,
             params=params,
             error_context="homework",
+        )
+
+    async def preview_teacher_broadcast(
+        self,
+        sender_id: int,
+        chat_id: int,
+        text: str,
+    ) -> TeacherBroadcastPreview:
+        return await self.write(
+            "POST",
+            "/api/v1/notifications/broadcasts/preview",
+            TeacherBroadcastPreview,
+            sender_id,
+            chat_id,
+            TeacherBroadcastPreviewRequest(text=text),
+            error_context="broadcast",
+            ambiguous_write=False,
+        )
+
+    async def publish_teacher_broadcast(
+        self,
+        sender_id: int,
+        chat_id: int,
+        request: TeacherBroadcastPublishRequest,
+        operation_key: uuid.UUID,
+    ) -> TeacherBroadcastPublication:
+        pending = self.pending_broadcast_operations.get(sender_id)
+        if pending is not None:
+            pending_key, pending_request = pending
+            if pending_key != operation_key or pending_request != request:
+                raise BroadcastOutcomeUnknown(pending_key)
+            try:
+                publication = await self.reconcile_teacher_broadcast(
+                    sender_id, chat_id, pending_key
+                )
+            except BackendError as exc:
+                if exc.status != 404:
+                    raise BroadcastOutcomeUnknown(pending_key) from exc
+            except BackendUnavailable as exc:
+                raise BroadcastOutcomeUnknown(pending_key) from exc
+            else:
+                return publication
+
+        self.pending_broadcast_operations[sender_id] = (operation_key, request)
+        try:
+            publication = await self.write(
+                "POST",
+                "/api/v1/notifications/broadcasts",
+                TeacherBroadcastPublication,
+                sender_id,
+                chat_id,
+                request,
+                headers={"Idempotency-Key": str(operation_key)},
+                error_context="broadcast",
+            )
+        except BackendOutcomeUnknown as exc:
+            raise BroadcastOutcomeUnknown(operation_key) from exc
+        except BackendError:
+            self.pending_broadcast_operations.pop(sender_id, None)
+            raise
+        except BackendUnavailable as exc:
+            raise BroadcastOutcomeUnknown(operation_key) from exc
+        except asyncio.CancelledError:
+            raise
+        else:
+            self.pending_broadcast_operations.pop(sender_id, None)
+            return publication
+
+    async def reconcile_teacher_broadcast(
+        self,
+        sender_id: int,
+        chat_id: int,
+        operation_key: uuid.UUID,
+    ) -> TeacherBroadcastPublication:
+        publication = await self.read(
+            f"/api/v1/notifications/broadcasts/operations/{operation_key}",
+            TeacherBroadcastPublication,
+            sender_id,
+            chat_id,
+            error_context="broadcast",
+        )
+        pending = self.pending_broadcast_operations.get(sender_id)
+        if pending is not None and pending[0] == operation_key:
+            self.pending_broadcast_operations.pop(sender_id, None)
+        return publication
+
+    async def read_teacher_broadcast_results(
+        self,
+        sender_id: int,
+        chat_id: int,
+        operation_key: uuid.UUID,
+        *,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> TeacherBroadcastResults:
+        return await self.read(
+            f"/api/v1/notifications/broadcasts/operations/{operation_key}/results",
+            TeacherBroadcastResults,
+            sender_id,
+            chat_id,
+            params={"skip": str(skip), "limit": str(limit)},
+            error_context="broadcast",
         )
 
     async def read_homework_assignment(

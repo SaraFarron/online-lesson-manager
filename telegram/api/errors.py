@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 if TYPE_CHECKING:
     from .models.events import BreakDisplacementPreview
@@ -40,6 +41,16 @@ class HomeworkOutcomeUnknown(BackendOutcomeUnknown):
         )
 
 
+class BroadcastOutcomeUnknown(BackendOutcomeUnknown):
+    def __init__(self, operation_key: UUID) -> None:
+        self.operation_key = operation_key
+        RuntimeError.__init__(
+            self,
+            "The broadcast outcome is unknown. Reconcile this operation before "
+            "starting another broadcast.",
+        )
+
+
 class HomeworkAttachmentTooLarge(ValueError):
     def __init__(self) -> None:
         super().__init__("Homework attachments must be 20 MiB or smaller.")
@@ -59,3 +70,12 @@ class BackendError(RuntimeError):
         self.code = code
         self.displacement_preview = displacement_preview
         super().__init__(detail)
+
+
+class BroadcastPreviewStale(BackendError):
+    def __init__(self) -> None:
+        super().__init__(
+            409,
+            "The recipient list or message changed. Preview the broadcast again.",
+            code="broadcast_preview_stale",
+        )

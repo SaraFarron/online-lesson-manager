@@ -52,6 +52,15 @@ from .homework import (
     HomeworkSubmissionReview,
     StagedHomeworkAttachment,
 )
+from .notifications import (
+    TeacherBroadcastPreview,
+    TeacherBroadcastPreviewRequest,
+    TeacherBroadcastPublication,
+    TeacherBroadcastPublishRequest,
+    TeacherBroadcastRecipientResult,
+    TeacherBroadcastResultCounts,
+    TeacherBroadcastResults,
+)
 from .schedule import ScheduleDay, ScheduleItem, ScheduleResponse
 
 __all__ = [
@@ -107,4 +116,11 @@ __all__ = [
     "ScheduleItem",
     "ScheduleDay",
     "ScheduleResponse",
+    "TeacherBroadcastPreviewRequest",
+    "TeacherBroadcastPreview",
+    "TeacherBroadcastPublishRequest",
+    "TeacherBroadcastPublication",
+    "TeacherBroadcastResultCounts",
+    "TeacherBroadcastRecipientResult",
+    "TeacherBroadcastResults",
 ]

@@ -14,11 +14,14 @@ from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.models import Homework, HomeworkSubmission
 from backend.main import app
+from backend.notifications.models import TeacherBroadcast
 from telegram.api import (
     BackendClient,
     BackendError,
     BackendOutcomeUnknown,
     BackendUnavailable,
+    BroadcastOutcomeUnknown,
+    BroadcastPreviewStale,
     CircuitBreaker,
     EventCreatePayload,
     EventManagementDetail,
@@ -36,6 +39,7 @@ from telegram.api import (
     ScheduleResponse,
     SelfProfileUpdate,
     StudentProfileUpdate,
+    TeacherBroadcastPublishRequest,
     TeacherProfileUpdate,
     Token,
 )
@@ -1107,6 +1111,151 @@ async def test_homework_client_streams_backend_workflow(
             assert not (tmp_path / operation_key.hex).exists()
     finally:
         app.dependency_overrides.pop(get_homework_settings, None)
+
+
+async def test_broadcast_client_renews_auth_and_reconciles_ambiguous_publish(
+    client: httpx.AsyncClient,
+    db_session,
+    bot_service_key: str,
+) -> None:
+    teacher = User(
+        id=uuid4(),
+        email="broadcast-client-teacher@example.com",
+        full_name="Broadcast Teacher",
+        role="TEACHER",
+        timezone="UTC",
+        telegram_user_id=7_000_000_001,
+        telegram_private_chat_id=7_000_000_001,
+    )
+    student = User(
+        id=uuid4(),
+        email="broadcast-client-student@example.com",
+        full_name="Broadcast Student",
+        role="STUDENT",
+        timezone="UTC",
+        teacher_id=teacher.id,
+        telegram_private_chat_id=7_000_000_002,
+    )
+    db_session.add_all([teacher, student])
+    await db_session.commit()
+
+    publish_requests = 0
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        nonlocal publish_requests
+        response = await client.send(request)
+        if (
+            request.method == "POST"
+            and request.url.path == "/api/v1/notifications/broadcasts"
+        ):
+            publish_requests += 1
+            if response.status_code == 202:
+                raise httpx.ReadTimeout("response lost after commit", request=request)
+        return response
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, bot_service_key)
+        expired_token = create_access_token(
+            str(teacher.id), expires_delta=timedelta(seconds=-10)
+        )
+        api.tokens[teacher.telegram_user_id] = expired_token
+        preview = await api.preview_teacher_broadcast(
+            teacher.telegram_user_id,
+            teacher.telegram_private_chat_id,
+            "A confirmed message",
+        )
+        assert preview.recipient_count == 1
+        assert api.tokens[teacher.telegram_user_id] != expired_token
+
+        db_session.add(
+            User(
+                id=uuid4(),
+                email="broadcast-client-student-two@example.com",
+                full_name="Second Student",
+                role="STUDENT",
+                timezone="UTC",
+                teacher_id=teacher.id,
+                telegram_private_chat_id=7_000_000_003,
+            )
+        )
+        await db_session.commit()
+        stale_key = uuid4()
+        stale_request = TeacherBroadcastPublishRequest(
+            text="A confirmed message",
+            preview_token=preview.preview_token,
+        )
+        with pytest.raises(BroadcastPreviewStale):
+            await api.publish_teacher_broadcast(
+                teacher.telegram_user_id,
+                teacher.telegram_private_chat_id,
+                stale_request,
+                stale_key,
+            )
+        assert teacher.telegram_user_id not in api.pending_broadcast_operations
+
+        fresh_preview = await api.preview_teacher_broadcast(
+            teacher.telegram_user_id,
+            teacher.telegram_private_chat_id,
+            "A confirmed message",
+        )
+        operation_key = uuid4()
+        request = TeacherBroadcastPublishRequest(
+            text="A confirmed message",
+            preview_token=fresh_preview.preview_token,
+        )
+        with pytest.raises(BroadcastOutcomeUnknown) as unknown:
+            await api.publish_teacher_broadcast(
+                teacher.telegram_user_id,
+                teacher.telegram_private_chat_id,
+                request,
+                operation_key,
+            )
+        assert unknown.value.operation_key == operation_key
+
+        with pytest.raises(BroadcastOutcomeUnknown) as blocked:
+            await api.publish_teacher_broadcast(
+                teacher.telegram_user_id,
+                teacher.telegram_private_chat_id,
+                request,
+                uuid4(),
+            )
+        assert blocked.value.operation_key == operation_key
+
+        reconciled = await api.publish_teacher_broadcast(
+            teacher.telegram_user_id,
+            teacher.telegram_private_chat_id,
+            request,
+            operation_key,
+        )
+        results = await api.read_teacher_broadcast_results(
+            teacher.telegram_user_id,
+            teacher.telegram_private_chat_id,
+            operation_key,
+        )
+
+    assert publish_requests == 2
+    assert reconciled.operation_key == operation_key
+    assert reconciled.status == "queued"
+    assert results.total == 2
+    assert results.counts.pending == 2
+    assert (
+        await db_session.scalar(select(func.count()).select_from(TeacherBroadcast)) == 1
+    )
+
+
+async def test_broadcast_result_client_rejects_malformed_response() -> None:
+    async def transport(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"unexpected": "shape"})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(transport), base_url="http://test"
+    ) as http:
+        api = BackendClient(http, KEY)
+        api.tokens[100] = create_access_token(str(uuid4()))
+        with pytest.raises(BackendUnavailable):
+            await api.read_teacher_broadcast_results(100, 100, uuid4())
 
 
 async def test_homework_submission_unknown_outcome_retries_same_operation_key(

@@ -1,6 +1,8 @@
 from typing import Literal
 
-ErrorContext = Literal["default", "schedule", "scheduling", "settings", "homework"]
+ErrorContext = Literal[
+    "default", "schedule", "scheduling", "settings", "homework", "broadcast"
+]
 
 
 DEFAULT_ERROR_MESSAGES = {
@@ -51,6 +53,15 @@ HOMEWORK_ERROR_MESSAGES = {
     409: "Homework changed or was already completed. Reload it before trying again.",
     413: "This attachment exceeds the allowed 20 MiB file limit.",
     422: "Check the homework content, attachments, and file limits.",
+}
+
+BROADCAST_ERROR_MESSAGES = {
+    400: "This broadcast action is not allowed for this account.",
+    401: "Broadcast authentication failed. Restart with /start and retry.",
+    403: "This account cannot publish this broadcast.",
+    404: "The broadcast operation was not found.",
+    409: "The broadcast request conflicts with a previous operation.",
+    422: "Review the broadcast text and recipient preview.",
 }
 
 

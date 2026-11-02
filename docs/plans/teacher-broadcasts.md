@@ -4,7 +4,7 @@
 
 A teacher can compose, review and confirm a one-time message to their own students, with durable delivery and honest per-recipient outcome reporting.
 
-**Status:** In progress — Tasks 00–02 complete.
+**Status:** In progress — Tasks 00–03 complete.
 
 ## Scope (README.md sections covered)
 
@@ -110,9 +110,17 @@ cross-teacher denial, and paging. Focused notification regressions passed
 
 **Reuse:** Existing write/204/error/circuit breaker and homework operation patterns.
 
-**Acceptance Criteria:** [ ] Auth expiry, malformed results, timeout-after-commit, repeated keys and stale previews have explicit safe outcomes. [ ] Bot mypy and client tests pass.
+**Acceptance Criteria:** [x] Auth expiry, malformed results, timeout-after-commit, repeated keys and stale previews have explicit safe outcomes. [x] Bot mypy and client tests pass.
 
 **Out of scope:** Bot-side durable sending/fan-out. **Suitable for:** AI agent.
+
+**Execution:** Added strict typed preview, publish, reconciliation and paginated
+result calls, including the broadcast notification type. Expired-token writes
+renew once; stale previews raise a typed error. Ambiguous publishes retain the
+same key and payload, reconcile before retry, and block a different operation
+until resolved. Verified stale previews, timeout-after-commit reconciliation,
+malformed result rejection, and authentication renewal. Bot client/worker tests
+passed (53 passed); Ruff, formatting and bot mypy passed.
 
 ## Task 04: Wire compose, review, confirm, results and approved toggle
 

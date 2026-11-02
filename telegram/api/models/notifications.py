@@ -1,8 +1,8 @@
 from datetime import date
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 NotificationType = Literal[
     "DAILY_DIGEST",
@@ -10,8 +10,12 @@ NotificationType = Literal[
     "HOMEWORK_REMINDER",
     "ASSIGNMENT_CREATED",
     "SUBMISSION_RECEIVED",
+    "TEACHER_BROADCAST",
 ]
 AcknowledgementOutcome = Literal["sent", "retryable", "terminal", "unknown"]
+BroadcastDeliveryStatus = Literal[
+    "pending", "retrying", "sent", "suppressed", "failed", "unknown"
+]
 
 
 class ClaimedNotification(BaseModel):
@@ -47,3 +51,69 @@ class AcknowledgeResponse(BaseModel):
     state: Literal["PENDING", "CLAIMED", "RETRY", "SENT", "TERMINAL", "SUPPRESSED"]
     last_outcome: Literal["SENT", "RETRYABLE", "TERMINAL", "UNKNOWN"]
     available_at: AwareDatetime
+
+
+class TeacherBroadcastPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=4096)
+
+    @model_validator(mode="after")
+    def reject_blank_text(self) -> Self:
+        if not self.text.strip():
+            raise ValueError("Broadcast text cannot be blank")
+        return self
+
+
+class TeacherBroadcastPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preview_token: str = Field(min_length=1, max_length=2048)
+    recipient_count: int = Field(ge=0)
+    eligible_count: int = Field(ge=0)
+    unsendable_count: int = Field(ge=0)
+
+
+class TeacherBroadcastPublishRequest(TeacherBroadcastPreviewRequest):
+    preview_token: str = Field(min_length=1, max_length=2048)
+
+
+class TeacherBroadcastPublication(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    operation_key: UUID
+    status: Literal["queued"]
+    recipient_count: int = Field(ge=0)
+    eligible_count: int = Field(ge=0)
+    unsendable_count: int = Field(ge=0)
+
+
+class TeacherBroadcastResultCounts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pending: int = Field(ge=0)
+    retrying: int = Field(ge=0)
+    sent: int = Field(ge=0)
+    suppressed: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    unknown: int = Field(ge=0)
+
+
+class TeacherBroadcastRecipientResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    student_id: UUID
+    student_name: str | None
+    status: BroadcastDeliveryStatus
+
+
+class TeacherBroadcastResults(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_key: UUID
+    total: int = Field(ge=0)
+    skip: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+    counts: TeacherBroadcastResultCounts
+    recipients: list[TeacherBroadcastRecipientResult]
