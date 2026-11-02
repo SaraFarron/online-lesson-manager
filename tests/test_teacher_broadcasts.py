@@ -17,10 +17,17 @@ from backend.notifications.broadcasts import (
     preview_teacher_broadcast,
     publish_teacher_broadcast,
 )
-from backend.notifications.constants import NotificationState, NotificationType
+from backend.notifications.constants import (
+    AcknowledgementOutcome,
+    NotificationState,
+    NotificationType,
+)
 from backend.notifications.models import NotificationIntent, TeacherBroadcast
-from backend.notifications.schemas import TeacherBroadcastPublishRequest
-from backend.notifications.service import claim_pending_intents
+from backend.notifications.schemas import (
+    AcknowledgeRequest,
+    TeacherBroadcastPublishRequest,
+)
+from backend.notifications.service import acknowledge_intent, claim_pending_intents
 
 BROADCAST_ROOT = "/api/v1/notifications/broadcasts"
 
@@ -348,6 +355,216 @@ async def test_student_cannot_preview_and_teacher_cannot_read_other_publication(
         headers=_auth(other_teacher),
     )
     assert not_found.status_code == 404
+    results_not_found = await client.get(
+        f"{BROADCAST_ROOT}/operations/{operation_key}/results",
+        headers=_auth(other_teacher),
+    )
+    assert results_not_found.status_code == 404
+
+
+async def test_broadcast_results_aggregate_delivery_states_and_paginate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    teacher = await _user(db_session, "TEACHER")
+    students = [
+        await _user(
+            db_session,
+            "STUDENT",
+            teacher_id=teacher.id,
+            chat_id=1000 + index,
+        )
+        for index in range(8)
+    ]
+    for index, student in enumerate(students):
+        student.full_name = f"Student {index:02}"
+    await db_session.commit()
+
+    text = "Result status test"
+    preview = await client.post(
+        f"{BROADCAST_ROOT}/preview",
+        headers=_auth(teacher),
+        json={"text": text},
+    )
+    operation_key = uuid4()
+    published = await client.post(
+        BROADCAST_ROOT,
+        headers={**_auth(teacher), **_idempotency(operation_key)},
+        json={"text": text, "preview_token": preview.json()["preview_token"]},
+    )
+    assert published.status_code == 202, published.text
+
+    intents = list(
+        await db_session.scalars(
+            select(NotificationIntent).where(
+                NotificationIntent.source_id == UUID(published.json()["id"])
+            )
+        )
+    )
+    state_by_name = {
+        "Student 00": (NotificationState.PENDING, None),
+        "Student 01": (NotificationState.CLAIMED, None),
+        "Student 02": (NotificationState.RETRY, "RETRYABLE"),
+        "Student 03": (NotificationState.RETRY, "UNKNOWN"),
+        "Student 04": (NotificationState.SENT, "SENT"),
+        "Student 05": (NotificationState.SUPPRESSED, "TERMINAL"),
+        "Student 06": (NotificationState.TERMINAL, "TERMINAL"),
+        "Student 07": (NotificationState.TERMINAL, "UNKNOWN"),
+    }
+    users_by_id = {student.id: student for student in students}
+    for intent in intents:
+        student = users_by_id[intent.recipient_id]
+        intent.state, intent.last_outcome = state_by_name[student.full_name]
+        if intent.state == NotificationState.CLAIMED:
+            intent.lease_token = uuid4()
+            intent.lease_expires_at = datetime.now(UTC) + timedelta(minutes=1)
+    await db_session.commit()
+
+    response = await client.get(
+        f"{BROADCAST_ROOT}/operations/{operation_key}/results?skip=2&limit=3",
+        headers=_auth(teacher),
+    )
+
+    assert response.status_code == 200, response.text
+    results = response.json()
+    assert results["total"] == 8
+    assert results["skip"] == 2
+    assert results["limit"] == 3
+    assert results["counts"] == {
+        "pending": 2,
+        "retrying": 1,
+        "sent": 1,
+        "suppressed": 1,
+        "failed": 1,
+        "unknown": 2,
+    }
+    assert [recipient["student_name"] for recipient in results["recipients"]] == [
+        "Student 02",
+        "Student 03",
+        "Student 04",
+    ]
+    assert [recipient["status"] for recipient in results["recipients"]] == [
+        "retrying",
+        "unknown",
+        "sent",
+    ]
+    assert "chat_id" not in response.text
+
+    invalid_limit = await client.get(
+        f"{BROADCAST_ROOT}/operations/{operation_key}/results?limit=101",
+        headers=_auth(teacher),
+    )
+    assert invalid_limit.status_code == 422
+
+
+async def test_empty_broadcast_has_zero_results(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    teacher = await _user(db_session, "TEACHER")
+    preview = await client.post(
+        f"{BROADCAST_ROOT}/preview",
+        headers=_auth(teacher),
+        json={"text": "No recipients"},
+    )
+    operation_key = uuid4()
+    published = await client.post(
+        BROADCAST_ROOT,
+        headers={**_auth(teacher), **_idempotency(operation_key)},
+        json={
+            "text": "No recipients",
+            "preview_token": preview.json()["preview_token"],
+        },
+    )
+    assert published.status_code == 202
+
+    results = await client.get(
+        f"{BROADCAST_ROOT}/operations/{operation_key}/results",
+        headers=_auth(teacher),
+    )
+
+    assert results.status_code == 200, results.text
+    assert results.json()["total"] == 0
+    assert results.json()["recipients"] == []
+    assert results.json()["counts"] == {
+        "pending": 0,
+        "retrying": 0,
+        "sent": 0,
+        "suppressed": 0,
+        "failed": 0,
+        "unknown": 0,
+    }
+
+
+async def test_delivery_acknowledgements_appear_in_broadcast_results(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    teacher = await _user(db_session, "TEACHER")
+    students = [
+        await _user(
+            db_session,
+            "STUDENT",
+            teacher_id=teacher.id,
+            chat_id=2000 + index,
+        )
+        for index in range(3)
+    ]
+    text = "Delivery outcomes"
+    preview = await client.post(
+        f"{BROADCAST_ROOT}/preview",
+        headers=_auth(teacher),
+        json={"text": text},
+    )
+    operation_key = uuid4()
+    published = await client.post(
+        BROADCAST_ROOT,
+        headers={**_auth(teacher), **_idempotency(operation_key)},
+        json={"text": text, "preview_token": preview.json()["preview_token"]},
+    )
+    assert published.status_code == 202
+
+    claimed = await claim_pending_intents(
+        db_session,
+        now=datetime.now(UTC) + timedelta(seconds=1),
+    )
+    outcomes = {
+        students[0].id: (AcknowledgementOutcome.RETRYABLE, "telegram_rate_limited"),
+        students[1].id: (AcknowledgementOutcome.TERMINAL, "telegram_forbidden"),
+        students[2].id: (AcknowledgementOutcome.UNKNOWN, "telegram_send_unknown"),
+    }
+    for notification in claimed:
+        outcome, error_code = outcomes[notification.recipient_id]
+        await acknowledge_intent(
+            db_session,
+            notification.id,
+            AcknowledgeRequest(
+                lease_token=notification.lease_token,
+                outcome=outcome,
+                error_code=error_code,
+            ),
+            now=datetime.now(UTC) + timedelta(seconds=2),
+        )
+
+    results = await client.get(
+        f"{BROADCAST_ROOT}/operations/{operation_key}/results",
+        headers=_auth(teacher),
+    )
+
+    assert results.status_code == 200, results.text
+    assert results.json()["counts"] == {
+        "pending": 0,
+        "retrying": 1,
+        "sent": 0,
+        "suppressed": 0,
+        "failed": 1,
+        "unknown": 1,
+    }
+    assert {item["status"] for item in results.json()["recipients"]} == {
+        "retrying",
+        "failed",
+        "unknown",
+    }
 
 
 async def test_claim_revalidates_link_and_builds_the_teacher_message(
@@ -363,9 +580,10 @@ async def test_claim_revalidates_link_and_builds_the_teacher_message(
         headers=_auth(teacher),
         json={"text": text},
     )
+    operation_key = uuid4()
     published = await client.post(
         BROADCAST_ROOT,
-        headers={**_auth(teacher), **_idempotency(uuid4())},
+        headers={**_auth(teacher), **_idempotency(operation_key)},
         json={
             "text": text,
             "preview_token": preview.json()["preview_token"],
@@ -389,6 +607,13 @@ async def test_claim_revalidates_link_and_builds_the_teacher_message(
     )
     assert suppressed is not None
     assert suppressed.state == NotificationState.SUPPRESSED
+    results = await client.get(
+        f"{BROADCAST_ROOT}/operations/{operation_key}/results",
+        headers=_auth(teacher),
+    )
+    assert results.status_code == 200, results.text
+    assert results.json()["counts"]["pending"] == 1
+    assert results.json()["counts"]["suppressed"] == 1
 
 
 async def test_concurrent_publish_retries_create_one_broadcast(

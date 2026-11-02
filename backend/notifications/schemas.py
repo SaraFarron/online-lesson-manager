@@ -122,3 +122,32 @@ class TeacherBroadcastPublication(BaseModel):
     recipient_count: int = Field(ge=0)
     eligible_count: int = Field(ge=0)
     unsendable_count: int = Field(ge=0)
+
+
+BroadcastDeliveryStatus = Literal[
+    "pending", "retrying", "sent", "suppressed", "failed", "unknown"
+]
+
+
+class TeacherBroadcastResultCounts(BaseModel):
+    pending: int = Field(ge=0)
+    retrying: int = Field(ge=0)
+    sent: int = Field(ge=0)
+    suppressed: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    unknown: int = Field(ge=0)
+
+
+class TeacherBroadcastRecipientResult(BaseModel):
+    student_id: UUID
+    student_name: str | None
+    status: BroadcastDeliveryStatus
+
+
+class TeacherBroadcastResults(BaseModel):
+    operation_key: UUID
+    total: int = Field(ge=0)
+    skip: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+    counts: TeacherBroadcastResultCounts
+    recipients: list[TeacherBroadcastRecipientResult]

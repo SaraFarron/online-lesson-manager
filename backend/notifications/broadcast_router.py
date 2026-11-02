@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, status
+from fastapi import APIRouter, Header, Query, status
 
 from backend.auth.dependencies import CurrentUser, SessionDep
 from backend.notifications import broadcasts
@@ -10,6 +10,7 @@ from backend.notifications.schemas import (
     TeacherBroadcastPreviewRequest,
     TeacherBroadcastPublication,
     TeacherBroadcastPublishRequest,
+    TeacherBroadcastResults,
 )
 
 router = APIRouter(
@@ -71,4 +72,26 @@ async def reconcile_broadcast(
 ) -> TeacherBroadcastPublication:
     return await broadcasts.reconcile_teacher_broadcast(
         session, current_user, operation_key
+    )
+
+
+@router.get(
+    "/operations/{operation_key}/results",
+    response_model=TeacherBroadcastResults,
+    summary="Read paginated delivery results for a teacher broadcast",
+    responses={status.HTTP_404_NOT_FOUND: {"description": "Publication not found"}},
+)
+async def read_broadcast_results(
+    operation_key: UUID,
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> TeacherBroadcastResults:
+    return await broadcasts.get_teacher_broadcast_results(
+        session,
+        current_user,
+        operation_key,
+        skip=skip,
+        limit=limit,
     )

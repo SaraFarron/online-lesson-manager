@@ -4,7 +4,7 @@
 
 A teacher can compose, review and confirm a one-time message to their own students, with durable delivery and honest per-recipient outcome reporting.
 
-**Status:** In progress — Tasks 00–01 complete.
+**Status:** In progress — Tasks 00–02 complete.
 
 ## Scope (README.md sections covered)
 
@@ -89,9 +89,16 @@ focused notification regressions, Ruff, and backend/bot mypy passed.
 
 **Reuse:** Existing notification claim/ack/retry services and minimal roster display labels.
 
-**Acceptance Criteria:** [ ] Blocked chats/429s, worker crash, unlink and empty roster have correct counts and states. [ ] Another teacher cannot inspect recipient results; common checks pass.
+**Acceptance Criteria:** [x] Blocked chats/429s, worker crash, unlink and empty roster have correct counts and states. [x] Another teacher cannot inspect recipient results; common checks pass.
 
 **Out of scope:** Read receipts or promises of human delivery. **Suitable for:** AI agent.
+
+**Execution:** Added teacher-owned, bounded result pages with aggregate counts
+and minimal recipient labels. Retryable sends report `retrying`; ambiguous
+sends remain `unknown`, including exhausted ambiguous attempts. Verified
+delivery acknowledgements, suppression after unlinking, empty rosters,
+cross-teacher denial, and paging. Focused notification regressions passed
+(42 passed, 3 environment-dependent skips); Ruff and backend mypy passed.
 
 ## Task 03: Add typed bot broadcast operations
 

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import jwt
 from jwt.exceptions import InvalidTokenError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,14 +17,19 @@ from backend.events.time_utils import normalize_utc
 from backend.exceptions import Conflict, Forbidden, NotFound
 from backend.notifications.constants import (
     PUSH_CATCH_UP,
+    AcknowledgementOutcome,
     NotificationState,
     NotificationType,
 )
 from backend.notifications.models import NotificationIntent, TeacherBroadcast
 from backend.notifications.schemas import (
+    BroadcastDeliveryStatus,
     TeacherBroadcastPreview,
     TeacherBroadcastPublication,
     TeacherBroadcastPublishRequest,
+    TeacherBroadcastRecipientResult,
+    TeacherBroadcastResultCounts,
+    TeacherBroadcastResults,
 )
 
 
@@ -138,6 +143,97 @@ async def reconcile_teacher_broadcast(
     if broadcast is None:
         raise NotFound("broadcast_not_found")
     return _publication(broadcast)
+
+
+async def get_teacher_broadcast_results(
+    session: AsyncSession,
+    teacher: User,
+    operation_key: uuid.UUID,
+    *,
+    skip: int,
+    limit: int,
+) -> TeacherBroadcastResults:
+    _require_teacher(teacher)
+    broadcast = await _get_by_operation_key(session, teacher.id, operation_key)
+    if broadcast is None:
+        raise NotFound("broadcast_not_found")
+
+    intent_filter = (
+        NotificationIntent.notification_type == NotificationType.TEACHER_BROADCAST,
+        NotificationIntent.source_id == broadcast.id,
+    )
+    grouped_counts = await session.execute(
+        select(
+            NotificationIntent.state,
+            NotificationIntent.last_outcome,
+            func.count(),
+        )
+        .where(*intent_filter)
+        .group_by(NotificationIntent.state, NotificationIntent.last_outcome)
+    )
+    counts = {
+        "pending": 0,
+        "retrying": 0,
+        "sent": 0,
+        "suppressed": 0,
+        "failed": 0,
+        "unknown": 0,
+    }
+    for state, last_outcome, count in grouped_counts:
+        counts[_delivery_status(state, last_outcome)] += count
+
+    rows = await session.execute(
+        select(
+            NotificationIntent.recipient_id,
+            User.full_name,
+            NotificationIntent.state,
+            NotificationIntent.last_outcome,
+        )
+        .join(User, User.id == NotificationIntent.recipient_id)
+        .where(*intent_filter)
+        .order_by(User.full_name.asc().nulls_last(), User.id)
+        .offset(skip)
+        .limit(limit)
+    )
+    recipients = [
+        TeacherBroadcastRecipientResult(
+            student_id=student_id,
+            student_name=student_name,
+            status=_delivery_status(state, last_outcome),
+        )
+        for student_id, student_name, state, last_outcome in rows
+    ]
+    return TeacherBroadcastResults(
+        operation_key=broadcast.operation_key,
+        total=sum(counts.values()),
+        skip=skip,
+        limit=limit,
+        counts=TeacherBroadcastResultCounts(**counts),
+        recipients=recipients,
+    )
+
+
+def _delivery_status(state: str, last_outcome: str | None) -> BroadcastDeliveryStatus:
+    notification_state = NotificationState(state)
+    if notification_state in {NotificationState.PENDING, NotificationState.CLAIMED}:
+        return "pending"
+    if notification_state == NotificationState.RETRY:
+        return (
+            "unknown"
+            if last_outcome == AcknowledgementOutcome.UNKNOWN.name
+            else "retrying"
+        )
+    if notification_state == NotificationState.SENT:
+        return "sent"
+    if notification_state == NotificationState.SUPPRESSED:
+        return "suppressed"
+    if notification_state == NotificationState.TERMINAL:
+        return (
+            "unknown"
+            if last_outcome == AcknowledgementOutcome.UNKNOWN.name
+            else "failed"
+        )
+    raise RuntimeError(f"Unsupported notification state: {notification_state}")
 
 
 def _require_teacher(teacher: User) -> None:
