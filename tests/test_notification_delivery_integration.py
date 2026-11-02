@@ -3,12 +3,15 @@ from collections.abc import Generator
 from datetime import UTC, datetime, time, timedelta
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from aiogram import Bot
-from aiogram.methods import SendMessage
+from aiogram.exceptions import TelegramForbiddenError
+from aiogram.methods import SendMessage, TelegramMethod
+from aiogram.methods.base import TelegramType
 from httpx import AsyncClient
 from pydantic import SecretStr
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.models import StudentProfile, TeacherProfile, User
@@ -24,7 +27,7 @@ from backend.notifications.config import (
 )
 from backend.notifications.constants import NotificationState, NotificationType
 from backend.notifications.homework_producers import produce_homework_reminders
-from backend.notifications.models import NotificationIntent
+from backend.notifications.models import NotificationIntent, TeacherBroadcast
 from backend.notifications.router import get_notification_clock
 from backend.notifications.schedule_producers import produce_schedule_notifications
 from telegram.api.notifications import NotificationClient
@@ -355,6 +358,251 @@ async def test_preferences_to_recorded_delivery_for_every_notification_type(
         assert all(intent.sent_at is not None for intent in persisted)
         await bot.session.close()
     finally:
+        if previous_clock is None:
+            app.dependency_overrides.pop(get_notification_clock, None)
+        else:
+            app.dependency_overrides[get_notification_clock] = previous_clock
+
+
+@pytest.mark.asyncio
+async def test_broadcast_worker_revalidates_recipients_and_recovers_after_restart(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    notification_api_key: str,
+) -> None:
+    now = datetime.now(UTC).replace(microsecond=0)
+    previous_clock = app.dependency_overrides.get(get_notification_clock)
+    app.dependency_overrides[get_notification_clock] = lambda: now
+    teacher = User(
+        id=uuid4(),
+        email=f"{uuid4()}@example.com",
+        full_name="Broadcast Teacher",
+        role="TEACHER",
+        timezone="UTC",
+        telegram_private_chat_id=6_300_000_001,
+    )
+    students = [
+        User(
+            id=uuid4(),
+            email=f"{uuid4()}@example.com",
+            full_name=f"Broadcast Student {index}",
+            role="STUDENT",
+            timezone="UTC",
+            teacher_id=teacher.id,
+            telegram_private_chat_id=6_300_001_000 + index,
+        )
+        for index in range(4)
+    ]
+    other_teacher = User(
+        id=uuid4(),
+        email=f"{uuid4()}@example.com",
+        full_name="Other Teacher",
+        role="TEACHER",
+        timezone="UTC",
+        telegram_private_chat_id=6_300_000_002,
+    )
+    other_student = User(
+        id=uuid4(),
+        email=f"{uuid4()}@example.com",
+        full_name="Other Teacher's Student",
+        role="STUDENT",
+        timezone="UTC",
+        teacher_id=other_teacher.id,
+        telegram_private_chat_id=6_300_002_000,
+    )
+    db_session.add_all([teacher, *students, other_teacher, other_student])
+    await db_session.commit()
+
+    text = "Important update: <please read>"
+    preview = await client.post(
+        "/api/v1/notifications/broadcasts/preview",
+        headers=_authorization(teacher),
+        json={"text": text},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["recipient_count"] == 4
+    operation_key = uuid4()
+    published = await client.post(
+        "/api/v1/notifications/broadcasts",
+        headers={
+            **_authorization(teacher),
+            "Idempotency-Key": str(operation_key),
+        },
+        json={"text": text, "preview_token": preview.json()["preview_token"]},
+    )
+    assert published.status_code == 202, published.text
+    publication_id = UUID(published.json()["id"])
+    intents = list(
+        await db_session.scalars(
+            select(NotificationIntent)
+            .where(NotificationIntent.source_id == publication_id)
+            .order_by(
+                NotificationIntent.available_at,
+                NotificationIntent.created_at,
+                NotificationIntent.id,
+            )
+        )
+    )
+    assert {intent.recipient_id for intent in intents} == {
+        student.id for student in students
+    }
+    assert other_student.id not in {intent.recipient_id for intent in intents}
+    assert len(intents) == 4
+
+    now = datetime.now(UTC).replace(microsecond=0) + timedelta(seconds=1)
+    first_intent = intents[0]
+    first_student = next(
+        student for student in students if student.id == first_intent.recipient_id
+    )
+    unlinked_student = next(
+        student for student in students if student.id != first_student.id
+    )
+    blocked_student = next(
+        student
+        for student in students
+        if student.id not in {first_student.id, unlinked_student.id}
+    )
+    second_deliverable = next(
+        student
+        for student in students
+        if student.id not in {first_student.id, unlinked_student.id, blocked_student.id}
+    )
+    unlinked_student.teacher_id = None
+    for intent in intents:
+        if intent.id == first_intent.id:
+            intent.available_at = now
+        else:
+            intent.available_at = now + timedelta(minutes=2)
+    await db_session.commit()
+
+    fail_first_ack = True
+
+    async def service_transport(request: httpx.Request) -> httpx.Response:
+        nonlocal fail_first_ack
+        if (
+            fail_first_ack
+            and request.method == "POST"
+            and request.url.path.endswith("/ack")
+        ):
+            fail_first_ack = False
+            raise httpx.ConnectError(
+                "simulated worker shutdown before acknowledgement", request=request
+            )
+        return await client.send(request)
+
+    service_http = httpx.AsyncClient(
+        transport=httpx.MockTransport(service_transport),
+        base_url="http://test",
+    )
+    notification_client = NotificationClient(service_http, notification_api_key)
+
+    class BroadcastRecordingSession(RecordingSession):
+        async def make_request(
+            self,
+            bot: Bot,
+            method: TelegramMethod[TelegramType],
+            timeout: int | None = None,
+        ) -> TelegramType:
+            if (
+                method.__api_method__ == "sendMessage"
+                and int(method.model_dump()["chat_id"])
+                == blocked_student.telegram_private_chat_id
+            ):
+                raise TelegramForbiddenError(
+                    method=method,
+                    message="bot was blocked by the user",
+                )
+            return await super().make_request(bot, method, timeout)
+
+    first_session = RecordingSession()
+    first_bot = Bot("123456789:test-token-for-local-recording", session=first_session)
+    first_worker = NotificationWorker(first_bot, notification_client)
+    restarted_bot: Bot | None = None
+    try:
+        first_claim = await notification_client.claim(limit=1)
+        assert len(first_claim.items) == 1
+        assert first_claim.items[0].recipient_id == first_student.id
+        await first_worker._deliver(first_claim.items[0])
+        assert (
+            len([call for call in first_session.calls if isinstance(call, SendMessage)])
+            == 1
+        )
+        await db_session.refresh(first_intent)
+        assert first_intent.state == NotificationState.CLAIMED
+        assert first_intent.attempt_count == 1
+
+        app.dependency_overrides[get_notification_clock] = lambda: (
+            now + timedelta(seconds=61)
+        )
+        restarted_session = BroadcastRecordingSession()
+        restarted_bot = Bot(
+            "123456789:test-token-for-local-recording",
+            session=restarted_session,
+        )
+        restarted_worker = NotificationWorker(restarted_bot, notification_client)
+        recovered_claim = await notification_client.claim(limit=1)
+        assert len(recovered_claim.items) == 1
+        assert recovered_claim.items[0].id == first_intent.id
+        await restarted_worker._deliver(recovered_claim.items[0])
+
+        app.dependency_overrides[get_notification_clock] = lambda: (
+            now + timedelta(minutes=2, seconds=1)
+        )
+        for _ in range(3):
+            batch = await notification_client.claim(limit=1)
+            if batch.items:
+                await restarted_worker._deliver(batch.items[0])
+
+        results = await client.get(
+            f"/api/v1/notifications/broadcasts/operations/{operation_key}/results",
+            headers=_authorization(teacher),
+        )
+        assert results.status_code == 200, results.text
+        assert results.json()["counts"] == {
+            "pending": 0,
+            "retrying": 0,
+            "sent": 2,
+            "suppressed": 1,
+            "failed": 1,
+            "unknown": 0,
+        }
+        by_name = {
+            row["student_name"]: row["status"] for row in results.json()["recipients"]
+        }
+        assert by_name == {
+            first_student.full_name: "sent",
+            unlinked_student.full_name: "suppressed",
+            blocked_student.full_name: "failed",
+            second_deliverable.full_name: "sent",
+        }
+        recorded_sends = [
+            call
+            for session in (first_session, restarted_session)
+            for call in session.calls
+            if isinstance(call, SendMessage)
+        ]
+        assert Counter(int(call.chat_id) for call in recorded_sends) == Counter(
+            {
+                int(first_student.telegram_private_chat_id): 2,
+                int(second_deliverable.telegram_private_chat_id): 1,
+            }
+        )
+        assert all(
+            "Important update: &lt;please read&gt;" in call.text
+            for call in recorded_sends
+        )
+        await db_session.refresh(first_intent)
+        assert first_intent.state == NotificationState.SENT
+        assert first_intent.attempt_count == 2
+        assert (
+            await db_session.scalar(select(func.count()).select_from(TeacherBroadcast))
+            == 1
+        )
+    finally:
+        await first_bot.session.close()
+        if restarted_bot is not None:
+            await restarted_bot.session.close()
+        await service_http.aclose()
         if previous_clock is None:
             app.dependency_overrides.pop(get_notification_clock, None)
         else:

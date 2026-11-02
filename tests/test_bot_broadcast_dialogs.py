@@ -67,6 +67,7 @@ async def _make_driver(
     user_id: int = TEACHER_TELEGRAM_ID,
     lose_publish_response: bool = False,
     dispatcher: Dispatcher | None = None,
+    unavailable_preview: bool = False,
 ) -> tuple[BotDriver, BackendClient, httpx.AsyncClient, list[httpx.Request]]:
     requests: list[httpx.Request] = []
     lost_response = False
@@ -74,6 +75,12 @@ async def _make_driver(
     async def transport(request: httpx.Request) -> httpx.Response:
         nonlocal lost_response
         requests.append(request)
+        if (
+            unavailable_preview
+            and request.method == "POST"
+            and request.url.path == f"{BROADCAST_ROOT}/preview"
+        ):
+            raise httpx.ConnectError("simulated backend outage", request=request)
         response = await client.send(request)
         if (
             lose_publish_response
@@ -168,7 +175,32 @@ async def test_confirmation_reconciles_lost_response_and_results_reload_and_page
     db_session: AsyncSession,
     bot_service_key: str,
 ) -> None:
-    teacher, students = await _seed(db_session, student_count=12)
+    _teacher, students = await _seed(db_session, student_count=12)
+    unrelated_teacher_id = uuid4()
+    unrelated_teacher = User(
+        id=unrelated_teacher_id,
+        email=f"broadcast-dialog-unrelated-teacher-{unrelated_teacher_id}@example.com",
+        full_name="Unrelated Teacher",
+        role="TEACHER",
+        timezone="UTC",
+        telegram_user_id=6_200_000_002,
+        telegram_private_chat_id=6_200_000_002,
+        is_active=True,
+    )
+    unrelated_student_id = uuid4()
+    unrelated_student = User(
+        id=unrelated_student_id,
+        email=f"broadcast-dialog-unrelated-student-{unrelated_student_id}@example.com",
+        full_name="Unrelated Student",
+        role="STUDENT",
+        timezone="UTC",
+        teacher_id=unrelated_teacher_id,
+        telegram_user_id=6_200_003_000,
+        telegram_private_chat_id=6_200_003_000,
+        is_active=True,
+    )
+    db_session.add_all([unrelated_teacher, unrelated_student])
+    await db_session.commit()
     driver, api, http, requests = await _make_driver(
         client,
         bot_service_key,
@@ -205,6 +237,20 @@ async def test_confirmation_reconciles_lost_response_and_results_reload_and_page
             )
             == 12
         )
+        queued_intents = list(await db_session.scalars(select(NotificationIntent)))
+        assert {intent.recipient_id for intent in queued_intents} == {
+            student.id for student in students
+        }
+        publication = await db_session.scalar(select(TeacherBroadcast))
+        assert publication is not None
+        assert all(
+            intent.notification_type == "TEACHER_BROADCAST"
+            and intent.source_id == publication.id
+            for intent in queued_intents
+        )
+        assert unrelated_student.id not in {
+            intent.recipient_id for intent in queued_intents
+        }
 
         await driver.click("Check publication status")
         assert "Queued for delivery" in driver.session.last_message.text
@@ -321,5 +367,40 @@ async def test_maximum_broadcast_preview_is_escaped_and_length_safe(
         second_page = driver.session.last_message.text
         assert "Message (page 2 of 4)" in second_page
         assert rendered_utf16_length(second_page) < 4096
+    finally:
+        await _close(driver, http)
+
+
+async def test_backend_outage_during_preview_keeps_broadcast_unpublished(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    await _seed(db_session, student_count=2)
+    driver, _api, http, requests = await _make_driver(
+        client,
+        bot_service_key,
+        unavailable_preview=True,
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Broadcast")
+        await driver.text("A message to preview")
+        await driver.click("Preview")
+
+        assert "unavailable" in driver.session.last_message.text.casefold()
+        assert any(
+            request.url.path == f"{BROADCAST_ROOT}/preview" for request in requests
+        )
+        assert (
+            await db_session.scalar(select(func.count()).select_from(TeacherBroadcast))
+            == 0
+        )
+        assert (
+            await db_session.scalar(
+                select(func.count()).select_from(NotificationIntent)
+            )
+            == 0
+        )
     finally:
         await _close(driver, http)

@@ -31,8 +31,8 @@ notification preferences to these values; downgrade removes new schema fields
 but does not restore the former notification values. Preferences are saved
 through partial profile updates. Durable notification producers and a Telegram
 delivery worker are implemented, including Telegram settings and claim-time
-source-rich text. Teacher broadcasts remain planned and reuse this delivery
-foundation rather than adding a second sender.
+source-rich text. Teacher broadcasts use the same durable notification
+foundation and Telegram worker rather than a second sender.
 
 Profile PUT endpoints use partial-update semantics: omitted fields preserve saved
 values and invitation codes; explicit null disables notification preferences only.
@@ -151,13 +151,26 @@ student linkage, completed/deleted homework, or stale lesson occurrences
 suppress a send at claim time. The bot formats content from the currently
 authorized source records and sends through the same serial worker.
 
-Teacher broadcasts are not implemented. Future broadcast work must persist
-deduplicated per-recipient intents through the notifications domain and reuse
-the protected claim/ack API, existing Telegram worker, and its retry/lease
-semantics. Keep roster authorization and recipient revalidation in the backend;
-do not send from the dialog, loop over chat IDs in the bot, or add a parallel
-poller/sender. Broadcast confirmation, opt-out, and recipient-snapshot rules
-require their own approved contract.
+Teacher broadcasts are one-time, plain-text messages of 1–4096 characters.
+The teacher reviews a preview of the exact text and active linked-student
+roster before confirming; preview sends nothing, and roster or text changes
+require a fresh preview. Confirmation snapshots the active linked roster and
+transactionally persists one notification intent per student. Students linked
+later are excluded. There is no separate broadcast opt-out, and lesson/homework
+preferences do not disable broadcasts. At claim time, current account activity,
+teacher linkage, and private-chat routing are revalidated; invalid recipients
+are suppressed.
+
+The teacher-only Telegram dialog publishes through the backend and shows
+bounded per-recipient results (`pending`, `retrying`, `sent`, `suppressed`,
+`failed`, `unknown`). `sent` means Telegram accepted the message, not that the
+student read it. An uncertain publication must reconcile with the same
+operation key before a new broadcast is started. Broadcast delivery uses the
+existing protected claim/ack API and serial Telegram worker; do not send from
+the dialog, enumerate chats in the bot, or add a parallel poller/sender.
+Retries and 60-second lease recovery can duplicate a Telegram-accepted send
+when its acknowledgement is lost. Delivery is not exactly-once; an `unknown`
+result is not proof that no message was delivered.
 
 ### Implemented Telegram flows and limits
 
@@ -196,8 +209,8 @@ write outcomes, accepted input that Telegram could not remove, and committed
 writes whose refresh failed. Drafts and recovery controls remain available;
 ordinary errors do not create extra messages or callback popups.
 Long homework text is paginated in the existing screen without truncation.
-Teacher broadcasts, free-slot selection, offline schedule cache, and account
-linking/transfers remain unimplemented. Teachers can create text,
+Free-slot selection, offline schedule cache, and account linking/transfers
+remain unimplemented. Teachers can create text,
 file, or mixed assignments for their own students through Telegram and
 optionally link an exact upcoming lesson occurrence. Students can browse
 authorized assignments, view their text, download materials as separate
@@ -341,7 +354,7 @@ intermediate mismatch returns authentication errors, not offline success.
 5. [Ошибки в интерфейсе Telegram](./docs/plans/telegram-error-emphasis.md) — ошибки и неопределённые исходы выделяются в начале текущего экрана; длинный текст заданий разбит на страницы без усечения.
 6. [Рефакторинг пакетов Telegram, событий и домашних заданий](./docs/plans/package-refactoring.md) — перегруппировка модулей завершена поэтапно с сохранением поведения и проверкой контрактов; результаты проверок записаны в плане.
 
-Автоматизированные критерии исходных задач 01–09 по единообразию редакторов событий Telegram выполнены и записаны в [исходном плане редакторов](./docs/plans/telegram-event-editor-consistency.md); PostgreSQL-проверка остается недоступной, проверка в реальном Telegram не проводилась. Реализация уведомлений описана ниже и в [плане доставки](./docs/plans/notification-delivery-and-telegram-settings.md); разовые рассылки учителя остаются отдельным будущим этапом.
+Автоматизированные критерии исходных задач 01–09 по единообразию редакторов событий Telegram выполнены и записаны в [исходном плане редакторов](./docs/plans/telegram-event-editor-consistency.md); PostgreSQL-проверка остается недоступной, проверка в реальном Telegram не проводилась. Реализация уведомлений описана ниже и в [плане доставки](./docs/plans/notification-delivery-and-telegram-settings.md); разовые рассылки учителя реализованы на общей очереди и описаны в [отдельном плане](./docs/plans/teacher-broadcasts.md).
 
 ## Фронтенд
 В случае если до фронтенда дойдет, первые версии нужно делать без использования каких то больших фреймворков типо react. Из шаблона проектов есть начальные файлы в templates - используется htmx. Этого должно быть достаточно на первое время.
@@ -523,12 +536,10 @@ Telegram Settings. Текст строится при claim из повторн�
   и видимость с учётом каникул; неактивное вхождение не запускает напоминание.
 - `notification_homework` задаёт срок напоминания о невыполненном задании;
   отдельные переключатели управляют push о создании задания и новой версии
-  решения. Учительские разовые рассылки остаются отдельным этапом. Они должны
-  сохранять intent на каждого подтвержденного получателя в notifications
-  domain и использовать тот же claim/ack API и Telegram worker — без отправки
-  из UI, обхода очереди или собственного sender. До реализации требуют
-  отдельного одобрения opt-out, границы состава получателей и операции
-  подтверждения.
+  решения. Учительские разовые рассылки используют общий notifications
+  outbox, claim/ack API и Telegram worker. Backend фиксирует активных связанных
+  учеников при подтверждении, а claim повторно проверяет связь и маршрут;
+  отдельных opt-out и обхода очереди из UI нет.
 - Очередь гарантирует сохранение intent и восстановление незавершённых leases,
   но не exactly-once доставку. Telegram может принять сообщение до потери
   ответа или acknowledgement, поэтому retry после неизвестного исхода может
@@ -679,8 +690,8 @@ from each lesson's snapshotted duration. Legacy lessons and series keep a
 zero-minute snapshot; preference changes apply to future writes only. A
 reservation may extend beyond work hours or local midnight, follows its parent
 lesson's cancellation and visibility, and does not count as a lesson.
-Free-slot selection, an arbitrary-date picker, an HTMX schedule UI, offline
-schedule caching, and teacher broadcasts remain pending. Durable notification
-production, owner-editable Telegram settings, claim-time source-rich message
+Free-slot selection, an arbitrary-date picker, an HTMX schedule UI, and offline
+schedule caching remain pending. Durable notification production,
+owner-editable Telegram settings, claim-time source-rich message
 formatting, and serial Telegram delivery are implemented. Telegram week
 navigation is available for earlier and later Monday–Sunday weeks.

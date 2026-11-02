@@ -4,7 +4,7 @@
 
 A teacher can compose, review and confirm a one-time message to their own students, with durable delivery and honest per-recipient outcome reporting.
 
-**Status:** In progress — Tasks 00–04 complete.
+**Status:** Complete — Tasks 00–05 complete.
 
 ## Scope (README.md sections covered)
 
@@ -157,10 +157,18 @@ formatting, and bot mypy passed.
 
 **Reuse:** Notification worker tests and real dispatcher/ASGI fixtures.
 
-**Acceptance Criteria:** [ ] No unauthorized recipient or duplicate publication; visible partial failure remains recoverable. [ ] Common checks pass with guarantees/limits recorded.
+**Acceptance Criteria:** [x] No unauthorized recipient or duplicate publication; visible partial failure remains recoverable. [x] Common checks pass with guarantees/limits recorded.
 
 **Out of scope:** HTMX and unrelated notification types. **Suitable for:** AI agent; human for opt-in live acceptance.
 
-## Open questions
-
-Task 00 decisions require approval. Public broadcast API requests must remain independent of Bot API routing; recipient changes during delivery follow the notification foundation rather than inventing a second policy.
+**Execution:** Added a real-backend Telegram dialog check for 12 intended
+students plus an unrelated teacher/student, asserting the exact queued
+recipient IDs and publication source. Preview remains unpublished during a
+backend outage. A real notification client and worker test verifies claim-time
+unlink suppression, terminal blocked-chat reporting, and lease recovery after
+restarting the worker; a send accepted before a lost acknowledgement is
+delivered again after lease expiry, documenting the duplicate possibility.
+The final aggregate is checked against persisted recipient outcomes. Focused
+broadcast/backend/bot/worker suites passed (71 passed, 1 PostgreSQL-only test
+skipped because `SCHEDULE_TEST_DATABASE_URL` is unset); backend and bot Ruff,
+format, and mypy checks passed. No live Telegram acceptance was performed.
