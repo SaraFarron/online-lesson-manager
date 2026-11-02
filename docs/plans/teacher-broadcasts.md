@@ -4,7 +4,7 @@
 
 A teacher can compose, review and confirm a one-time message to their own students, with durable delivery and honest per-recipient outcome reporting.
 
-**Status:** In progress — Tasks 00–03 complete.
+**Status:** In progress — Tasks 00–04 complete.
 
 ## Scope (README.md sections covered)
 
@@ -122,7 +122,7 @@ until resolved. Verified stale previews, timeout-after-commit reconciliation,
 malformed result rejection, and authentication renewal. Bot client/worker tests
 passed (53 passed); Ruff, formatting and bot mypy passed.
 
-## Task 04: Wire compose, review, confirm, results and approved toggle
+## Task 04: Wire compose, review, confirm and results
 
 **Domain:** Telegram teacher home/settings/dialogs. **Type:** bot. **Dependencies:** 03.
 
@@ -132,9 +132,20 @@ passed (53 passed); Ruff, formatting and bot mypy passed.
 
 **Reuse:** Existing dialog pagination, `ShowMode.EDIT`, leading feedback and private-chat isolation.
 
-**Acceptance Criteria:** [ ] Cancel/preview sends no broadcast. [ ] Confirmation enqueues once; result screen matches recorded deliveries and does not mutate active student dialogs. [ ] Both roles see only approved actions; common bot checks pass.
+**Acceptance Criteria:** [x] Cancel/preview sends no broadcast. [x] Confirmation enqueues once; result screen matches recorded deliveries and does not mutate active student dialogs. [x] Both roles see only approved actions; common bot checks pass.
 
 **Out of scope:** Campaign editing or recall after send. **Suitable for:** AI agent.
+
+**Execution:** Added a teacher-only composition and confirmation flow with
+escaped, UTF-16-safe paginated previews, roster counts, explicit confirmation,
+and bounded result paging/refresh. Preview and cancel leave publication and
+delivery tables untouched. A lost publish response is reconciled by the same
+operation key; stale previews return to the editable draft, and unresolved
+operations retain their original key and request. Verified through the real
+backend and recording Bot API, including student-role visibility, a
+4096-character escaped preview, roster changes, 12-recipient pagination, and
+recorded delivery refresh. Dialog/client tests passed (40 passed); Ruff,
+formatting, and bot mypy passed.
 
 ## Task 05: Verify end to end and document limits
 

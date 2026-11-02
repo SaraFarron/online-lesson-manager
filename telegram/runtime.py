@@ -10,6 +10,7 @@ from aiogram_dialog.api.exceptions import OutdatedIntent, UnknownIntent
 
 from telegram.api import BackendClient, BackendError, BackendUnavailable
 from telegram.dialogs.breaks import build_break_dialog
+from telegram.dialogs.broadcast import build_broadcast_dialog
 from telegram.dialogs.home import Screens, build_dialog
 from telegram.dialogs.homework.student import build_homework_student_dialog
 from telegram.dialogs.homework.teacher_creation import build_homework_teacher_dialog
@@ -99,6 +100,7 @@ def build_dispatcher(client: BackendClient | None = None) -> Dispatcher:
     commands.message.register(start, CommandStart(), F.chat.type == "private")
     dispatcher.include_router(commands)
     dispatcher.include_router(build_dialog())
+    dispatcher.include_router(build_broadcast_dialog())
     dispatcher.include_router(build_schedule_dialog())
     dispatcher.include_router(build_lesson_dialog())
     dispatcher.include_router(build_event_management_dialog())

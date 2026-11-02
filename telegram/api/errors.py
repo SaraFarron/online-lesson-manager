@@ -5,6 +5,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from .models.events import BreakDisplacementPreview
+    from .models.notifications import TeacherBroadcastPublishRequest
 
 
 class BackendUnavailable(RuntimeError):
@@ -42,8 +43,13 @@ class HomeworkOutcomeUnknown(BackendOutcomeUnknown):
 
 
 class BroadcastOutcomeUnknown(BackendOutcomeUnknown):
-    def __init__(self, operation_key: UUID) -> None:
+    def __init__(
+        self,
+        operation_key: UUID,
+        request: TeacherBroadcastPublishRequest,
+    ) -> None:
         self.operation_key = operation_key
+        self.request = request
         RuntimeError.__init__(
             self,
             "The broadcast outcome is unknown. Reconcile this operation before "

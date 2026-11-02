@@ -10,6 +10,7 @@ from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import SessionView
 from telegram.dialogs.breaks import open_break_management
+from telegram.dialogs.broadcast import open_teacher_broadcast
 from telegram.dialogs.homework.student import open_student_homework
 from telegram.dialogs.homework.teacher_creation import open_homework_creation
 from telegram.dialogs.homework.teacher_management import (
@@ -110,6 +111,7 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "can_edit_settings": view is not None
         and view.account.role in {"TEACHER", "STUDENT"},
         "can_manage_homework": view is not None and view.account.role == "TEACHER",
+        "can_broadcast": view is not None and view.account.role == "TEACHER",
         "can_view_homework": view is not None and view.account.role == "STUDENT",
     }
 
@@ -203,6 +205,12 @@ def build_dialog() -> Dialog:
                 id="manage_homework",
                 on_click=open_teacher_homework_management,
                 when="can_manage_homework",
+            ),
+            Button(
+                Const("Broadcast"),
+                id="broadcast",
+                on_click=open_teacher_broadcast,
+                when="can_broadcast",
             ),
             Button(
                 Const("Homework"),

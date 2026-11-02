@@ -1222,6 +1222,7 @@ async def test_broadcast_client_renews_auth_and_reconciles_ambiguous_publish(
                 uuid4(),
             )
         assert blocked.value.operation_key == operation_key
+        assert blocked.value.request == request
 
         reconciled = await api.publish_teacher_broadcast(
             teacher.telegram_user_id,

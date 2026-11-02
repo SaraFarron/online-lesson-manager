@@ -480,16 +480,16 @@ class BackendClient:
         if pending is not None:
             pending_key, pending_request = pending
             if pending_key != operation_key or pending_request != request:
-                raise BroadcastOutcomeUnknown(pending_key)
+                raise BroadcastOutcomeUnknown(pending_key, pending_request)
             try:
                 publication = await self.reconcile_teacher_broadcast(
                     sender_id, chat_id, pending_key
                 )
             except BackendError as exc:
                 if exc.status != 404:
-                    raise BroadcastOutcomeUnknown(pending_key) from exc
+                    raise BroadcastOutcomeUnknown(pending_key, pending_request) from exc
             except BackendUnavailable as exc:
-                raise BroadcastOutcomeUnknown(pending_key) from exc
+                raise BroadcastOutcomeUnknown(pending_key, pending_request) from exc
             else:
                 return publication
 
@@ -506,12 +506,12 @@ class BackendClient:
                 error_context="broadcast",
             )
         except BackendOutcomeUnknown as exc:
-            raise BroadcastOutcomeUnknown(operation_key) from exc
+            raise BroadcastOutcomeUnknown(operation_key, request) from exc
         except BackendError:
             self.pending_broadcast_operations.pop(sender_id, None)
             raise
         except BackendUnavailable as exc:
-            raise BroadcastOutcomeUnknown(operation_key) from exc
+            raise BroadcastOutcomeUnknown(operation_key, request) from exc
         except asyncio.CancelledError:
             raise
         else:
