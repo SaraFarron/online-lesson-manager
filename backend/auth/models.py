@@ -1,16 +1,18 @@
 import uuid
-from datetime import time
+from datetime import UTC, datetime, time
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    DateTime,
     ForeignKey,
     Integer,
     String,
     Time,
     Uuid,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -45,6 +47,12 @@ class User(Base, TimestampMixin):
     timezone: Mapped[str] = mapped_column(String)
     notification_lessons_today: Mapped[int | None] = mapped_column(
         Integer, nullable=True, default=None
+    )
+    notification_schedule_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.current_timestamp(),
     )
     student_profile: Mapped[StudentProfile | None] = relationship(
         "StudentProfile",
@@ -86,6 +94,12 @@ class StudentProfile(Base, TimestampMixin):
     )
     notification_lesson: Mapped[int | None] = mapped_column(
         Integer, nullable=True, default=None
+    )
+    notification_lesson_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.current_timestamp(),
     )
     notification_homework: Mapped[int | None] = mapped_column(
         Integer, nullable=True, default=None

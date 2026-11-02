@@ -8,10 +8,11 @@ import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import User
+from backend.auth.models import StudentProfile, User
 from backend.notifications.models import NotificationIntent
 
 MIGRATION_PATH = (
@@ -24,6 +25,18 @@ SPEC = spec_from_file_location("notification_delivery_schema", MIGRATION_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MIGRATION = module_from_spec(SPEC)
 SPEC.loader.exec_module(MIGRATION)
+SCHEDULE_MIGRATION_PATH = (
+    Path(__file__).parents[1]
+    / "alembic"
+    / "versions"
+    / "2026-11-02_notification_schedule_timestamps.py"
+)
+SCHEDULE_SPEC = spec_from_file_location(
+    "notification_schedule_timestamps", SCHEDULE_MIGRATION_PATH
+)
+assert SCHEDULE_SPEC is not None and SCHEDULE_SPEC.loader is not None
+SCHEDULE_MIGRATION = module_from_spec(SCHEDULE_SPEC)
+SCHEDULE_SPEC.loader.exec_module(SCHEDULE_MIGRATION)
 
 
 async def _register_and_login(
@@ -53,6 +66,7 @@ def _auth_header(token: str) -> dict[str, str]:
 
 async def test_homework_push_preferences_default_and_update_independently(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     teacher_id, teacher_token = await _register_and_login(
         client, "notification-teacher@example.com", "TEACHER"
@@ -66,6 +80,17 @@ async def test_homework_push_preferences_default_and_update_independently(
     )
     assert teacher_created.status_code == 201, teacher_created.text
     assert teacher_created.json()["notification_homework_submission"] is True
+    teacher_user = await db_session.get(User, uuid.UUID(teacher_id))
+    assert teacher_user is not None
+    initial_schedule_timestamp = teacher_user.notification_schedule_updated_at
+    digest_update = await client.patch(
+        "/api/v1/auth/me",
+        json={"notification_lessons_today": 600},
+        headers=teacher_headers,
+    )
+    assert digest_update.status_code == 200, digest_update.text
+    await db_session.refresh(teacher_user)
+    assert teacher_user.notification_schedule_updated_at > initial_schedule_timestamp
 
     student_id, student_token = await _register_and_login(
         client, "notification-student@example.com", "STUDENT"
@@ -79,6 +104,11 @@ async def test_homework_push_preferences_default_and_update_independently(
     )
     assert student_created.status_code == 201, student_created.text
     assert student_created.json()["notification_homework_assignment"] is True
+    student_profile = await db_session.scalar(
+        select(StudentProfile).where(StudentProfile.student_id == uuid.UUID(student_id))
+    )
+    assert student_profile is not None
+    initial_reminder_timestamp = student_profile.notification_lesson_updated_at
 
     teacher_disabled = await client.put(
         teacher_profile_url,
@@ -100,6 +130,8 @@ async def test_homework_push_preferences_default_and_update_independently(
     )
     assert student_other_setting.status_code == 200, student_other_setting.text
     assert student_other_setting.json()["notification_homework_assignment"] is False
+    await db_session.refresh(student_profile)
+    assert student_profile.notification_lesson_updated_at > initial_reminder_timestamp
 
     _, other_teacher_token = await _register_and_login(
         client, "other-notification-teacher@example.com", "TEACHER"
@@ -150,10 +182,55 @@ async def test_notification_intent_dedupe_key_is_unique(
     await db_session.rollback()
 
 
-def _run_migration(connection: sa.Connection, operation: str) -> None:
+def _run_migration(
+    connection: sa.Connection,
+    operation: str,
+    migration: object = MIGRATION,
+) -> None:
     context = MigrationContext.configure(connection)
     with Operations.context(context):
-        getattr(MIGRATION, operation)()
+        getattr(migration, operation)()
+
+
+def test_notification_schedule_timestamp_migration_round_trips() -> None:
+    engine = sa.create_engine("sqlite://")
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "CREATE TABLE user (id CHAR(32) PRIMARY KEY, "
+                "notification_lessons_today INTEGER)"
+            )
+            connection.exec_driver_sql(
+                "CREATE TABLE student_profile (id CHAR(32) PRIMARY KEY, "
+                "notification_lesson INTEGER)"
+            )
+            connection.exec_driver_sql("INSERT INTO user VALUES ('user-1', 540)")
+            connection.exec_driver_sql(
+                "INSERT INTO student_profile VALUES ('student-1', 15)"
+            )
+
+            _run_migration(connection, "upgrade", SCHEDULE_MIGRATION)
+
+            user_timestamp = connection.exec_driver_sql(
+                "SELECT notification_schedule_updated_at FROM user WHERE id = 'user-1'"
+            ).scalar_one()
+            student_timestamp = connection.exec_driver_sql(
+                "SELECT notification_lesson_updated_at FROM student_profile "
+                "WHERE id = 'student-1'"
+            ).scalar_one()
+            assert user_timestamp is not None
+            assert student_timestamp is not None
+
+            _run_migration(connection, "downgrade", SCHEDULE_MIGRATION)
+            assert "notification_schedule_updated_at" not in {
+                column["name"] for column in sa.inspect(connection).get_columns("user")
+            }
+            assert "notification_lesson_updated_at" not in {
+                column["name"]
+                for column in sa.inspect(connection).get_columns("student_profile")
+            }
+    finally:
+        engine.dispose()
 
 
 def test_notification_migration_preserves_legacy_rows_and_guards_downgrade() -> None:

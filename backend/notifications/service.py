@@ -391,6 +391,8 @@ def _match_schedule_occurrence(
         return "lesson_occurrence_stale"
     if normalize_utc(match.end) <= now:
         return "lesson_occurrence_ended"
+    if normalize_utc(match.start) <= now:
+        return "lesson_occurrence_started"
     return None
 
 

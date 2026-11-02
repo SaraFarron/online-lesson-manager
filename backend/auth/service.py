@@ -2,6 +2,7 @@ import re
 import secrets
 import string
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
@@ -164,6 +165,18 @@ async def update_user(session: AsyncSession, user: User, data: dict[str, Any]) -
     else:
         data.pop("password", None)
 
+    schedule_settings_changed = (
+        "notification_lessons_today" in data
+        and data["notification_lessons_today"] != user.notification_lessons_today
+    )
+    telegram_route_changed = (
+        "telegram_private_chat_id" in data
+        and data["telegram_private_chat_id"] is not None
+        and data["telegram_private_chat_id"] != user.telegram_private_chat_id
+    )
+    if schedule_settings_changed or telegram_route_changed:
+        user.notification_schedule_updated_at = datetime.now(UTC)
+
     for key, value in data.items():
         if value is not None or key in {
             "email",
@@ -224,7 +237,13 @@ async def update_student_profile(
 ) -> StudentProfilePublic:
     if not user.student_profile:
         raise ValueError("User does not have a student profile")
-    for key, value in student_profile_data.model_dump(exclude_unset=True).items():
+    updates = student_profile_data.model_dump(exclude_unset=True)
+    if (
+        "notification_lesson" in updates
+        and updates["notification_lesson"] != user.student_profile.notification_lesson
+    ):
+        user.student_profile.notification_lesson_updated_at = datetime.now(UTC)
+    for key, value in updates.items():
         setattr(user.student_profile, key, value)
     session.add(user)
     await session.commit()

@@ -4,7 +4,7 @@
 
 Deliver authorized schedule/homework notifications to Telegram reliably, with user-controlled preferences and explicit handling of delivery failures.
 
-**Status:** Tasks 00–02 complete; Tasks 03–07 planned.
+**Status:** Tasks 00–03 complete; Tasks 04–07 planned.
 
 ## Scope (README.md sections covered)
 
@@ -101,7 +101,9 @@ The reconciled completion inventory’s Tasks 00 and 04 establish the prerequisi
 
 **Reuse:** `get_schedule`, local-day bounds, occurrence identity and homework completion reads.
 
-**Acceptance Criteria:** [ ] Empty day sends nothing; teacher/student contents remain isolated. [ ] Exact UTC tests cover both DST transitions, midnight, open-ended series, cancellation/move/vacation, disabled prefs and worker restart. [ ] No auto-break reminder or unbounded per-user expansion.
+**Acceptance Criteria:** [x] Empty day sends nothing; teacher/student contents remain isolated. [x] Exact UTC tests cover both DST transitions, midnight, open-ended series, cancellation/move/vacation, disabled prefs and worker restart. [x] No auto-break reminder or unbounded per-user expansion.
+
+**Execution (2026-11-02):** Added local-day digest and exact occurrence reminder producers using authorized viewer schedules, first-fold/gap-shifted local clock resolution, same-day digest catch-up, 15-minute reminder catch-up, stable dedupe keys, and conflict-safe insertion. Added separate persisted change timestamps for digest/routing and lesson-reminder preferences so unrelated profile edits do not suppress valid catch-up; the reversible schema migration backfills existing users. Student digest context bulk-loads only the viewer's current homework statuses for visible lesson occurrences. Tests cover empty days, local DST gap/fold, midnight, open-ended recurrences, cancellations, vacations, moved lessons, disabled/late settings and routing, automatic-break exclusion, restart deduplication, and student-only homework context. Focused SQLite/PostgreSQL/schedule/time tests and SQLite/PostgreSQL migration round trips/schema checks passed. `ruff check backend tests`, `ruff format --check backend tests`, and `mypy backend` passed.
 
 **Out of scope:** Broadcasts. **Suitable for:** AI agent.
 
