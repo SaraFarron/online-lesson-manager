@@ -1,3 +1,4 @@
+from datetime import timedelta
 from enum import StrEnum
 
 
@@ -28,3 +29,4 @@ class AcknowledgementOutcome(StrEnum):
 MAX_DELIVERY_ATTEMPTS = 8
 MAX_CLAIM_BATCH = 50
 CLAIM_LEASE_SECONDS = 60
+PUSH_CATCH_UP = timedelta(hours=24)

@@ -4,7 +4,7 @@
 
 Deliver authorized schedule/homework notifications to Telegram reliably, with user-controlled preferences and explicit handling of delivery failures.
 
-**Status:** Tasks 00–03 complete; Tasks 04–07 planned.
+**Status:** Tasks 00–04 complete; Tasks 05–07 planned.
 
 ## Scope (README.md sections covered)
 
@@ -117,7 +117,11 @@ The reconciled completion inventory’s Tasks 00 and 04 establish the prerequisi
 
 **Reuse:** `create_assignment`, `create_submission`, existing completion/operation reconciliation and occurrence validation.
 
-**Acceptance Criteria:** [ ] Rollback emits no intent; replay emits none extra; new solution version follows approved notification policy. [ ] Complete/deleted/de-linked or canceled/hidden linked lessons suppress reminders. [ ] File cleanup/submission regressions and common checks pass.
+**Acceptance Criteria:** [x] Rollback emits no intent; replay emits none extra; new solution version follows approved notification policy. [x] Complete/deleted/de-linked or canceled/hidden linked lessons suppress reminders. [x] File cleanup/submission regressions and common checks pass.
+
+**Execution (2026-11-03):** Assignment publication and each newly finalized submission version now add their push intent within the same commit, only when the approved toggle and Telegram route are available. Idempotent reconciliation paths do not add another intent. Homework reminders use calendar lead days and the recipient's digest time, resolve DST with the approved gap/fold policy, catch up for at most 15 minutes, and are created only for exact active visible lesson occurrences with incomplete, nondeleted homework and unchanged preferences/routing. Dispatch revalidates the current lead/time settings, active link, completion/deletion state, and exact occurrence. Submission finalization now conditionally locks the still-active homework row before persisting the submission, preventing concurrent deletion from leaving orphaned submissions. Added a reversible preference-change timestamp migration.
+
+The full repository suite passed (518 passed, 9 skipped); focused PostgreSQL producer tests passed (10 passed). Full SQLite and PostgreSQL migration chains passed upgrade, `alembic check`, one-step downgrade, re-upgrade, and final schema check. `ruff check backend tests`, `ruff format --check backend tests`, and `mypy backend` passed.
 
 **Out of scope:** Adding homework features or delivering file bytes in push text. **Suitable for:** AI agent.
 

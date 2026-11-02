@@ -3,9 +3,10 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from backend.auth.constants import Roles
 from backend.auth.models import User
@@ -18,6 +19,7 @@ from backend.homework.schemas import (
     HomeworkSubmissionCreated,
 )
 from backend.homework.services.staged_attachments import load_staged_attachments
+from backend.notifications import service as notification_service
 
 logger = logging.getLogger(__name__)
 
@@ -116,11 +118,13 @@ async def create_submission(
     if active_student.teacher_id != homework.teacher_id:
         raise NotFound("Homework not found")
     active_teacher = await session.scalar(
-        select(User.id).where(
+        select(User)
+        .where(
             User.id == homework.teacher_id,
             User.role == Roles.TEACHER,
             User.is_active.is_(True),
         )
+        .options(selectinload(User.teacher_profile))
     )
     if active_teacher is None:
         raise NotFound("Homework not found")
@@ -161,20 +165,47 @@ async def create_submission(
         text=payload.text,
         operation_key=payload.operation_key,
     )
-    session.add(submission)
+    submitted_at = datetime.now(UTC)
+    completion_source = None
+    if homework.status == HomeworkStatus.INCOMPLETE.value:
+        completion_source = HomeworkCompletionSource.STUDENT_SUBMISSION.value
+    lock_statement = (
+        update(Homework)
+        .where(
+            Homework.id == homework_id,
+            Homework.student_id == active_student.id,
+            Homework.deleted_at.is_(None),
+            Homework.cleanup_pending.is_(False),
+        )
+        .values(id=Homework.id)
+        .execution_options(synchronize_session=False)
+    )
+    if completion_source is not None:
+        lock_statement = lock_statement.values(
+            status=HomeworkStatus.COMPLETE.value,
+            completion_source=completion_source,
+            completed_at=submitted_at,
+        )
     try:
+        locked = await session.scalar(lock_statement.returning(Homework.id))
+        if locked is None:
+            raise NotFound("Homework not found")
+        if completion_source is not None:
+            homework.status = HomeworkStatus.COMPLETE.value
+            homework.completion_source = completion_source
+            homework.completed_at = submitted_at
+        notification_service.add_submission_received_intent(
+            session,
+            homework,
+            submission,
+            active_teacher,
+        )
+        session.add(submission)
         await session.flush()
         for attachment in attachments:
             attachment.homework_id = homework_id
             attachment.submission_id = submission.id
             attachment.staged_until = None
-
-        if homework.status == HomeworkStatus.INCOMPLETE.value:
-            homework.status = HomeworkStatus.COMPLETE.value
-            homework.completion_source = (
-                HomeworkCompletionSource.STUDENT_SUBMISSION.value
-            )
-            homework.completed_at = datetime.now(UTC)
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()

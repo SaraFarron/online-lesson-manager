@@ -2,8 +2,6 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy import and_, exists, or_, select
-from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
@@ -17,7 +15,7 @@ from backend.events.time_utils import (
     resolve_local_datetime,
 )
 from backend.notifications.constants import NotificationType
-from backend.notifications.models import NotificationIntent
+from backend.notifications.producer_utils import insert_notification_intents
 from backend.schedule import service as schedule_service
 from backend.schedule.schemas import ScheduleItem, SchedulePeriod, ScheduleResponse
 
@@ -93,23 +91,7 @@ async def produce_schedule_notifications(
                 if reminder is not None:
                     intents.append(reminder)
 
-    if not intents:
-        return
-    dialect = session.get_bind().dialect.name
-    if dialect == "postgresql":
-        await session.execute(
-            postgresql_insert(NotificationIntent)
-            .values(intents)
-            .on_conflict_do_nothing(index_elements=[NotificationIntent.dedupe_key])
-        )
-    elif dialect == "sqlite":
-        await session.execute(
-            sqlite_insert(NotificationIntent)
-            .values(intents)
-            .on_conflict_do_nothing(index_elements=[NotificationIntent.dedupe_key])
-        )
-    else:
-        raise RuntimeError(f"Unsupported notification producer database: {dialect}")
+    await insert_notification_intents(session, intents)
 
 
 def _daily_digest_due_at(

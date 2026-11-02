@@ -297,7 +297,10 @@ async def test_completed_homework_reminder_is_suppressed(
     db_session: AsyncSession,
     notification_api_key: str,
 ) -> None:
-    _, intent = await _create_assignment_intent(db_session, assignment_completed=True)
+    student, intent = await _create_assignment_intent(
+        db_session, assignment_completed=True
+    )
+    student.notification_lessons_today = 600
     intent.notification_type = NotificationType.HOMEWORK_REMINDER
     profile = await db_session.scalar(
         select(StudentProfile).where(StudentProfile.student_id == intent.recipient_id)

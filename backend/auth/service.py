@@ -169,12 +169,13 @@ async def update_user(session: AsyncSession, user: User, data: dict[str, Any]) -
         "notification_lessons_today" in data
         and data["notification_lessons_today"] != user.notification_lessons_today
     )
+    timezone_changed = "timezone" in data and data["timezone"] != user.timezone
     telegram_route_changed = (
         "telegram_private_chat_id" in data
         and data["telegram_private_chat_id"] is not None
         and data["telegram_private_chat_id"] != user.telegram_private_chat_id
     )
-    if schedule_settings_changed or telegram_route_changed:
+    if schedule_settings_changed or timezone_changed or telegram_route_changed:
         user.notification_schedule_updated_at = datetime.now(UTC)
 
     for key, value in data.items():
@@ -243,6 +244,12 @@ async def update_student_profile(
         and updates["notification_lesson"] != user.student_profile.notification_lesson
     ):
         user.student_profile.notification_lesson_updated_at = datetime.now(UTC)
+    if (
+        "notification_homework" in updates
+        and updates["notification_homework"]
+        != user.student_profile.notification_homework
+    ):
+        user.student_profile.notification_homework_updated_at = datetime.now(UTC)
     for key, value in updates.items():
         setattr(user.student_profile, key, value)
     session.add(user)

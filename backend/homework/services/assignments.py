@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from backend.auth.constants import Roles
 from backend.auth.models import User
@@ -22,6 +23,7 @@ from backend.homework.schemas import (
     LessonOccurrenceReference,
 )
 from backend.homework.services.staged_attachments import load_staged_attachments
+from backend.notifications import service as notification_service
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +166,7 @@ async def create_assignment(
             User.teacher_id == teacher_id,
         )
         .with_for_update()
+        .options(selectinload(User.student_profile))
     )
     if student is None:
         raise Forbidden("Student is not actively linked to this teacher")
@@ -202,6 +205,7 @@ async def create_assignment(
         lesson_occurrence_start=lesson_start,
         operation_key=operation_key,
     )
+    notification_service.add_assignment_created_intent(session, homework, student)
     session.add(homework)
     for attachment in attachments:
         attachment.homework_id = homework.id

@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import Iterable, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Literal
 
 from sqlalchemy import case, func, select, update
@@ -11,13 +11,19 @@ from sqlalchemy.sql import Select
 from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.constants import EventType
-from backend.events.time_utils import get_timezone, normalize_utc, to_storage_utc
+from backend.events.time_utils import (
+    get_timezone,
+    normalize_utc,
+    resolve_local_datetime,
+    to_storage_utc,
+)
 from backend.exceptions import BadRequest, Conflict, Forbidden, ValidationError
 from backend.homework.models import Homework, HomeworkSubmission
 from backend.notifications.constants import (
     CLAIM_LEASE_SECONDS,
     MAX_CLAIM_BATCH,
     MAX_DELIVERY_ATTEMPTS,
+    PUSH_CATCH_UP,
     AcknowledgementOutcome,
     NotificationState,
     NotificationType,
@@ -31,6 +37,92 @@ from backend.notifications.schemas import (
 )
 from backend.schedule import service as schedule_service
 from backend.schedule.schemas import ScheduleItem, SchedulePeriod
+
+
+def add_assignment_created_intent(
+    session: AsyncSession,
+    homework: Homework,
+    student: User,
+    *,
+    now: datetime | None = None,
+) -> None:
+    profile = student.student_profile
+    if (
+        not student.is_active
+        or student.telegram_private_chat_id is None
+        or profile is None
+        or not profile.notification_homework_assignment
+    ):
+        return
+    _add_homework_push_intent(
+        session,
+        recipient=student,
+        notification_type=NotificationType.ASSIGNMENT_CREATED,
+        homework=homework,
+        now=now,
+    )
+
+
+def add_submission_received_intent(
+    session: AsyncSession,
+    homework: Homework,
+    submission: HomeworkSubmission,
+    teacher: User,
+    *,
+    now: datetime | None = None,
+) -> None:
+    profile = teacher.teacher_profile
+    if (
+        not teacher.is_active
+        or teacher.role != Roles.TEACHER
+        or teacher.telegram_private_chat_id is None
+        or profile is None
+        or not profile.notification_homework_submission
+    ):
+        return
+    _add_homework_push_intent(
+        session,
+        recipient=teacher,
+        notification_type=NotificationType.SUBMISSION_RECEIVED,
+        homework=homework,
+        source_version=submission.version,
+        now=now,
+    )
+
+
+def _add_homework_push_intent(
+    session: AsyncSession,
+    *,
+    recipient: User,
+    notification_type: NotificationType,
+    homework: Homework,
+    source_version: int | None = None,
+    now: datetime | None = None,
+) -> None:
+    timestamp = normalize_utc(now or datetime.now(UTC))
+    assignment = notification_type == NotificationType.ASSIGNMENT_CREATED
+    dedupe_key = (
+        f"assignment:{recipient.id}:{homework.id}"
+        if assignment
+        else f"submission:{recipient.id}:{homework.id}:{source_version}"
+    )
+    session.add(
+        NotificationIntent(
+            id=uuid.uuid4(),
+            recipient_id=recipient.id,
+            notification_type=notification_type.value,
+            dedupe_key=dedupe_key,
+            source_id=homework.id,
+            source_version=source_version,
+            scheduled_at=timestamp,
+            available_at=timestamp,
+            expires_at=timestamp + PUSH_CATCH_UP,
+            state=NotificationState.PENDING,
+            attempt_count=0,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+    )
 
 
 async def claim_pending_intents(
@@ -112,6 +204,7 @@ async def _recover_expired_intents(session: AsyncSession, now: datetime) -> None
             last_error_code="expired",
             updated_at=now,
         )
+        .execution_options(synchronize_session=False)
     )
     await session.execute(
         update(NotificationIntent)
@@ -127,6 +220,7 @@ async def _recover_expired_intents(session: AsyncSession, now: datetime) -> None
             last_error_code="attempts_exhausted",
             updated_at=now,
         )
+        .execution_options(synchronize_session=False)
     )
     await session.execute(
         update(NotificationIntent)
@@ -157,6 +251,7 @@ async def _recover_expired_intents(session: AsyncSession, now: datetime) -> None
             ),
             updated_at=now,
         )
+        .execution_options(synchronize_session=False)
     )
 
 
@@ -294,6 +389,7 @@ def _recipient_suppression_reason(
             user.role != Roles.STUDENT
             or user.student_profile is None
             or user.student_profile.notification_homework is None
+            or user.notification_lessons_today is None
         ):
             return "homework_reminder_disabled"
     elif kind == NotificationType.ASSIGNMENT_CREATED:
@@ -453,11 +549,42 @@ async def _validate_homework_source(
         != to_storage_utc(normalize_utc(homework.lesson_occurrence_start))
     ):
         return "homework_lesson_mismatch"
-    schedule_date = (
-        normalize_utc(homework.lesson_occurrence_start)
-        .astimezone(get_timezone(student.timezone))
-        .date()
-    )
+    profile = recipient.student_profile
+    if (
+        profile is None
+        or profile.notification_homework is None
+        or recipient.notification_lessons_today is None
+    ):
+        return "homework_reminder_disabled"
+    if normalize_utc(profile.notification_homework_updated_at) > normalize_utc(
+        intent.scheduled_at
+    ) or normalize_utc(recipient.notification_schedule_updated_at) > normalize_utc(
+        intent.scheduled_at
+    ):
+        return "homework_reminder_preference_changed"
+    lesson_start = normalize_utc(homework.lesson_occurrence_start)
+    lesson_date = lesson_start.astimezone(get_timezone(student.timezone)).date()
+    try:
+        reminder_date = lesson_date - timedelta(days=profile.notification_homework)
+        reminder_due_at = normalize_utc(
+            resolve_local_datetime(
+                datetime.combine(
+                    reminder_date,
+                    time(
+                        recipient.notification_lessons_today // 60,
+                        recipient.notification_lessons_today % 60,
+                    ),
+                ),
+                student.timezone,
+            )
+        )
+    except OverflowError, ValidationError:
+        return "homework_reminder_preference_invalid"
+    if intent.source_date != reminder_date or reminder_due_at != normalize_utc(
+        intent.scheduled_at
+    ):
+        return "homework_reminder_preference_changed"
+    schedule_date = lesson_start.astimezone(get_timezone(student.timezone)).date()
     try:
         schedule = await schedule_service.get_schedule(
             session, student, SchedulePeriod.DAY, schedule_date, now

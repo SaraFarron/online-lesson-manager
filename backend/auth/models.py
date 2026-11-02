@@ -104,6 +104,12 @@ class StudentProfile(Base, TimestampMixin):
     notification_homework: Mapped[int | None] = mapped_column(
         Integer, nullable=True, default=None
     )
+    notification_homework_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.current_timestamp(),
+    )
     notification_homework_assignment: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )

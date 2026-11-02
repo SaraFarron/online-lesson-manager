@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import User
+from backend.auth.models import TeacherProfile, User
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.constants import (
@@ -20,8 +20,11 @@ from backend.homework.constants import (
 )
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
 from backend.homework.schemas import HomeworkSubmissionCreate
+from backend.homework.services.management import complete_homework
 from backend.homework.services.submissions import create_submission
 from backend.main import app
+from backend.notifications.constants import NotificationType
+from backend.notifications.models import NotificationIntent
 
 
 @pytest.fixture
@@ -96,6 +99,14 @@ async def test_text_submission_completes_and_resubmissions_are_versioned(
     db_session: AsyncSession,
 ) -> None:
     teacher, student = await _linked_pair(db_session)
+    teacher.telegram_private_chat_id = 123456789
+    db_session.add(
+        TeacherProfile(
+            teacher_id=teacher.id,
+            code=f"t_{uuid4().hex[:6].upper()}",
+        )
+    )
+    await db_session.commit()
     homework = await _assignment(db_session, teacher, student)
     operation_key = uuid4()
     payload = {"text": "My answer", "operation_key": str(operation_key)}
@@ -124,6 +135,11 @@ async def test_text_submission_completes_and_resubmissions_are_versioned(
         await db_session.scalar(select(func.count()).select_from(HomeworkSubmission))
         == 1
     )
+    first_intent = await db_session.scalar(select(NotificationIntent))
+    assert first_intent is not None
+    assert first_intent.notification_type == NotificationType.SUBMISSION_RECEIVED
+    assert first_intent.source_id == homework.id
+    assert first_intent.source_version == 1
 
     reused_key = await client.post(
         url,
@@ -151,6 +167,32 @@ async def test_text_submission_completes_and_resubmissions_are_versioned(
         await db_session.scalar(select(func.count()).select_from(HomeworkSubmission))
         == 2
     )
+    intents = list(await db_session.scalars(select(NotificationIntent)))
+    assert len(intents) == 2
+    assert {intent.source_version for intent in intents} == {1, 2}
+
+
+async def test_teacher_completion_does_not_create_submission_notification(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _linked_pair(db_session)
+    teacher.telegram_private_chat_id = 123456789
+    db_session.add(
+        TeacherProfile(
+            teacher_id=teacher.id,
+            code=f"t_{uuid4().hex[:6].upper()}",
+        )
+    )
+    await db_session.commit()
+    homework = await _assignment(db_session, teacher, student)
+
+    completed = await complete_homework(db_session, teacher, homework.id)
+
+    assert completed.completion_source == "TEACHER"
+    assert (
+        await db_session.scalar(select(func.count()).select_from(NotificationIntent))
+        == 0
+    )
 
 
 async def test_file_and_mixed_submissions_link_private_student_owned_files(
@@ -159,6 +201,14 @@ async def test_file_and_mixed_submissions_link_private_student_owned_files(
     homework_storage: Path,
 ) -> None:
     teacher, student = await _linked_pair(db_session)
+    teacher.telegram_private_chat_id = 123456789
+    db_session.add(
+        TeacherProfile(
+            teacher_id=teacher.id,
+            code=f"t_{uuid4().hex[:6].upper()}",
+        )
+    )
+    await db_session.commit()
     homework = await _assignment(db_session, teacher, student)
     url = f"/api/v1/homework/assignments/{homework.id}/submissions"
 
@@ -427,6 +477,14 @@ async def test_failed_finalization_preserves_staged_files_and_unknown_ack_reconc
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     teacher, student = await _linked_pair(db_session)
+    teacher.telegram_private_chat_id = 123456789
+    db_session.add(
+        TeacherProfile(
+            teacher_id=teacher.id,
+            code=f"t_{uuid4().hex[:6].upper()}",
+        )
+    )
+    await db_session.commit()
     homework = await _assignment(db_session, teacher, student)
     attachment = HomeworkAttachment(
         owner_user_id=student.id,
@@ -454,6 +512,10 @@ async def test_failed_finalization_preserves_staged_files_and_unknown_ack_reconc
         await create_submission(db_session, student, homework.id, payload)
     assert raised.value.status_code == 503
     assert (
+        await db_session.scalar(select(func.count()).select_from(NotificationIntent))
+        == 0
+    )
+    assert (
         await db_session.scalar(select(func.count()).select_from(HomeworkSubmission))
         == 0
     )
@@ -479,6 +541,10 @@ async def test_failed_finalization_preserves_staged_files_and_unknown_ack_reconc
     assert result.completion_source == "STUDENT_SUBMISSION"
     assert (
         await db_session.scalar(select(func.count()).select_from(HomeworkSubmission))
+        == 1
+    )
+    assert (
+        await db_session.scalar(select(func.count()).select_from(NotificationIntent))
         == 1
     )
 

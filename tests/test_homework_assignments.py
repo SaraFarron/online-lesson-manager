@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import User
+from backend.auth.models import StudentProfile, User
 from backend.auth.utils import create_access_token
 from backend.constants import EventType
 from backend.events.models import Event, RecurrentCancels, RecurrentEvent
@@ -24,6 +24,8 @@ from backend.homework.models import Homework, HomeworkAttachment
 from backend.homework.schemas import HomeworkCreate
 from backend.homework.services.assignments import create_assignment
 from backend.main import app
+from backend.notifications.constants import NotificationType
+from backend.notifications.models import NotificationIntent
 
 
 @pytest.fixture
@@ -439,6 +441,9 @@ async def test_failed_assignment_finalization_leaves_staging_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     teacher, student = await _linked_pair(db_session)
+    student.telegram_private_chat_id = 123456789
+    db_session.add(StudentProfile(student_id=student.id))
+    await db_session.commit()
     attachment = await _stage_metadata(db_session, teacher, 12)
     attachment_id = attachment.id
 
@@ -459,6 +464,10 @@ async def test_failed_assignment_finalization_leaves_staging_unchanged(
 
     assert raised.value.status_code == 503
     assert await db_session.scalar(select(func.count()).select_from(Homework)) == 0
+    assert (
+        await db_session.scalar(select(func.count()).select_from(NotificationIntent))
+        == 0
+    )
     staged = await db_session.get(HomeworkAttachment, attachment_id)
     assert staged is not None
     assert staged.homework_id is None
@@ -470,6 +479,9 @@ async def test_unknown_commit_outcome_returns_original_assignment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     teacher, student = await _linked_pair(db_session)
+    student.telegram_private_chat_id = 123456789
+    db_session.add(StudentProfile(student_id=student.id))
+    await db_session.commit()
     original_commit = db_session.commit
 
     async def commit_then_lose_acknowledgement() -> None:
@@ -485,3 +497,59 @@ async def test_unknown_commit_outcome_returns_original_assignment(
     retry = await create_assignment(db_session, teacher, payload, key)
     assert retry.id == created.id
     assert await db_session.scalar(select(func.count()).select_from(Homework)) == 1
+    assert (
+        await db_session.scalar(select(func.count()).select_from(NotificationIntent))
+        == 1
+    )
+
+
+async def test_assignment_notification_is_committed_once_across_retries(
+    db_session: AsyncSession,
+) -> None:
+    teacher, student = await _linked_pair(db_session)
+    student.telegram_private_chat_id = 123456789
+    db_session.add(StudentProfile(student_id=student.id))
+    await db_session.commit()
+    payload = HomeworkCreate(student_id=student.id, text="A new assignment")
+    key = uuid4()
+
+    created = await create_assignment(db_session, teacher, payload, key)
+    retry = await create_assignment(db_session, teacher, payload, key)
+    intents = list(await db_session.scalars(select(NotificationIntent)))
+
+    assert retry.id == created.id
+    assert len(intents) == 1
+    assert intents[0].notification_type == NotificationType.ASSIGNMENT_CREATED
+    assert intents[0].recipient_id == student.id
+    assert intents[0].source_id == created.id
+
+
+@pytest.mark.parametrize(
+    ("chat_id", "enabled"),
+    [(None, True), (123456789, False)],
+)
+async def test_assignment_notification_is_not_backfilled_for_unroutable_or_disabled(
+    db_session: AsyncSession,
+    chat_id: int | None,
+    enabled: bool,
+) -> None:
+    teacher, student = await _linked_pair(db_session)
+    student.telegram_private_chat_id = chat_id
+    db_session.add(
+        StudentProfile(
+            student_id=student.id,
+            notification_homework_assignment=enabled,
+        )
+    )
+    await db_session.commit()
+
+    await create_assignment(
+        db_session,
+        teacher,
+        HomeworkCreate(student_id=student.id, text="No backfill"),
+        uuid4(),
+    )
+    assert (
+        await db_session.scalar(select(func.count()).select_from(NotificationIntent))
+        == 0
+    )

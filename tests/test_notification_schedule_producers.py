@@ -65,6 +65,7 @@ def _student_profile(
         created_at=HISTORICAL,
         updated_at=updated_at,
         notification_lesson_updated_at=updated_at,
+        notification_homework_updated_at=updated_at,
     )
 
 

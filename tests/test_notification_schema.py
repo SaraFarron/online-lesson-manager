@@ -37,6 +37,19 @@ SCHEDULE_SPEC = spec_from_file_location(
 assert SCHEDULE_SPEC is not None and SCHEDULE_SPEC.loader is not None
 SCHEDULE_MIGRATION = module_from_spec(SCHEDULE_SPEC)
 SCHEDULE_SPEC.loader.exec_module(SCHEDULE_MIGRATION)
+HOMEWORK_REMINDER_MIGRATION_PATH = (
+    Path(__file__).parents[1]
+    / "alembic"
+    / "versions"
+    / "2026-11-03_homework_reminder_preference_timestamp.py"
+)
+HOMEWORK_REMINDER_SPEC = spec_from_file_location(
+    "homework_reminder_preference_timestamp",
+    HOMEWORK_REMINDER_MIGRATION_PATH,
+)
+assert HOMEWORK_REMINDER_SPEC is not None and HOMEWORK_REMINDER_SPEC.loader is not None
+HOMEWORK_REMINDER_MIGRATION = module_from_spec(HOMEWORK_REMINDER_SPEC)
+HOMEWORK_REMINDER_SPEC.loader.exec_module(HOMEWORK_REMINDER_MIGRATION)
 
 
 async def _register_and_login(
@@ -83,6 +96,15 @@ async def test_homework_push_preferences_default_and_update_independently(
     teacher_user = await db_session.get(User, uuid.UUID(teacher_id))
     assert teacher_user is not None
     initial_schedule_timestamp = teacher_user.notification_schedule_updated_at
+    timezone_update = await client.patch(
+        "/api/v1/auth/me",
+        json={"timezone": "Europe/London"},
+        headers=teacher_headers,
+    )
+    assert timezone_update.status_code == 200, timezone_update.text
+    await db_session.refresh(teacher_user)
+    assert teacher_user.notification_schedule_updated_at > initial_schedule_timestamp
+    timezone_updated_timestamp = teacher_user.notification_schedule_updated_at
     digest_update = await client.patch(
         "/api/v1/auth/me",
         json={"notification_lessons_today": 600},
@@ -90,7 +112,7 @@ async def test_homework_push_preferences_default_and_update_independently(
     )
     assert digest_update.status_code == 200, digest_update.text
     await db_session.refresh(teacher_user)
-    assert teacher_user.notification_schedule_updated_at > initial_schedule_timestamp
+    assert teacher_user.notification_schedule_updated_at > timezone_updated_timestamp
 
     student_id, student_token = await _register_and_login(
         client, "notification-student@example.com", "STUDENT"
@@ -109,6 +131,7 @@ async def test_homework_push_preferences_default_and_update_independently(
     )
     assert student_profile is not None
     initial_reminder_timestamp = student_profile.notification_lesson_updated_at
+    initial_homework_timestamp = student_profile.notification_homework_updated_at
 
     teacher_disabled = await client.put(
         teacher_profile_url,
@@ -132,6 +155,17 @@ async def test_homework_push_preferences_default_and_update_independently(
     assert student_other_setting.json()["notification_homework_assignment"] is False
     await db_session.refresh(student_profile)
     assert student_profile.notification_lesson_updated_at > initial_reminder_timestamp
+    assert (
+        student_profile.notification_homework_updated_at == initial_homework_timestamp
+    )
+    homework_update = await client.put(
+        student_profile_url,
+        json={"notification_homework": 3},
+        headers=student_headers,
+    )
+    assert homework_update.status_code == 200, homework_update.text
+    await db_session.refresh(student_profile)
+    assert student_profile.notification_homework_updated_at > initial_homework_timestamp
 
     _, other_teacher_token = await _register_and_login(
         client, "other-notification-teacher@example.com", "TEACHER"
@@ -210,6 +244,7 @@ def test_notification_schedule_timestamp_migration_round_trips() -> None:
             )
 
             _run_migration(connection, "upgrade", SCHEDULE_MIGRATION)
+            _run_migration(connection, "upgrade", HOMEWORK_REMINDER_MIGRATION)
 
             user_timestamp = connection.exec_driver_sql(
                 "SELECT notification_schedule_updated_at FROM user WHERE id = 'user-1'"
@@ -220,7 +255,13 @@ def test_notification_schedule_timestamp_migration_round_trips() -> None:
             ).scalar_one()
             assert user_timestamp is not None
             assert student_timestamp is not None
+            homework_timestamp = connection.exec_driver_sql(
+                "SELECT notification_homework_updated_at FROM student_profile "
+                "WHERE id = 'student-1'"
+            ).scalar_one()
+            assert homework_timestamp is not None
 
+            _run_migration(connection, "downgrade", HOMEWORK_REMINDER_MIGRATION)
             _run_migration(connection, "downgrade", SCHEDULE_MIGRATION)
             assert "notification_schedule_updated_at" not in {
                 column["name"] for column in sa.inspect(connection).get_columns("user")
