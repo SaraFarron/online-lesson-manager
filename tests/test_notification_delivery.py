@@ -2,7 +2,7 @@ import asyncio
 import os
 import uuid
 from collections.abc import AsyncGenerator, Generator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -78,6 +78,7 @@ async def _create_assignment_intent(
     teacher = User(
         id=teacher_id,
         email=f"teacher-{teacher_id}@example.com",
+        full_name="Teacher <Tutor> & Co",
         role="TEACHER",
         timezone="UTC",
         is_active=True,
@@ -167,6 +168,11 @@ async def test_claim_acknowledgement_and_stale_lease(
     assert item["chat_id"] == student.telegram_private_chat_id
     assert item["notification_type"] == NotificationType.ASSIGNMENT_CREATED
     assert item["source_id"] == str(intent.source_id)
+    assert item["content"] == [
+        "From: Teacher <Tutor> & Co",
+        "Text: Complete the exercise",
+        "Open /start in Telegram to view the related details.",
+    ]
 
     ack = await client.post(
         f"{SERVICE_ROOT}/{intent.id}/ack",
@@ -183,6 +189,139 @@ async def test_claim_acknowledgement_and_stale_lease(
     )
     assert stale.status_code == 409, stale.text
     assert stale.json()["detail"] == "notification_lease_stale"
+
+
+async def test_claimed_homework_excerpt_is_bounded(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    notification_api_key: str,
+) -> None:
+    _student, intent = await _create_assignment_intent(db_session)
+    homework = await db_session.get(Homework, intent.source_id)
+    assert homework is not None
+    homework.text = "<" * 550
+    await db_session.flush()
+
+    response = await client.post(
+        f"{SERVICE_ROOT}/claim",
+        headers={"X-Notification-Service-Key": notification_api_key},
+        json={},
+    )
+
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert item["content"][1] == f"Text: {'<' * 500}…"
+    assert len(item["content"][1]) == 507
+
+
+async def test_digest_content_is_viewer_scoped_and_includes_student_homework_status(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    notification_api_key: str,
+) -> None:
+    teacher_id, student_id, other_student_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    teacher = User(
+        id=teacher_id,
+        email=f"teacher-{teacher_id}@example.com",
+        full_name="Digest Teacher",
+        role="TEACHER",
+        timezone="UTC",
+        notification_lessons_today=540,
+        telegram_private_chat_id=123456789,
+    )
+    student = User(
+        id=student_id,
+        email=f"student-{student_id}@example.com",
+        full_name="First Student",
+        role="STUDENT",
+        timezone="UTC",
+        teacher_id=teacher_id,
+        notification_lessons_today=540,
+        telegram_private_chat_id=123456790,
+    )
+    other_student = User(
+        id=other_student_id,
+        email=f"student-{other_student_id}@example.com",
+        full_name="Other Student",
+        role="STUDENT",
+        timezone="UTC",
+        teacher_id=teacher_id,
+        notification_lessons_today=540,
+        telegram_private_chat_id=123456791,
+    )
+    first_start = NOW + timedelta(hours=2)
+    other_start = NOW + timedelta(hours=3)
+    first_lesson = Event(
+        id=uuid.uuid4(),
+        teacher_id=teacher_id,
+        user_id=student_id,
+        event_type=EventType.LESSON,
+        start=first_start.replace(tzinfo=None),
+        end=(first_start + timedelta(minutes=30)).replace(tzinfo=None),
+    )
+    other_lesson = Event(
+        id=uuid.uuid4(),
+        teacher_id=teacher_id,
+        user_id=other_student_id,
+        event_type=EventType.LESSON,
+        start=other_start.replace(tzinfo=None),
+        end=(other_start + timedelta(minutes=30)).replace(tzinfo=None),
+    )
+    incomplete_homework = Homework(
+        id=uuid.uuid4(),
+        teacher_id=teacher_id,
+        student_id=student_id,
+        text="Read the text",
+        lesson_kind="EVENT",
+        lesson_source_id=first_lesson.id,
+        lesson_occurrence_start=first_start.replace(tzinfo=None),
+        status="INCOMPLETE",
+        operation_key=uuid.uuid4(),
+    )
+    digest_date = date(2026, 11, 1)
+    intents = [
+        NotificationIntent(
+            id=uuid.uuid4(),
+            recipient_id=recipient.id,
+            notification_type=NotificationType.DAILY_DIGEST,
+            dedupe_key=f"digest:{recipient.id}:{digest_date.isoformat()}",
+            source_date=digest_date,
+            scheduled_at=NOW,
+            available_at=NOW,
+            expires_at=NOW + timedelta(hours=14),
+        )
+        for recipient in (teacher, student)
+    ]
+    db_session.add_all(
+        [
+            teacher,
+            student,
+            other_student,
+            first_lesson,
+            other_lesson,
+            incomplete_homework,
+            *intents,
+        ]
+    )
+    await db_session.flush()
+
+    response = await client.post(
+        f"{SERVICE_ROOT}/claim",
+        headers={"X-Notification-Service-Key": notification_api_key},
+        json={},
+    )
+
+    assert response.status_code == 200, response.text
+    content_by_recipient = {
+        item["recipient_id"]: item["content"] for item in response.json()["items"]
+    }
+    teacher_content = content_by_recipient[str(teacher_id)]
+    student_content = content_by_recipient[str(student_id)]
+    assert "12:00–12:30 Lesson — First Student" in teacher_content
+    assert "13:00–13:30 Lesson — Other Student" in teacher_content
+    assert "12:00–12:30 Lesson" in student_content
+    assert "Incomplete homework for 12:00 lesson: 1" in student_content
+    assert "Other Student" not in student_content
 
 
 async def test_disabled_or_inactive_recipients_are_suppressed(
@@ -244,6 +383,7 @@ async def test_submission_alert_survives_submission_completion(
     student = User(
         id=student_id,
         email=f"student-{student_id}@example.com",
+        full_name="Student <Name> & Co",
         role="STUDENT",
         timezone="UTC",
         teacher_id=teacher_id,
@@ -290,6 +430,16 @@ async def test_submission_alert_survives_submission_completion(
     )
     assert claim.status_code == 200, claim.text
     assert [item["id"] for item in claim.json()["items"]] == [str(intent.id)]
+    item = claim.json()["items"][0]
+    assert item["content"] == [
+        "From: Student <Name> & Co",
+        "Solution version: 1",
+        "Assignment:",
+        "Text: Complete the exercise",
+        "Student solution:",
+        "Text: Finished",
+        "Open /start in Telegram to view the related details.",
+    ]
 
 
 async def test_completed_homework_reminder_is_suppressed(

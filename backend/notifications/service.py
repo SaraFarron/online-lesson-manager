@@ -28,6 +28,7 @@ from backend.notifications.constants import (
     NotificationState,
     NotificationType,
 )
+from backend.notifications.content import build_notification_content
 from backend.notifications.models import NotificationIntent
 from backend.notifications.schemas import (
     AcknowledgeRequest,
@@ -168,12 +169,14 @@ async def claim_pending_intents(
             continue
         if user is None or user.telegram_private_chat_id is None:
             raise RuntimeError("Deliverable notification has no Telegram route")
+        content = await build_notification_content(session, user, intent, timestamp)
         claimed.append(
             ClaimedNotification(
                 id=intent.id,
                 recipient_id=intent.recipient_id,
                 chat_id=user.telegram_private_chat_id,
                 notification_type=NotificationType(intent.notification_type),
+                content=content,
                 source_id=intent.source_id,
                 source_version=intent.source_version,
                 source_date=intent.source_date,

@@ -1,10 +1,18 @@
 import json
+import uuid
+from datetime import UTC, datetime, timedelta
 from itertools import count
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
 from telegram.api import BackendClient, Registration, SessionView
+from telegram.api.models.notifications import (
+    AcknowledgeRequest,
+    AcknowledgeResponse,
+    ClaimedNotification,
+)
+from telegram.notifications.worker import NotificationWorker
 from telegram.runtime import build_dispatcher
 from tests.bot_support import BotDriver
 
@@ -276,6 +284,128 @@ async def test_student_reminder_units_and_null_disable_are_saved_as_profile_only
             "notification_homework": None,
         }
         assert registered_student.account.teacher_id == registered_teacher.account.id
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_homework_push_toggles_save_only_their_own_profile_field(
+    client, bot_service_key
+) -> None:
+    registration_api, registered_teacher, teacher_telegram_id = await _register_teacher(
+        client, bot_service_key
+    )
+    student_telegram_id, _registered_student = await _register_student(
+        registration_api, registered_teacher.teacher.code
+    )
+    teacher_driver, teacher_api, teacher_http, teacher_requests = await _make_bot(
+        client, bot_service_key, teacher_telegram_id
+    )
+    student_driver, student_api, student_http, student_requests = await _make_bot(
+        client, bot_service_key, student_telegram_id
+    )
+    try:
+        await _open_settings(teacher_driver)
+        await teacher_driver.click("Teacher settings")
+        assert "Student solution alerts: on" in teacher_driver.session.last_message.text
+        await teacher_driver.click("Turn off student solution alerts")
+        assert (
+            "Student solution alerts: off" in teacher_driver.session.last_message.text
+        )
+        await teacher_driver.click("Save teacher settings")
+        teacher_view = await teacher_api.view(teacher_telegram_id, teacher_telegram_id)
+        assert teacher_view.teacher.notification_homework_submission is False
+        teacher_update = next(
+            request
+            for request in teacher_requests
+            if request.method == "PUT" and request.url.path.endswith("/teacher-profile")
+        )
+        assert _request_body(teacher_update) == {
+            "notification_homework_submission": False
+        }
+        assert teacher_view.teacher.work_start == registered_teacher.teacher.work_start
+
+        await _open_settings(student_driver)
+        await student_driver.click("Student notifications")
+        assert "New assignment alerts: on" in student_driver.session.last_message.text
+        await student_driver.click("Turn off new-assignment alerts")
+        assert "New assignment alerts: off" in student_driver.session.last_message.text
+        await student_driver.click("Save student notifications")
+        student_view = await student_api.view(student_telegram_id, student_telegram_id)
+        assert student_view.student.notification_homework_assignment is False
+        student_update = next(
+            request
+            for request in student_requests
+            if request.method == "PUT" and request.url.path.endswith("/student-profile")
+        )
+        assert _request_body(student_update) == {
+            "notification_homework_assignment": False
+        }
+        assert student_view.student.notification_lesson == (
+            _registered_student.student.notification_lesson
+        )
+        assert student_view.student.notification_homework == (
+            _registered_student.student.notification_homework
+        )
+    finally:
+        await _close_bot(teacher_driver, teacher_http)
+        await _close_bot(student_driver, student_http)
+
+
+async def test_notification_send_preserves_an_active_settings_draft(
+    client, bot_service_key
+) -> None:
+    _registration_api, _registered, telegram_id = await _register_teacher(
+        client, bot_service_key
+    )
+    driver, api, http, _requests = await _make_bot(client, bot_service_key, telegram_id)
+
+    class AcknowledgingClient:
+        async def acknowledge(
+            self, intent_id: uuid.UUID, request: AcknowledgeRequest
+        ) -> AcknowledgeResponse:
+            assert request.outcome == "sent"
+            return AcknowledgeResponse(
+                id=intent_id,
+                state="SENT",
+                last_outcome="SENT",
+                available_at=datetime.now(UTC),
+            )
+
+    try:
+        await _open_settings(driver)
+        await driver.click("Account settings")
+        await driver.click("Change timezone")
+        await driver.text("Europe/Paris")
+        active_message = driver.session.last_message
+        assert "Timezone: Europe/Paris" in active_message.text
+
+        now = datetime.now(UTC)
+        notification = ClaimedNotification(
+            id=uuid.uuid4(),
+            recipient_id=uuid.uuid4(),
+            chat_id=telegram_id,
+            notification_type="DAILY_DIGEST",
+            content=["Schedule for today: 10:00–11:00 Lesson"],
+            source_id=None,
+            source_version=None,
+            source_date=None,
+            occurrence_source_type=None,
+            occurrence_source_id=None,
+            occurrence_start_at=None,
+            scheduled_at=now,
+            lease_token=uuid.uuid4(),
+            lease_expires_at=now + timedelta(seconds=60),
+        )
+        call_count = len(driver.session.calls)
+        worker = NotificationWorker(driver.bot, AcknowledgingClient())
+        await worker._deliver(notification)
+        worker_calls = driver.session.calls[call_count:]
+        assert [call.__api_method__ for call in worker_calls] == ["sendMessage"]
+
+        driver.session.last_message = active_message
+        await driver.click("Save account settings")
+        updated = await api.view(telegram_id, telegram_id)
+        assert updated.account.timezone == "Europe/Paris"
     finally:
         await _close_bot(driver, http)
 

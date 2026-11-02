@@ -27,9 +27,10 @@ from telegram.api.models.notifications import (
 )
 from telegram.api.notifications import NotificationClient, NotificationProtocolError
 from telegram.config import BotConfig
+from telegram.notifications.messages import render_notification
 from telegram.notifications.rate_limit import OutboundRateLimiter
 from telegram.notifications.worker import NotificationWorker
-from tests.bot_support import RecordingSession
+from tests.bot_support import RecordingSession, rendered_utf16_length
 
 type ClaimResult = ClaimResponse | Exception
 
@@ -110,6 +111,7 @@ def _notification(
         recipient_id=uuid.uuid4(),
         chat_id=5000000000,
         notification_type=notification_type,
+        content=["Assigned work: read chapter 4."],
         source_id=None,
         source_version=None,
         source_date=None,
@@ -227,10 +229,27 @@ async def test_worker_sends_and_acknowledges_successful_notification() -> None:
         sent = [call for call in session.calls if call.__api_method__ == "sendMessage"]
         assert len(sent) == 1
         assert sent[0].model_dump()["chat_id"] == item.chat_id
-        assert sent[0].model_dump()["text"].startswith("You have new homework.")
+        assert sent[0].model_dump()["text"].startswith("<b>New homework assignment</b>")
+        assert sent[0].model_dump()["parse_mode"] == "HTML"
         assert client.acknowledgements[0][1].outcome == "sent"
     finally:
         await bot.session.close()
+
+
+def test_notification_text_escapes_untrusted_content_and_paginates_utf16_safely() -> (
+    None
+):
+    item = _notification()
+    item.content = ["Student: <Alice & Bob>\x00", "💻" * 3000]
+
+    pages = render_notification(item)
+
+    assert len(pages) > 1
+    assert all(rendered_utf16_length(page) <= 4096 for page in pages)
+    assert "&lt;Alice &amp; Bob&gt;" in pages[0]
+    assert all("Part " in page for page in pages)
+    assert all("\x00" not in page for page in pages)
+    assert sum(page.count("💻") for page in pages) == 3000
 
 
 async def test_worker_continues_after_backend_outage_and_empty_queue_is_bounded() -> (

@@ -5,6 +5,7 @@ from uuid import UUID
 
 import httpx
 from aiogram import Bot
+from aiogram.enums import ParseMode
 from aiogram.exceptions import (
     TelegramAPIError,
     TelegramBadRequest,
@@ -97,10 +98,12 @@ class NotificationWorker:
             outcome="sent",
         )
         try:
-            await self.bot.send_message(
-                chat_id=notification.chat_id,
-                text=render_notification(notification),
-            )
+            for page in render_notification(notification):
+                await self.bot.send_message(
+                    chat_id=notification.chat_id,
+                    text=page,
+                    parse_mode=ParseMode.HTML,
+                )
         except TelegramRetryAfter as exc:
             if exc.retry_after > 86400:
                 request = AcknowledgeRequest(

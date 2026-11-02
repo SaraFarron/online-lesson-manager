@@ -4,7 +4,7 @@
 
 Deliver authorized schedule/homework notifications to Telegram reliably, with user-controlled preferences and explicit handling of delivery failures.
 
-**Status:** Tasks 00–04 complete; Tasks 05–07 planned.
+**Status:** Tasks 00–06 complete; Task 07 planned.
 
 ## Scope (README.md sections covered)
 
@@ -153,9 +153,11 @@ Focused worker/backend tests passed (36 passed, 2 skipped), and the full reposit
 
 **Reuse:** Existing Settings, shared feedback/input utilities and schedule formatting conventions.
 
-**Acceptance Criteria:** [ ] Both roles can save approved toggles without overwriting other fields. [ ] Notification delivery during an active dialog leaves drafts and callback state intact; sent text is length-safe and authorized. [ ] Existing settings/bot tests pass.
+**Acceptance Criteria:** [x] Both roles can save approved toggles without overwriting other fields. [x] Notification delivery during an active dialog leaves drafts and callback state intact; sent text is length-safe and authorized. [x] Existing settings/bot tests pass.
 
 **Out of scope:** New channels, free-form quiet-hour settings or notification history UI. **Suitable for:** AI agent.
+
+**Execution (2026-11-02):** Added the approved assignment-created and submission-received toggles to the student and teacher Telegram settings drafts, preserving the existing digest, reminder-unit and homework-day editors and sending only changed profile fields. Settings now explain the shared digest-time dependency, reachability, suppression and ambiguous-send behavior. Claim-time content is rendered from revalidated current schedule/homework sources; homework excerpts and attachment names are bounded, student names are viewer-scoped, and the bot HTML-escapes dynamic text, strips invalid control characters and splits messages below Telegram's UTF-16 limit. The worker sends pages directly rather than editing the active dialog. Focused settings, worker, claim and producer checks passed (48 passed, 4 PostgreSQL-only cases skipped); `ruff check backend telegram tests`, `ruff format --check backend telegram tests`, and `mypy backend telegram` passed.
 
 ## Task 07: Verify release and publish delivery handoff
 

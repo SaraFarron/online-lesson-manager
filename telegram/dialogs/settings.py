@@ -110,6 +110,9 @@ def _settings_data(view: SessionView) -> dict[str, Any]:
             "between_lessons_break": view.teacher.between_lessons_break,
             "max_consecutive_lessons": view.teacher.max_consecutive_lessons,
             "max_lessons_per_day": view.teacher.max_lessons_per_day,
+            "notification_homework_submission": (
+                view.teacher.notification_homework_submission
+            ),
         }
         data["teacher_original"] = profile.copy()
         data["teacher_draft"] = {**profile, "working_days": working_days[:]}
@@ -119,6 +122,9 @@ def _settings_data(view: SessionView) -> dict[str, Any]:
         profile = {
             "notification_lesson": view.student.notification_lesson,
             "notification_homework": view.student.notification_homework,
+            "notification_homework_assignment": (
+                view.student.notification_homework_assignment
+            ),
         }
         data["student_original"] = profile.copy()
         data["student_draft"] = profile.copy()
@@ -249,6 +255,37 @@ async def edit_field(
         await manager.switch_to(SettingsScreens.reminder_unit, show_mode=ShowMode.EDIT)
     else:
         await manager.switch_to(SettingsScreens.field, show_mode=ShowMode.EDIT)
+
+
+async def toggle_push_notification(
+    _callback: CallbackQuery, button: Button, manager: DialogManager
+) -> None:
+    toggles = {
+        "toggle_submission_alerts": (
+            "teacher",
+            "notification_homework_submission",
+            "teacher_draft",
+        ),
+        "toggle_assignment_alerts": (
+            "student",
+            "notification_homework_assignment",
+            "student_draft",
+        ),
+    }
+    button_id = button.widget_id
+    if button_id is None:
+        raise ValueError("Notification preference is missing its button ID")
+    toggle = toggles.get(button_id)
+    if toggle is None:
+        raise ValueError("Unknown notification preference")
+    section, field, draft_key = toggle
+    data = manager.dialog_data
+    if data.get("section") != section or draft_key not in data:
+        raise ValueError("Notification preference is unavailable for this role")
+    draft = data[draft_key]
+    draft[field] = not draft[field]
+    data.update(error="", notice="")
+    await manager.show(show_mode=ShowMode.EDIT)
 
 
 async def disable_digest(
@@ -729,8 +766,15 @@ async def teacher_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any
         "Working days: "
         + ", ".join(DAY_NAMES[day - 1] for day in draft["working_days"]),
     )
+    alerts_enabled = draft["notification_homework_submission"]
+    lines.append("Student solution alerts: " + ("on" if alerts_enabled else "off"))
     return {
         "profile": escape("\n".join(lines)),
+        "submission_alert_toggle": (
+            "Turn off student solution alerts"
+            if alerts_enabled
+            else "Turn on student solution alerts"
+        ),
         "notice": escape(str(data.get("notice", ""))),
         "feedback": _feedback(data),
         "can_save": bool(
@@ -755,6 +799,14 @@ async def student_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any
             _format_field_value(
                 "notification_homework", draft["notification_homework"], None
             )
+        ),
+        "assignment_alerts": (
+            "on" if draft["notification_homework_assignment"] else "off"
+        ),
+        "assignment_alert_toggle": (
+            "Turn off new-assignment alerts"
+            if draft["notification_homework_assignment"]
+            else "Turn on new-assignment alerts"
         ),
         "notice": escape(str(data.get("notice", ""))),
         "feedback": _feedback(data),
@@ -805,8 +857,10 @@ def build_settings_dialog() -> Dialog:
         Window(
             Format(
                 "{feedback}{role} settings\n"
-                "Account and role preferences save separately. Notifications are "
-                "preferences only; delivery is not active.\n"
+                "Account and role preferences save separately. Messages require "
+                "a reachable Telegram private chat. Stale or no-longer-visible "
+                "items are suppressed; an uncertain Telegram response can cause "
+                "a duplicate.\n"
                 "{notice}"
             ),
             Button(
@@ -852,6 +906,8 @@ def build_settings_dialog() -> Dialog:
             Format(
                 "{feedback}Account preferences\nTimezone: {timezone}\n"
                 "Daily digest (local): {digest}\n"
+                "Turning off the digest time also disables incomplete-homework "
+                "reminders, which use this send time.\n"
                 "Timezone changes do not move stored event instants.\n{notice}"
             ),
             Button(
@@ -888,6 +944,8 @@ def build_settings_dialog() -> Dialog:
                 "{feedback}Teacher preferences\n{profile}\n"
                 "Break changes apply to new lessons only; existing lessons and "
                 "series keep their saved break duration.\n"
+                "Student solution alerts apply to newly submitted versions; "
+                "pending alerts are checked again before sending.\n"
                 "{notice}"
             ),
             Button(
@@ -933,6 +991,12 @@ def build_settings_dialog() -> Dialog:
                 when="can_edit",
             ),
             Button(
+                Format("{submission_alert_toggle}"),
+                id="toggle_submission_alerts",
+                on_click=toggle_push_notification,
+                when="can_edit",
+            ),
+            Button(
                 Const("Save teacher settings"),
                 id="save",
                 on_click=save_teacher,
@@ -946,8 +1010,10 @@ def build_settings_dialog() -> Dialog:
         Window(
             Format(
                 "{feedback}Student notifications\nLesson reminder: {reminder}\n"
-                "Homework reminder: {homework}\n"
-                "These preferences do not mean notifications are being delivered.\n"
+                "Incomplete-homework reminder: {homework}\n"
+                "New assignment alerts: {assignment_alerts}\n"
+                "Lesson and incomplete-homework reminders require a current "
+                "visible linked lesson. Assignment alerts are independent.\n"
                 "{notice}"
             ),
             Button(
@@ -973,6 +1039,12 @@ def build_settings_dialog() -> Dialog:
                 id="disable_homework",
                 on_click=disable_homework_reminder,
                 when="can_disable_homework",
+            ),
+            Button(
+                Format("{assignment_alert_toggle}"),
+                id="toggle_assignment_alerts",
+                on_click=toggle_push_notification,
+                when="can_edit",
             ),
             Button(
                 Const("Save student notifications"),

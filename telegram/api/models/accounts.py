@@ -32,11 +32,13 @@ class TeacherProfile(BaseModel):
     between_lessons_break: int
     max_consecutive_lessons: int
     max_lessons_per_day: int
+    notification_homework_submission: bool = True
 
 
 class StudentProfile(BaseModel):
     notification_lesson: int | None
     notification_homework: int | None
+    notification_homework_assignment: bool = True
 
 
 class StudentPickerItem(BaseModel):
@@ -138,6 +140,7 @@ class TeacherProfileUpdate(BaseModel):
     between_lessons_break: int | None = Field(default=None, ge=0, strict=True)
     max_consecutive_lessons: int | None = Field(default=None, gt=0, strict=True)
     max_lessons_per_day: int | None = Field(default=None, gt=0, strict=True)
+    notification_homework_submission: bool | None = None
 
     @field_validator(
         "code",
@@ -148,6 +151,7 @@ class TeacherProfileUpdate(BaseModel):
         "between_lessons_break",
         "max_consecutive_lessons",
         "max_lessons_per_day",
+        "notification_homework_submission",
         mode="before",
     )
     @classmethod
@@ -188,3 +192,11 @@ class StudentProfileUpdate(BaseModel):
 
     notification_lesson: int | None = Field(default=None, ge=1, le=600, strict=True)
     notification_homework: int | None = Field(default=None, ge=1, strict=True)
+    notification_homework_assignment: bool | None = None
+
+    @field_validator("notification_homework_assignment", mode="before")
+    @classmethod
+    def reject_null_assignment_toggle(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("Assignment notification toggle cannot be null")
+        return value

@@ -23,6 +23,7 @@ class ClaimedNotification(BaseModel):
     recipient_id: UUID
     chat_id: int
     notification_type: NotificationType
+    content: list[str]
     source_id: UUID | None
     source_version: int | None
     source_date: date | None
