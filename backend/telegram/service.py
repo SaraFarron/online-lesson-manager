@@ -25,11 +25,19 @@ async def create_session(session: AsyncSession, sender: TelegramSender) -> User:
         )
     if not user.is_active:
         raise InactiveUser()
-    if (
-        sender.telegram_private_chat_id is not None
-        and sender.telegram_private_chat_id != user.telegram_private_chat_id
+    changed = False
+    if sender.telegram_private_chat_id is not None and (
+        sender.telegram_private_chat_id != user.telegram_private_chat_id
     ):
         user.telegram_private_chat_id = sender.telegram_private_chat_id
+        changed = True
+    if (
+        "telegram_username" in sender.model_fields_set
+        and sender.telegram_username != user.telegram_username
+    ):
+        user.telegram_username = sender.telegram_username
+        changed = True
+    if changed:
         await session.commit()
         await session.refresh(user)
     return user
@@ -70,6 +78,7 @@ async def register(session: AsyncSession, data: TelegramRegistration) -> User:
                     role=data.role,
                     timezone=data.timezone,
                     full_name=data.full_name,
+                    telegram_username=data.telegram_username,
                     notification_lessons_today=data.notification_lessons_today,
                     telegram_user_id=data.telegram_user_id,
                     telegram_private_chat_id=data.telegram_private_chat_id,
@@ -81,6 +90,11 @@ async def register(session: AsyncSession, data: TelegramRegistration) -> User:
             if isinstance(data, TeacherRegistration):
                 await auth_service.add_teacher_profile(session, data.profile, user)
             else:
+                if teacher is None:
+                    raise RuntimeError("Student registration requires a teacher")
+                await auth_service.record_student_teacher_link(
+                    session, user, teacher.id
+                )
                 await auth_service.add_student_profile(session, data.profile, user)
     except IntegrityError as exc:
         if is_telegram_identity_conflict(exc):

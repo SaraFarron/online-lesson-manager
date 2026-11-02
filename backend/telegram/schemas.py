@@ -13,12 +13,16 @@ from backend.auth.schemas import (
 )
 
 TelegramID = Annotated[int, Field(gt=0, le=2**63 - 1, strict=True)]
+TelegramUsername = Annotated[
+    str, Field(min_length=5, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
+]
 
 
 class TelegramSender(BaseModel):
     model_config = ConfigDict(extra="forbid")
     telegram_user_id: TelegramID
     telegram_private_chat_id: TelegramID | None = None
+    telegram_username: TelegramUsername | None = None
 
 
 class ErrorResponse(BaseModel):

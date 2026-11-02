@@ -84,6 +84,9 @@ class TeacherConfirmation(BaseModel):
 class Registration(BaseModel):
     telegram_user_id: int
     telegram_private_chat_id: int
+    telegram_username: str | None = Field(
+        default=None, min_length=5, max_length=32, pattern=r"^[A-Za-z0-9_]+$"
+    )
     full_name: str | None
     role: Literal["TEACHER", "STUDENT"]
     timezone: str

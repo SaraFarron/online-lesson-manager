@@ -6,13 +6,17 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Time,
+    UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +36,7 @@ class User(Base, TimestampMixin):
     hashed_password: Mapped[str | None] = mapped_column(String(1024))
     telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
     telegram_private_chat_id: Mapped[int | None] = mapped_column(BigInteger)
+    telegram_username: Mapped[str | None] = mapped_column(String(32), nullable=True)
     full_name: Mapped[str | None] = mapped_column(
         String(256), nullable=True, default=None
     )
@@ -146,4 +151,49 @@ class TeacherProfile(Base, TimestampMixin):
     max_lessons_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
     notification_homework_submission: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
+    )
+
+
+class StudentTeacherRelationship(Base, TimestampMixin):
+    __tablename__ = "student_teacher_relationship"
+    __table_args__ = (
+        CheckConstraint(
+            "removed_at IS NULL OR linked_at IS NULL OR removed_at >= linked_at",
+            name="removed_after_link",
+        ),
+        UniqueConstraint(
+            "id",
+            "teacher_id",
+            "student_id",
+            name="relationship_scope",
+        ),
+        Index(
+            "student_teacher_relationship_one_active_per_student_idx",
+            "student_id",
+            unique=True,
+            sqlite_where=text("removed_at IS NULL"),
+            postgresql_where=text("removed_at IS NULL"),
+        ),
+        Index(
+            "student_teacher_relationship_teacher_removed_student_idx",
+            "teacher_id",
+            "removed_at",
+            "student_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False
+    )
+    teacher_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False
+    )
+    linked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    removed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

@@ -21,7 +21,12 @@ from backend.auth.exceptions import (
     TeacherCodeGenerationFailed,
     TeacherCodeNotFound,
 )
-from backend.auth.models import StudentProfile, TeacherProfile, User
+from backend.auth.models import (
+    StudentProfile,
+    StudentTeacherRelationship,
+    TeacherProfile,
+    User,
+)
 from backend.auth.schemas import (
     StudentProfileCreate,
     StudentProfilePublic,
@@ -75,9 +80,39 @@ async def link_student_to_teacher(
     teacher = await resolve_teacher_code(session, teacher_code)
     student.teacher_id = teacher.id
     session.add(student)
-    await session.commit()
+    try:
+        await record_student_teacher_link(session, student, teacher.id)
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        if is_active_relationship_conflict(exc):
+            raise StudentAlreadyLinked() from exc
+        raise
     await session.refresh(student)
     return student
+
+
+async def record_student_teacher_link(
+    session: AsyncSession, student: User, teacher_id: uuid.UUID
+) -> StudentTeacherRelationship:
+    relationship = StudentTeacherRelationship(
+        student_id=student.id,
+        teacher_id=teacher_id,
+        linked_at=datetime.now(UTC),
+    )
+    session.add(relationship)
+    await session.flush()
+    return relationship
+
+
+def is_active_relationship_conflict(error: IntegrityError) -> bool:
+    diagnostic = getattr(error.orig, "diag", None)
+    return (
+        getattr(diagnostic, "constraint_name", None)
+        == "student_teacher_relationship_one_active_per_student_idx"
+        or str(error.orig)
+        == "UNIQUE constraint failed: student_teacher_relationship.student_id"
+    )
 
 
 async def resolve_teacher_code(session: AsyncSession, teacher_code: str) -> User:

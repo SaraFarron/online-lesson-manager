@@ -84,6 +84,7 @@ class BackendClient:
         self.credential = credential
         self.breaker = breaker or CircuitBreaker()
         self.tokens: dict[int, str] = {}
+        self.telegram_usernames: dict[int, str | None] = {}
         self.pending_registrations: set[int] = set()
         self.pending_broadcast_operations: dict[
             int, tuple[uuid.UUID, TeacherBroadcastPublishRequest]
@@ -259,8 +260,18 @@ class BackendClient:
         sender_id: int,
         chat_id: int,
         *,
+        telegram_username: str | None = None,
+        sync_username: bool = False,
         error_context: ErrorContext = "default",
     ) -> Token:
+        if sync_username:
+            self.telegram_usernames[sender_id] = telegram_username
+        body: dict[str, int | str | None] = {
+            "telegram_user_id": sender_id,
+            "telegram_private_chat_id": chat_id,
+        }
+        if sender_id in self.telegram_usernames:
+            body["telegram_username"] = self.telegram_usernames[sender_id]
         try:
             token = await self.request(
                 "POST",
@@ -268,10 +279,7 @@ class BackendClient:
                 Token,
                 service=True,
                 error_context=error_context,
-                body={
-                    "telegram_user_id": sender_id,
-                    "telegram_private_chat_id": chat_id,
-                },
+                body=body,
             )
         except BackendError as exc:
             if exc.status in {400, 404}:
@@ -1107,9 +1115,21 @@ class BackendClient:
             )
         return view
 
-    async def login(self, sender_id: int, chat_id: int) -> SessionView | None:
+    async def login(
+        self,
+        sender_id: int,
+        chat_id: int,
+        *,
+        telegram_username: str | None = None,
+        sync_username: bool = False,
+    ) -> SessionView | None:
         try:
-            await self.session(sender_id, chat_id)
+            await self.session(
+                sender_id,
+                chat_id,
+                telegram_username=telegram_username,
+                sync_username=sync_username,
+            )
         except BackendError as exc:
             if exc.status == 404:
                 return None
@@ -1127,9 +1147,15 @@ class BackendClient:
 
     async def register(self, data: Registration) -> SessionView:
         sender_id = data.telegram_user_id
+        self.telegram_usernames[sender_id] = data.telegram_username
         if sender_id in self.pending_registrations:
             # An ambiguous previous write must be resolved before another write.
-            existing = await self.login(sender_id, data.telegram_private_chat_id)
+            existing = await self.login(
+                sender_id,
+                data.telegram_private_chat_id,
+                telegram_username=data.telegram_username,
+                sync_username=True,
+            )
             if existing is not None:
                 self.pending_registrations.discard(sender_id)
                 return existing
@@ -1147,7 +1173,12 @@ class BackendClient:
             )
         except BackendUnavailable:
             self.pending_registrations.add(sender_id)
-            existing = await self.login(sender_id, data.telegram_private_chat_id)
+            existing = await self.login(
+                sender_id,
+                data.telegram_private_chat_id,
+                telegram_username=data.telegram_username,
+                sync_username=True,
+            )
             if existing is None:
                 raise BackendUnavailable()
             self.pending_registrations.discard(sender_id)
@@ -1155,7 +1186,12 @@ class BackendClient:
         except BackendError as exc:
             if exc.status != 409:
                 raise
-            existing = await self.login(sender_id, data.telegram_private_chat_id)
+            existing = await self.login(
+                sender_id,
+                data.telegram_private_chat_id,
+                telegram_username=data.telegram_username,
+                sync_username=True,
+            )
             if existing is None:
                 raise
             return existing

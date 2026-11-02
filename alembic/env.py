@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # ── Import every model module so Alembic sees all tables ─────────────────────
+from backend.activity import models as _activity_models  # noqa: F401
 from backend.auth import models as _auth_models  # noqa: F401
 from backend.config import settings
 from backend.events import models as _events_models  # noqa: F401

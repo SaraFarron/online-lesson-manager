@@ -421,6 +421,7 @@ async def submit(
     data = Registration(
         telegram_user_id=callback.from_user.id,
         telegram_private_chat_id=callback.message.chat.id,
+        telegram_username=callback.from_user.username,
         full_name=callback.from_user.full_name,
         role=draft["role"],
         timezone=draft["timezone"],

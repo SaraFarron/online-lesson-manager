@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 # Import every domain's models so Base.metadata is fully populated before create_all.
+from backend.activity import models as activity_models  # noqa: F401
 from backend.auth import models as auth_models  # noqa: F401
 from backend.database import get_db
 from backend.events import models as events_models  # noqa: F401

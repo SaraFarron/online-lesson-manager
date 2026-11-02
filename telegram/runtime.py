@@ -48,7 +48,12 @@ async def start(
     if client is None or message.from_user is None:
         return
     try:
-        view = await client.login(message.from_user.id, message.chat.id)
+        view = await client.login(
+            message.from_user.id,
+            message.chat.id,
+            telegram_username=message.from_user.username,
+            sync_username=True,
+        )
     except (BackendError, BackendUnavailable) as exc:
         dialog_manager.dialog_data["error"] = str(exc)
         await dialog_manager.switch_to(Screens.unavailable, show_mode=ShowMode.EDIT)
