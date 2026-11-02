@@ -15,6 +15,7 @@ from backend.homework.middleware import HomeworkUploadLimitMiddleware
 from backend.homework.router import router as homework_router
 from backend.lessons.router import recurrent_router as recurrent_lessons_router
 from backend.lessons.router import router as lessons_router
+from backend.notifications.broadcast_router import router as broadcasts_router
 from backend.notifications.router import router as notifications_router
 from backend.pages.router import htmx_router
 from backend.pages.router import router as pages_router
@@ -68,3 +69,4 @@ app.include_router(schedule_router, prefix=settings.API_V1_STR)
 app.include_router(events_router, prefix=settings.API_V1_STR)
 app.include_router(homework_router, prefix=settings.API_V1_STR)
 app.include_router(notifications_router, prefix=settings.API_V1_STR)
+app.include_router(broadcasts_router, prefix=settings.API_V1_STR)

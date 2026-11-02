@@ -12,6 +12,7 @@ _TITLES = {
     "HOMEWORK_REMINDER": "Incomplete homework reminder",
     "ASSIGNMENT_CREATED": "New homework assignment",
     "SUBMISSION_RECEIVED": "Homework solution received",
+    "TEACHER_BROADCAST": "Message from your teacher",
 }
 
 

@@ -90,3 +90,35 @@ class NotificationHealth(BaseModel):
     sent: int = Field(ge=0)
     terminal: int = Field(ge=0)
     suppressed: int = Field(ge=0)
+
+
+class TeacherBroadcastPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=4096)
+
+    @model_validator(mode="after")
+    def reject_blank_text(self) -> TeacherBroadcastPreviewRequest:
+        if not self.text.strip():
+            raise ValueError("Broadcast text cannot be blank")
+        return self
+
+
+class TeacherBroadcastPreview(BaseModel):
+    preview_token: str = Field(min_length=1, max_length=2048)
+    recipient_count: int = Field(ge=0)
+    eligible_count: int = Field(ge=0)
+    unsendable_count: int = Field(ge=0)
+
+
+class TeacherBroadcastPublishRequest(TeacherBroadcastPreviewRequest):
+    preview_token: str = Field(min_length=1, max_length=2048)
+
+
+class TeacherBroadcastPublication(BaseModel):
+    id: UUID
+    operation_key: UUID
+    status: Literal["queued"] = "queued"
+    recipient_count: int = Field(ge=0)
+    eligible_count: int = Field(ge=0)
+    unsendable_count: int = Field(ge=0)

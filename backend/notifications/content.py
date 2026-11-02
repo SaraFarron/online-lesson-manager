@@ -12,7 +12,7 @@ from backend.events.time_utils import get_timezone, normalize_utc
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
 from backend.notifications.constants import NotificationType
 from backend.notifications.context import get_daily_digest_context
-from backend.notifications.models import NotificationIntent
+from backend.notifications.models import NotificationIntent, TeacherBroadcast
 from backend.schedule import service as schedule_service
 from backend.schedule.schemas import (
     ScheduleItem,
@@ -84,6 +84,14 @@ async def build_notification_content(
                 f"and ends at {local_end:%H:%M} ({recipient.timezone})."
             ]
         )
+
+    if kind == NotificationType.TEACHER_BROADCAST:
+        if intent.source_id is None:
+            raise RuntimeError("Teacher broadcast is missing its source")
+        broadcast = await session.get(TeacherBroadcast, intent.source_id)
+        if broadcast is None:
+            raise RuntimeError("Validated teacher broadcast disappeared during claim")
+        return [broadcast.message]
 
     if intent.source_id is None:
         raise RuntimeError("Homework notification is missing its source")

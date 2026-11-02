@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
 )
@@ -37,7 +38,7 @@ class NotificationIntent(Base, TimestampMixin):
         CheckConstraint(
             "notification_type IN "
             "('DAILY_DIGEST', 'LESSON_REMINDER', 'HOMEWORK_REMINDER', "
-            "'ASSIGNMENT_CREATED', 'SUBMISSION_RECEIVED')",
+            "'ASSIGNMENT_CREATED', 'SUBMISSION_RECEIVED', 'TEACHER_BROADCAST')",
             name="notification_type_valid",
         ),
         CheckConstraint(
@@ -107,3 +108,40 @@ class NotificationIntent(Base, TimestampMixin):
     last_outcome: Mapped[str | None] = mapped_column(String(16))
     last_error_code: Mapped[str | None] = mapped_column(String(64))
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TeacherBroadcast(Base, TimestampMixin):
+    __tablename__ = "teacher_broadcast"
+    __table_args__ = (
+        UniqueConstraint(
+            "teacher_id",
+            "operation_key",
+            name="teacher_broadcast_teacher_operation_key_key",
+        ),
+        UniqueConstraint(
+            "confirmation_token",
+            name="teacher_broadcast_confirmation_token_key",
+        ),
+        CheckConstraint(
+            "recipient_count >= 0 AND eligible_count >= 0 "
+            "AND unsendable_count >= 0 "
+            "AND recipient_count = eligible_count + unsendable_count",
+            name="recipient_counts_consistent",
+        ),
+        Index("ix_teacher_broadcast_teacher_id_created_at", "teacher_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    teacher_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("user.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    operation_key: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    confirmation_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    recipient_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    eligible_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    unsendable_count: Mapped[int] = mapped_column(Integer, nullable=False)

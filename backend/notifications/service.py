@@ -29,7 +29,7 @@ from backend.notifications.constants import (
     NotificationType,
 )
 from backend.notifications.content import build_notification_content
-from backend.notifications.models import NotificationIntent
+from backend.notifications.models import NotificationIntent, TeacherBroadcast
 from backend.notifications.schemas import (
     AcknowledgeRequest,
     AcknowledgeResponse,
@@ -409,6 +409,9 @@ def _recipient_suppression_reason(
             or not user.teacher_profile.notification_homework_submission
         ):
             return "submission_notification_disabled"
+    elif kind == NotificationType.TEACHER_BROADCAST:
+        if user.role != Roles.STUDENT:
+            return "broadcast_recipient_role_invalid"
     return None
 
 
@@ -462,6 +465,16 @@ async def _source_suppression_reason(
         NotificationType.SUBMISSION_RECEIVED,
     }:
         return await _validate_homework_source(session, user, intent, now)
+    if kind == NotificationType.TEACHER_BROADCAST:
+        if intent.source_id is None:
+            return "broadcast_reference_missing"
+        broadcast = await session.get(TeacherBroadcast, intent.source_id)
+        if broadcast is None or user.teacher_id != broadcast.teacher_id:
+            return "broadcast_link_inactive"
+        teacher = await session.get(User, broadcast.teacher_id)
+        if teacher is None or not teacher.is_active or teacher.role != Roles.TEACHER:
+            return "broadcast_teacher_inactive"
+        return None
     return "notification_type_invalid"
 
 

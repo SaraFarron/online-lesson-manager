@@ -38,6 +38,7 @@ from backend.auth.utils import (
     string_to_time,
     verify_password,
 )
+from backend.exceptions import Conflict
 
 DUMMY_PASSWORD_HASH = (
     "$argon2id$v=19$m=65536,t=3,p=4$H7HFOyCv3KslcnJb9IzN6w$"
@@ -136,6 +137,31 @@ async def get_teacher_students(
         .limit(limit)
     )
     return list(students_result.scalars().all()), total
+
+
+async def get_teacher_student_roster(
+    session: AsyncSession, teacher_id: uuid.UUID
+) -> list[User]:
+    page_size = 100
+    skip = 0
+    expected_total: int | None = None
+    students: list[User] = []
+    while expected_total is None or skip < expected_total:
+        page, total = await get_teacher_students(
+            session, teacher_id, skip=skip, limit=page_size
+        )
+        if expected_total is None:
+            expected_total = total
+        elif total != expected_total:
+            raise Conflict("broadcast_roster_changed")
+        if not page and skip < total:
+            raise Conflict("broadcast_roster_changed")
+        students.extend(page)
+        skip += len(page)
+
+    if len(students) != expected_total or len({user.id for user in students}) != skip:
+        raise Conflict("broadcast_roster_changed")
+    return students
 
 
 async def create_user(session: AsyncSession, data: UserCreate) -> User:

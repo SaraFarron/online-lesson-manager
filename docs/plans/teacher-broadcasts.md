@@ -4,7 +4,7 @@
 
 A teacher can compose, review and confirm a one-time message to their own students, with durable delivery and honest per-recipient outcome reporting.
 
-**Status:** Planned.
+**Status:** In progress — Tasks 00–01 complete.
 
 ## Scope (README.md sections covered)
 
@@ -67,9 +67,17 @@ A teacher can compose, review and confirm a one-time message to their own studen
 
 **Reuse:** `get_teacher_students`, notification intent creation and operation-key conventions.
 
-**Acceptance Criteria:** [ ] Preview creates no delivery. [ ] Confirm includes all approved eligible students once across roster pages; duplicate/concurrent/lost-response requests yield one publication. [ ] Cross-teacher/student calls fail; migrations/common checks pass.
+**Acceptance Criteria:** [x] Preview creates no delivery. [x] Confirm includes all approved eligible students once across roster pages; duplicate/concurrent/lost-response requests yield one publication. [x] Cross-teacher/student calls fail; migrations/common checks pass.
 
 **Out of scope:** Another durable queue or direct Telegram calls. **Suitable for:** AI agent.
+
+**Execution (2026-11-02):** Added teacher-owned preview, publish and
+operation-key reconciliation. Preview tokens bind the text and current paged
+roster; publication and all recipient intents commit atomically through the
+existing notification queue. Verified 105-recipient fan-out, stale previews,
+authorization, repeat/lost-response reconciliation, and concurrent publish on
+PostgreSQL. SQLite and PostgreSQL migration upgrade/downgrade checks passed;
+focused notification regressions, Ruff, and backend/bot mypy passed.
 
 ## Task 02: Add delivery eligibility and teacher-scoped result reads
 
