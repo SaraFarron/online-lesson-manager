@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from backend.activity import service as activity_service
+from backend.auth import removal as removal_service
 from backend.auth import service
 from backend.auth.constants import Roles
 from backend.auth.dependencies import (
@@ -26,6 +27,9 @@ from backend.auth.schemas import (
     StudentProfileCreate,
     StudentProfilePublic,
     StudentProfileUpdate,
+    StudentRemovalConfirm,
+    StudentRemovalPreview,
+    StudentRemovalResult,
     TeacherBookingContext,
     TeacherProfileCreate,
     TeacherProfilePublic,
@@ -44,6 +48,7 @@ from backend.auth.schemas import (
 from backend.auth.utils import create_access_token
 from backend.events.booking_policy import get_teacher_preferences
 from backend.exceptions import BadRequest, Conflict
+from backend.homework.config import HomeworkConfig, get_homework_settings
 
 router = APIRouter(
     prefix="/auth",
@@ -56,6 +61,7 @@ router = APIRouter(
         422: {"description": "Invalid preferences or forbidden input fields"},
     },
 )
+HomeworkSettings = Annotated[HomeworkConfig, Depends(get_homework_settings)]
 
 
 def _student_profile_summary(
@@ -197,6 +203,38 @@ async def join_teacher(
 ) -> Any:
     return await service.link_student_to_teacher(
         session, current_user, data.teacher_code
+    )
+
+
+@router.post(
+    "/teacher/students/{student_id}/removal/preview",
+    response_model=StudentRemovalPreview,
+    summary="Preview the retained data and schedule effects of removing a student",
+)
+async def preview_teacher_student_removal(
+    session: SessionDep,
+    current_user: CurrentUser,
+    student_id: uuid.UUID,
+) -> StudentRemovalPreview:
+    return await removal_service.preview_student_removal(
+        session, current_user, student_id
+    )
+
+
+@router.post(
+    "/teacher/students/{student_id}/removal/confirm",
+    response_model=StudentRemovalResult,
+    summary="Confirm a fresh student-removal preview",
+)
+async def confirm_teacher_student_removal(
+    session: SessionDep,
+    current_user: CurrentUser,
+    student_id: uuid.UUID,
+    data: StudentRemovalConfirm,
+    config: HomeworkSettings,
+) -> StudentRemovalResult:
+    return await removal_service.confirm_student_removal(
+        session, current_user, student_id, data, config
     )
 
 

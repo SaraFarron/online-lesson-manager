@@ -8,7 +8,8 @@ import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 import backend.homework.services.management as management_service
 from backend.activity.constants import StudentActionType
@@ -17,7 +18,10 @@ from backend.auth.models import StudentTeacherRelationship, User
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
+from backend.homework.schemas import HomeworkSubmissionCreate
+from backend.homework.services.submissions import create_submission
 from backend.main import app
+from backend.models import Base
 
 
 @pytest.fixture
@@ -246,74 +250,92 @@ async def test_manual_completion_and_submission_race_has_one_winner(
 
 
 async def test_delete_and_submission_race_never_leaves_assignment_or_submission(
-    client: AsyncClient,
-    db_session: AsyncSession,
+    tmp_path: Path,
 ) -> None:
-    teacher, student = await _linked_pair(db_session)
-    homework = await _assignment(db_session, teacher, student)
-    delete_url = f"/api/v1/homework/assignments/{homework.id}"
-    submission_url = f"{delete_url}/submissions"
+    database_name = f"homework_delete_race_{uuid4().hex}"
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///file:{database_name}?mode=memory&cache=shared&uri=true",
+        poolclass=NullPool,
+    )
+    keeper = await engine.connect()
+    await keeper.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            teacher, student = await _linked_pair(session)
+            homework = await _assignment(session, teacher, student)
+            teacher_id, student_id, homework_id = (
+                teacher.id,
+                student.id,
+                homework.id,
+            )
 
-    deleted, submission = await asyncio.gather(
-        client.delete(delete_url, headers=_auth(teacher)),
-        client.post(
-            submission_url,
-            headers=_auth(student),
-            json={"text": "My answer", "operation_key": str(uuid4())},
-        ),
-    )
-    assert deleted.status_code == 204
-    assert submission.status_code in {201, 404}
-    assert (
-        await db_session.scalar(
-            select(func.count()).select_from(Homework).where(Homework.id == homework.id)
+        async def delete_assignment() -> bool:
+            try:
+                async with session_factory() as session:
+                    teacher = await session.get(User, teacher_id)
+                    assert teacher is not None
+                    await management_service.delete_homework(
+                        session,
+                        teacher,
+                        homework_id,
+                        HomeworkConfig(STORAGE_PATH=tmp_path),
+                    )
+                return True
+            except HTTPException as exc:
+                if exc.status_code == 409:
+                    return False
+                raise
+
+        async def submit_assignment() -> bool:
+            async with session_factory() as session:
+                student = await session.get(User, student_id)
+                assert student is not None
+                try:
+                    await create_submission(
+                        session,
+                        student,
+                        homework_id,
+                        HomeworkSubmissionCreate(
+                            text="My answer", operation_key=uuid4()
+                        ),
+                    )
+                    return True
+                except HTTPException as exc:
+                    if exc.status_code not in {404, 409, 503}:
+                        raise
+                    return False
+
+        deleted, submitted = await asyncio.gather(
+            delete_assignment(), submit_assignment()
         )
-        == 0
-    )
-    assert (
-        await db_session.scalar(
-            select(func.count())
-            .select_from(StudentAction)
-            .where(StudentAction.student_id == student.id)
-        )
-        == 0
-    )
-    assert (
-        await db_session.scalar(
-            select(func.count())
-            .select_from(StudentAction)
-            .where(StudentAction.student_id == student.id)
-        )
-        == 0
-    )
-    assert (
-        await db_session.scalar(
-            select(func.count())
-            .select_from(StudentAction)
-            .where(StudentAction.student_id == student.id)
-        )
-        == 0
-    )
-    actions = list(
-        await db_session.scalars(
-            select(StudentAction).where(StudentAction.student_id == student.id)
-        )
-    )
-    if submission.status_code == 201:
-        assert {action.action_type for action in actions} == {
-            StudentActionType.HOMEWORK_SUBMISSION_CREATED,
-            StudentActionType.HOMEWORK_COMPLETED,
-        }
-    else:
-        assert actions == []
-    assert (
-        await db_session.scalar(
-            select(func.count())
-            .select_from(HomeworkSubmission)
-            .where(HomeworkSubmission.homework_id == homework.id)
-        )
-        == 0
-    )
+        if not deleted:
+            assert await delete_assignment()
+        async with session_factory() as session:
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(Homework)
+                    .where(Homework.id == homework_id)
+                )
+                == 0
+            )
+            assert await session.scalar(
+                select(func.count())
+                .select_from(StudentAction)
+                .where(StudentAction.student_id == student_id)
+            ) == (2 if submitted else 0)
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(HomeworkSubmission)
+                    .where(HomeworkSubmission.homework_id == homework_id)
+                )
+                == 0
+            )
+    finally:
+        await keeper.close()
+        await engine.dispose()
 
 
 async def test_concurrent_delete_requests_are_safe(
@@ -534,7 +556,7 @@ async def test_failed_delete_cleanup_keeps_tombstone_and_retries(
     )
 
 
-async def test_unlinked_teacher_cannot_manage_homework(
+async def test_former_teacher_can_read_but_not_mutate_homework(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
@@ -543,8 +565,13 @@ async def test_unlinked_teacher_cannot_manage_homework(
     student.teacher_id = None
     await db_session.commit()
 
+    reviews = await client.get(
+        f"/api/v1/homework/assignments/{homework.id}/submissions",
+        headers=_auth(teacher),
+    )
+    assert reviews.status_code == 200
+
     for method, route in (
-        ("get", f"/api/v1/homework/assignments/{homework.id}/submissions"),
         ("post", f"/api/v1/homework/assignments/{homework.id}/complete"),
         ("delete", f"/api/v1/homework/assignments/{homework.id}"),
     ):

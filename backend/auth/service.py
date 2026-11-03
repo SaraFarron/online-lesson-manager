@@ -23,6 +23,7 @@ from backend.auth.constants import (
     Roles,
 )
 from backend.auth.exceptions import (
+    InactiveUser,
     NotAStudent,
     StudentAlreadyLinked,
     TeacherCodeAlreadyExists,
@@ -85,6 +86,7 @@ async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User | No
             selectinload(User.student_profile),
             selectinload(User.teacher_profile),
         )
+        .execution_options(populate_existing=True)
     )
     return result.scalar_one_or_none()
 
@@ -97,6 +99,16 @@ async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
 async def link_student_to_teacher(
     session: AsyncSession, student: User, teacher_code: str
 ) -> User:
+    result = await session.execute(
+        select(User)
+        .where(User.id == student.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    locked_student = result.scalar_one_or_none()
+    if locked_student is None or not locked_student.is_active:
+        raise InactiveUser()
+    student = locked_student
     if student.role != Roles.STUDENT:
         raise NotAStudent()
     if student.teacher_id is not None:

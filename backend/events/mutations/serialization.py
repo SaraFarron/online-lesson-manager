@@ -22,24 +22,28 @@ async def run_serialized_schedule_mutation[ResultT](
     try:
         await _acquire_teacher_schedule_guard(session, teacher_id, dialect_name)
     except OperationalError as exc:
-        await session.rollback()
+        if session.in_transaction():
+            await session.rollback()
         if _is_sqlite_contention(exc, dialect_name):
             raise Conflict("Schedule is being changed; retry this request.") from exc
         raise
     except BaseException:
-        await session.rollback()
+        if session.in_transaction():
+            await session.rollback()
         raise
 
     try:
         return await operation()
     except Conflict, ValidationError:
         if rollback_domain_errors:
-            await session.rollback()
+            if session.in_transaction():
+                await session.rollback()
         else:
             await session.commit()
         raise
     except BaseException:
-        await session.rollback()
+        if session.in_transaction():
+            await session.rollback()
         raise
 
 

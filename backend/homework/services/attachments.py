@@ -22,7 +22,7 @@ from starlette.datastructures import UploadFile
 from starlette.requests import ClientDisconnect
 
 from backend.auth.constants import Roles
-from backend.auth.models import User
+from backend.auth.models import StudentTeacherRelationship, User
 from backend.homework.config import HomeworkConfig
 from backend.homework.constants import (
     ATTACHMENT_TRANSFER_TIMEOUT_SECONDS,
@@ -183,6 +183,60 @@ def _attachment_expired(attachment: HomeworkAttachment) -> bool:
     ) <= datetime.now(UTC)
 
 
+async def _lock_active_attachment_owner(session: AsyncSession, owner: User) -> User:
+    locked_owner = await session.scalar(
+        select(User)
+        .where(
+            User.id == owner.id,
+            User.is_active.is_(True),
+            User.role == owner.role,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_owner is None:
+        raise HTTPException(status_code=404, detail="Attachment owner not found")
+    if locked_owner.role == Roles.STUDENT and locked_owner.teacher_id is None:
+        raise HTTPException(
+            status_code=409, detail="Student must be linked to a teacher to upload"
+        )
+    return locked_owner
+
+
+async def _load_existing_stage(
+    session: AsyncSession,
+    owner: User,
+    operation_key: uuid.UUID,
+) -> HomeworkAttachment | None:
+    result = await session.execute(
+        select(HomeworkAttachment)
+        .where(HomeworkAttachment.id == operation_key)
+        .execution_options(populate_existing=True)
+    )
+    existing = result.scalar_one_or_none()
+    if existing is None:
+        return None
+    if existing.owner_user_id != owner.id:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    await _lock_active_attachment_owner(session, owner)
+    result = await session.execute(
+        select(HomeworkAttachment)
+        .where(HomeworkAttachment.id == operation_key)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    existing = result.scalar_one_or_none()
+    if existing is None or existing.owner_user_id != owner.id:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    if existing.cleanup_pending or existing.homework_id is not None:
+        raise HTTPException(
+            status_code=409, detail="Attachment operation is already finalized"
+        )
+    if _attachment_expired(existing):
+        raise HTTPException(status_code=410, detail="Staged attachment has expired")
+    return existing
+
+
 async def stage_attachment(
     session: AsyncSession,
     owner: User,
@@ -190,16 +244,9 @@ async def stage_attachment(
     operation_key: uuid.UUID,
     config: HomeworkConfig,
 ) -> HomeworkAttachment:
-    existing = await session.get(HomeworkAttachment, operation_key)
+    existing = await _load_existing_stage(session, owner, operation_key)
     if existing is not None:
-        if existing.owner_user_id != owner.id:
-            raise HTTPException(status_code=404, detail="Attachment not found")
-        if existing.cleanup_pending or existing.homework_id is not None:
-            raise HTTPException(
-                status_code=409, detail="Attachment operation is already finalized"
-            )
-        if _attachment_expired(existing):
-            raise HTTPException(status_code=410, detail="Staged attachment has expired")
+        await session.commit()
         return existing
 
     root = await _available_storage_root(config)
@@ -244,20 +291,49 @@ async def stage_attachment(
                 status_code=503, detail="Homework storage is unavailable"
             ) from exc
 
-        attachment = HomeworkAttachment(
-            id=operation_key,
-            owner_user_id=owner.id,
-            storage_key=storage_key,
-            file_name=sanitize_filename(upload.filename),
-            byte_size=byte_size,
-            staged_until=datetime.now(UTC) + STAGED_ATTACHMENT_TTL,
-        )
-        session.add(attachment)
         try:
+            await _lock_active_attachment_owner(session, owner)
+            result = await session.execute(
+                select(HomeworkAttachment)
+                .where(HomeworkAttachment.id == operation_key)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            existing = result.scalar_one_or_none()
+            if existing is not None:
+                await session.commit()
+                if not await _remove_paths((final_path,)):
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Attachment upload could not be reconciled",
+                    )
+                if existing.owner_user_id != owner.id:
+                    raise HTTPException(status_code=404, detail="Attachment not found")
+                if existing.cleanup_pending or existing.homework_id is not None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Attachment operation is already finalized",
+                    )
+                return existing
+
+            attachment = HomeworkAttachment(
+                id=operation_key,
+                owner_user_id=owner.id,
+                storage_key=storage_key,
+                file_name=sanitize_filename(upload.filename),
+                byte_size=byte_size,
+                staged_until=datetime.now(UTC) + STAGED_ATTACHMENT_TTL,
+            )
+            session.add(attachment)
             await session.commit()
         except IntegrityError as exc:
             await session.rollback()
-            existing = await session.get(HomeworkAttachment, operation_key)
+            result = await session.execute(
+                select(HomeworkAttachment)
+                .where(HomeworkAttachment.id == operation_key)
+                .execution_options(populate_existing=True)
+            )
+            existing = result.scalar_one_or_none()
             if not await _remove_paths((final_path,)):
                 raise HTTPException(
                     status_code=503,
@@ -274,11 +350,25 @@ async def stage_attachment(
             ) from exc
         except SQLAlchemyError as exc:
             await session.rollback()
+            if not await _remove_paths((final_path,)):
+                raise HTTPException(
+                    status_code=503,
+                    detail="Attachment upload could not be reconciled",
+                ) from exc
             logger.exception("Unable to persist homework attachment metadata")
             raise HTTPException(
                 status_code=503,
                 detail="Attachment upload outcome is unknown; retry with the same key",
             ) from exc
+        except BaseException:
+            await session.rollback()
+            if not await _remove_paths((final_path,)):
+                logger.exception("Unable to remove a rejected homework upload")
+                raise HTTPException(
+                    status_code=503,
+                    detail="Rejected attachment upload could not be cleaned up",
+                )
+            raise
         return attachment
     finally:
         if not await _remove_paths((lock_path,)):
@@ -332,17 +422,33 @@ async def cancel_staged_attachment(
     attachment_id: uuid.UUID,
     config: HomeworkConfig,
 ) -> None:
-    attachment = await session.get(HomeworkAttachment, attachment_id)
-    if attachment is None or attachment.owner_user_id != owner.id:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-    if attachment.cleanup_pending or attachment.homework_id is not None:
-        if attachment.cleanup_pending and attachment.homework_id is None:
-            await _purge_staged_attachment(
-                session, attachment, await _available_storage_root(config)
-            )
-            return
-        raise HTTPException(status_code=409, detail="Attachment is already assigned")
+    await cleanup_staged_attachment(session, owner.id, attachment_id, config)
 
+
+async def cleanup_staged_attachment(
+    session: AsyncSession,
+    owner_user_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    config: HomeworkConfig,
+) -> None:
+    owner = await session.scalar(
+        select(User)
+        .where(User.id == owner_user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if owner is None:
+        raise HTTPException(status_code=404, detail="Attachment owner not found")
+    attachment = await session.scalar(
+        select(HomeworkAttachment)
+        .where(HomeworkAttachment.id == attachment_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if attachment is None or attachment.owner_user_id != owner_user_id:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    if attachment.homework_id is not None or attachment.submission_id is not None:
+        raise HTTPException(status_code=409, detail="Attachment is already assigned")
     await _purge_staged_attachment(
         session, attachment, await _available_storage_root(config)
     )
@@ -376,14 +482,27 @@ async def open_attachment_download(
             raise HTTPException(status_code=404, detail="Attachment not found")
         student = await session.get(User, homework.student_id)
         teacher = await session.get(User, homework.teacher_id)
+        retained_relationship = await session.scalar(
+            select(StudentTeacherRelationship.id).where(
+                StudentTeacherRelationship.teacher_id == homework.teacher_id,
+                StudentTeacherRelationship.student_id == homework.student_id,
+            )
+        )
+        active_relationship = await session.scalar(
+            select(User.id).where(
+                User.id == homework.student_id,
+                User.role == Roles.STUDENT,
+                User.is_active.is_(True),
+                User.teacher_id == homework.teacher_id,
+            )
+        )
         if (
             student is None
             or student.role != Roles.STUDENT
-            or not student.is_active
-            or student.teacher_id != homework.teacher_id
             or teacher is None
             or teacher.role != Roles.TEACHER
             or not teacher.is_active
+            or (retained_relationship is None and active_relationship is None)
         ):
             raise HTTPException(status_code=404, detail="Attachment not found")
         expected_owner = (

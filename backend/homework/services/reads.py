@@ -1,12 +1,12 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import ScalarSelect
 
 from backend.auth.constants import Roles
-from backend.auth.models import User
+from backend.auth.models import StudentTeacherRelationship, User
 from backend.events.time_utils import normalize_utc
 from backend.exceptions import Forbidden, NotFound, ValidationError
 from backend.homework.models import Homework, HomeworkAttachment
@@ -50,13 +50,20 @@ def _stored_lesson_reference(homework: Homework) -> LessonOccurrenceReference | 
 
 
 async def _visibility_filters(
-    session: AsyncSession,
-    viewer: User,
+    session: AsyncSession, viewer: User
 ) -> list[ColumnElement[bool]]:
     filters: list[ColumnElement[bool]] = [
         Homework.deleted_at.is_(None),
         Homework.cleanup_pending.is_(False),
     ]
+    retained_student_relationship = (
+        select(StudentTeacherRelationship.id)
+        .where(
+            StudentTeacherRelationship.student_id == Homework.student_id,
+            StudentTeacherRelationship.teacher_id == Homework.teacher_id,
+        )
+        .exists()
+    )
     active_student_relationship = (
         select(User.id)
         .where(
@@ -67,30 +74,32 @@ async def _visibility_filters(
         )
         .exists()
     )
-    filters.append(active_student_relationship)
+    filters.append(or_(retained_student_relationship, active_student_relationship))
 
     if viewer.role == Roles.TEACHER:
         filters.append(Homework.teacher_id == viewer.id)
         return filters
 
     if viewer.role == Roles.STUDENT:
-        if viewer.teacher_id is None:
-            raise Forbidden("Student must have an active teacher link to read homework")
-        active_teacher = await session.scalar(
-            select(User.id).where(
-                User.id == viewer.teacher_id,
-                User.role == Roles.TEACHER,
-                User.is_active.is_(True),
-            )
+        has_historical_relationship = await session.scalar(
+            select(StudentTeacherRelationship.id)
+            .where(StudentTeacherRelationship.student_id == viewer.id)
+            .limit(1)
         )
-        if active_teacher is None:
-            raise Forbidden("Student must have an active teacher link to read homework")
-        filters.extend(
-            (
-                Homework.student_id == viewer.id,
-                Homework.teacher_id == viewer.teacher_id,
+        has_active_teacher = (
+            viewer.teacher_id is not None
+            and await session.scalar(
+                select(User.id).where(
+                    User.id == viewer.teacher_id,
+                    User.role == Roles.TEACHER,
+                    User.is_active.is_(True),
+                )
             )
+            is not None
         )
+        if has_historical_relationship is None and not has_active_teacher:
+            raise Forbidden("Student must have a current or historical teacher link")
+        filters.append(Homework.student_id == viewer.id)
         return filters
 
     raise Forbidden("Only teachers and students can read homework")

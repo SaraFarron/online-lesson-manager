@@ -52,6 +52,7 @@ async def test_invalid_staged_attachment_states_are_preserved(
     )
     db_session.add(homework)
     await db_session.commit()
+    homework_id = homework.id
 
     owner = teacher if operation == "assignment" else student
     attachment_id = uuid4()
@@ -97,7 +98,7 @@ async def test_invalid_staged_attachment_states_are_preserved(
             await create_submission(
                 db_session,
                 student,
-                homework.id,
+                homework_id,
                 HomeworkSubmissionCreate(
                     text="New submission",
                     attachment_ids=[attachment_id],
@@ -114,7 +115,7 @@ async def test_invalid_staged_attachment_states_are_preserved(
     if attachment is not None:
         await db_session.refresh(attachment)
         assert attachment.homework_id == (
-            homework.id if attachment_state == "claimed" else None
+            homework_id if attachment_state == "claimed" else None
         )
 
 

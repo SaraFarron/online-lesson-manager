@@ -83,6 +83,8 @@ async def _create_recurrent_event(
     teacher = await get_user_by_id(session, teacher_id)
     if teacher is None:
         raise ValidationError(f"Teacher with ID {teacher_id} does not exist")
+    if actor is not None:
+        await assert_can_assign_user(session, actor, event_data.user_id)
 
     teacher_profile = None
     teacher_timezone = None

@@ -38,6 +38,15 @@ async def assert_can_assign_user(
             return
         raise Forbidden("User does not belong to this teacher")
     if actor.role == Roles.STUDENT:
+        current_actor = await get_user_by_id(session, actor.id)
+        if (
+            current_actor is None
+            or not current_actor.is_active
+            or current_actor.role != Roles.STUDENT
+            or current_actor.teacher_id is None
+            or current_actor.teacher_id != actor.teacher_id
+        ):
+            raise Forbidden("Student must remain linked to the schedule teacher")
         if user_id == actor.id:
             return
         raise Forbidden("Students can only manage their own events")

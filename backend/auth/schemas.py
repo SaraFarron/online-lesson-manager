@@ -200,6 +200,39 @@ class StudentJoinTeacher(BaseModel):
     teacher_code: TeacherCode
 
 
+class StudentRemovalConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preview_token: str = Field(min_length=1, max_length=1024)
+    operation_key: uuid.UUID
+
+
+class StudentRemovalImpact(BaseModel):
+    one_off_lessons_to_delete: int
+    recurring_series_to_truncate: int
+    recurring_series_to_delete: int
+    future_cancellations_to_delete: int
+    staged_uploads_to_revoke: int
+    notifications_to_suppress: int
+
+
+class StudentRemovalPreview(BaseModel):
+    student_id: uuid.UUID
+    relationship_id: uuid.UUID
+    impact: StudentRemovalImpact
+    confirmation_token: str
+    expires_at: datetime
+
+
+class StudentRemovalResult(BaseModel):
+    student_id: uuid.UUID
+    relationship_id: uuid.UUID
+    operation_key: uuid.UUID
+    removed_at: datetime
+    impact: StudentRemovalImpact
+    cleanup_complete: bool = True
+
+
 class StudentProfileCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     notification_lesson: LessonReminder | None = 15

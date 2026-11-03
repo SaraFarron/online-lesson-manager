@@ -151,6 +151,7 @@ async def _load_occurrence_action(
     ):
         raise ValidationError("Recurring lesson not found")
     assert_owns_event(actor, recurrent_event)
+    await assert_can_assign_user(session, actor, recurrent_event.user_id)
 
     cancellations = list(
         (

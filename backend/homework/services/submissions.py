@@ -12,6 +12,9 @@ from backend.activity import service as activity_service
 from backend.activity.constants import StudentActionType
 from backend.auth.constants import Roles
 from backend.auth.models import User
+from backend.events.mutations.serialization import (
+    run_serialized_schedule_mutation,
+)
 from backend.exceptions import Conflict, Forbidden, NotFound
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
 from backend.homework.schemas import (
@@ -92,6 +95,34 @@ async def create_submission(
 ) -> HomeworkSubmissionCreated:
     if student.role != Roles.STUDENT:
         raise Forbidden("Only students can submit homework")
+    teacher_id = await session.scalar(
+        select(Homework.teacher_id).where(
+            Homework.id == homework_id,
+            Homework.student_id == student.id,
+            Homework.deleted_at.is_(None),
+            Homework.cleanup_pending.is_(False),
+        )
+    )
+    if teacher_id is None:
+        raise NotFound("Homework not found")
+    return await run_serialized_schedule_mutation(
+        session,
+        teacher_id,
+        lambda: _create_submission_in_transaction(
+            session, student, homework_id, payload
+        ),
+        rollback_domain_errors=True,
+    )
+
+
+async def _create_submission_in_transaction(
+    session: AsyncSession,
+    student: User,
+    homework_id: uuid.UUID,
+    payload: HomeworkSubmissionCreate,
+) -> HomeworkSubmissionCreated:
+    if student.role != Roles.STUDENT:
+        raise Forbidden("Only students can submit homework")
 
     active_student = await session.scalar(
         select(User)
@@ -100,6 +131,7 @@ async def create_submission(
             User.role == Roles.STUDENT,
             User.is_active.is_(True),
         )
+        .execution_options(populate_existing=True)
         .with_for_update()
     )
     if active_student is None:

@@ -186,9 +186,11 @@ Define ten-action scope: proposed scheduling creates/moves/cancels/deletes, home
 
 **Reuse:** Existing authorization, event service guard, homework deletion/cleanup and notification recipient revalidation.
 
-**Acceptance Criteria:** [ ] Preview/Cancel change nothing. [ ] Confirm affects only the approved student/scope, works on both DBs and preserves unrelated lessons/files. [ ] Concurrent booking/submission/rejoin and unknown-response retries cannot bypass removal or repeat destruction.
+**Acceptance Criteria:** [x] Preview/Cancel change nothing. [x] Confirm affects only the approved student/scope, works on both DBs and preserves unrelated lessons/files. [x] Concurrent booking/submission/rejoin and unknown-response retries cannot bypass removal or repeat destruction.
 
 **Out of scope:** Calling admin user deletion as a shortcut. **Suitable for:** AI agent after explicit owner approval.
+
+**Execution (2026-11-04):** Added signed, expiring impact previews, fresh-state fingerprint checks, idempotent confirmation records, transactional event/relationship/notification changes, and recoverable staged-file cleanup. Schedule booking, assignment creation/deletion, and student submission now share the per-teacher mutation guard with removal; active users and relationships are refreshed inside the guard. Former teachers retain authorized historical reads while writes remain active-link-only. Verified exact retention, stale previews, retry/rejoin behavior, and booking/submission races on isolated SQLite and PostgreSQL databases; 64 focused cross-domain tests passed. Alembic upgrade/downgrade/upgrade round-trips passed on both databases. The full suite passed (582 passed, 14 skipped); Ruff check/format and backend mypy passed.
 
 ## Task 07: Wire Telegram student profile and removal screens
 

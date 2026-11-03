@@ -12,6 +12,9 @@ from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.constants import EventType
 from backend.events import range_service as event_range_service
+from backend.events.mutations.serialization import (
+    run_serialized_schedule_mutation,
+)
 from backend.events.occurrences import OccurrenceSourceKind
 from backend.events.time_utils import normalize_utc, to_storage_utc
 from backend.exceptions import Conflict, Forbidden, NotFound, ValidationError
@@ -155,6 +158,24 @@ async def create_assignment(
 ) -> HomeworkCreated:
     if teacher.role != Roles.TEACHER:
         raise Forbidden("Only teachers can create homework assignments")
+    return await run_serialized_schedule_mutation(
+        session,
+        teacher.id,
+        lambda: _create_assignment_in_transaction(
+            session, teacher, payload, operation_key
+        ),
+        rollback_domain_errors=True,
+    )
+
+
+async def _create_assignment_in_transaction(
+    session: AsyncSession,
+    teacher: User,
+    payload: HomeworkCreate,
+    operation_key: uuid.UUID,
+) -> HomeworkCreated:
+    if teacher.role != Roles.TEACHER:
+        raise Forbidden("Only teachers can create homework assignments")
     teacher_id = teacher.id
 
     student = await session.scalar(
@@ -165,6 +186,7 @@ async def create_assignment(
             User.is_active.is_(True),
             User.teacher_id == teacher_id,
         )
+        .execution_options(populate_existing=True)
         .with_for_update()
         .options(selectinload(User.student_profile))
     )

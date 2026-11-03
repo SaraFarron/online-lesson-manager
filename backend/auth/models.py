@@ -9,9 +9,11 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
+    Text,
     Time,
     UniqueConstraint,
     Uuid,
@@ -196,4 +198,49 @@ class StudentTeacherRelationship(Base, TimestampMixin):
     )
     removed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class StudentRemovalOperation(Base, TimestampMixin):
+    __tablename__ = "student_removal_operation"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["relationship_id", "teacher_id", "student_id"],
+            [
+                "student_teacher_relationship.id",
+                "student_teacher_relationship.teacher_id",
+                "student_teacher_relationship.student_id",
+            ],
+            name="student_removal_operation_relationship_scope_fkey",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "teacher_id",
+            "operation_key",
+            name="student_removal_operation_teacher_operation_key_key",
+        ),
+        UniqueConstraint(
+            "confirmation_token",
+            name="student_removal_operation_confirmation_token_key",
+        ),
+        Index(
+            "ix_student_removal_operation_teacher_id_student_id_created_at",
+            "teacher_id",
+            "student_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    relationship_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True))
+    teacher_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    operation_key: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    confirmation_token: Mapped[str] = mapped_column(Text, nullable=False)
+    impact: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
+    staged_attachment_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    removed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )

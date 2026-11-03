@@ -63,6 +63,8 @@ async def create_event_in_transaction(
     post_break_minutes: int | None = None,
     actor: User | None = None,
 ) -> Event:
+    if actor is not None:
+        await assert_can_assign_user(session, actor, event_data.user_id)
     teacher_profile = None
     teacher_timezone = None
     saved_post_break_minutes = 0
@@ -250,6 +252,7 @@ async def _delete_event(
             raise ValidationError("Event not found")
         if actor is not None:
             assert_owns_event(actor, fresh_recurrent)
+            await assert_can_assign_user(session, actor, fresh_recurrent.user_id)
         cancellations = list(
             (
                 await session.scalars(
@@ -286,6 +289,7 @@ async def _delete_event(
             raise ValidationError("Event not found")
         if actor is not None:
             assert_owns_event(actor, fresh_one_off)
+            await assert_can_assign_user(session, actor, fresh_one_off.user_id)
         if expected_revision is not None:
             _assert_expected_revision(
                 expected_revision, build_event_revision(fresh_one_off, ())

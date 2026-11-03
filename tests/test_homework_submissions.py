@@ -574,7 +574,7 @@ async def test_failed_finalization_preserves_staged_files_and_unknown_ack_reconc
 
     monkeypatch.setattr(db_session, "commit", fail_commit)
     with pytest.raises(HTTPException) as raised:
-        await create_submission(db_session, student, homework.id, payload)
+        await create_submission(db_session, student, homework_id, payload)
     assert raised.value.status_code == 503
     assert (
         await db_session.scalar(select(func.count()).select_from(NotificationIntent))
@@ -589,7 +589,7 @@ async def test_failed_finalization_preserves_staged_files_and_unknown_ack_reconc
     assert unchanged is not None
     assert unchanged.submission_id is None
     assert unchanged.staged_until is not None
-    incomplete = await db_session.get(Homework, homework.id)
+    incomplete = await db_session.get(Homework, homework_id)
     assert incomplete is not None
     assert incomplete.status == "INCOMPLETE"
 

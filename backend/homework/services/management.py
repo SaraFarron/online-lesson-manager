@@ -3,13 +3,17 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import Exists
 
 from backend.auth.constants import Roles
-from backend.auth.models import User
+from backend.auth.models import StudentTeacherRelationship, User
+from backend.events.mutations.serialization import (
+    run_serialized_schedule_mutation,
+)
 from backend.exceptions import Conflict, Forbidden, NotFound
 from backend.homework.config import HomeworkConfig
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
@@ -39,12 +43,25 @@ def _active_student_relationship() -> Exists:
     )
 
 
+def _retained_student_relationship() -> ColumnElement[bool]:
+    retained_relationship = (
+        select(StudentTeacherRelationship.id)
+        .where(
+            StudentTeacherRelationship.student_id == Homework.student_id,
+            StudentTeacherRelationship.teacher_id == Homework.teacher_id,
+        )
+        .exists()
+    )
+    return or_(retained_relationship, _active_student_relationship())
+
+
 async def _active_teacher_homework(
     session: AsyncSession,
     teacher: User,
     homework_id: uuid.UUID,
     *,
     lock: bool = False,
+    require_active_student: bool = True,
 ) -> Homework:
     if teacher.role != Roles.TEACHER:
         raise Forbidden("Only teachers can manage homework")
@@ -53,7 +70,11 @@ async def _active_teacher_homework(
         Homework.teacher_id == teacher.id,
         Homework.deleted_at.is_(None),
         Homework.cleanup_pending.is_(False),
-        _active_student_relationship(),
+        (
+            _active_student_relationship()
+            if require_active_student
+            else _retained_student_relationship()
+        ),
     )
     if lock:
         statement = statement.with_for_update()
@@ -85,7 +106,9 @@ async def list_submission_reviews(
     skip: int,
     limit: int,
 ) -> HomeworkSubmissionPage:
-    homework = await _active_teacher_homework(session, teacher, homework_id)
+    homework = await _active_teacher_homework(
+        session, teacher, homework_id, require_active_student=False
+    )
     total = await session.scalar(
         select(func.count(HomeworkSubmission.id)).where(
             HomeworkSubmission.homework_id == homework.id
@@ -250,34 +273,45 @@ async def delete_homework(
 ) -> None:
     if teacher.role != Roles.TEACHER:
         raise Forbidden("Only teachers can delete homework")
-    assignment = await session.scalar(
-        select(Homework)
-        .where(
+    assignment_teacher_id = await session.scalar(
+        select(Homework.teacher_id).where(
             Homework.id == homework_id,
             Homework.teacher_id == teacher.id,
         )
-        .with_for_update()
     )
-    if assignment is None:
+    if assignment_teacher_id is None:
         raise NotFound("Homework not found")
 
-    if assignment.deleted_at is None or not assignment.cleanup_pending:
-        if assignment.deleted_at is None:
-            if not await _active_student_link_exists(session, assignment):
-                raise NotFound("Homework not found")
-            assignment.deleted_at = datetime.now(UTC)
-        assignment.cleanup_pending = True
-        attachments = list(
-            (
-                await session.scalars(
-                    select(HomeworkAttachment)
-                    .where(HomeworkAttachment.homework_id == homework_id)
-                    .with_for_update()
-                )
-            ).all()
+    async def mark_for_deletion() -> None:
+        assignment = await session.scalar(
+            select(Homework)
+            .where(
+                Homework.id == homework_id,
+                Homework.teacher_id == teacher.id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
-        for attachment in attachments:
-            attachment.cleanup_pending = True
+        if assignment is None:
+            raise NotFound("Homework not found")
+
+        if assignment.deleted_at is None or not assignment.cleanup_pending:
+            if assignment.deleted_at is None:
+                if not await _active_student_link_exists(session, assignment):
+                    raise NotFound("Homework not found")
+                assignment.deleted_at = datetime.now(UTC)
+            assignment.cleanup_pending = True
+            attachments = list(
+                (
+                    await session.scalars(
+                        select(HomeworkAttachment)
+                        .where(HomeworkAttachment.homework_id == homework_id)
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            for attachment in attachments:
+                attachment.cleanup_pending = True
         try:
             await session.commit()
         except SQLAlchemyError as exc:
@@ -298,6 +332,13 @@ async def delete_homework(
                     status_code=503,
                     detail="Homework could not be hidden; retry deletion",
                 ) from exc
+
+    await run_serialized_schedule_mutation(
+        session,
+        assignment_teacher_id,
+        mark_for_deletion,
+        rollback_domain_errors=True,
+    )
 
     try:
         tombstone = await _load_cleanup_tombstone(
