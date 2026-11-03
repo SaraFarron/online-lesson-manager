@@ -148,12 +148,13 @@ async def test_schedule_outage_offers_navigation_recovery_without_stale_rows(
             await driver.click("This week")
             error_text = driver.session.last_message.text
             assert error_text.startswith(
-                "<b>❌ Error</b>\nSchedule is unavailable right now.\n\n"
+                "<b>❌ Error</b>\nThis schedule range is unavailable; "
+                "no eligible cached copy is available.\n\n"
             )
             assert len(error_text.encode("utf-16-le")) // 2 <= 4096
-            assert "Schedule is unavailable" in error_text
+            assert "no eligible cached copy is available" in error_text
             assert "No events" not in error_text
-            assert "return home and reopen" in error_text
+            assert "return to the schedule menu" in error_text
             _assert_no_refresh(driver)
             assert driver.callback_data("Back to home")
 
@@ -169,18 +170,20 @@ async def test_schedule_outage_offers_navigation_recovery_without_stale_rows(
             await driver.click("◀ Previous week")
             error_text = driver.session.last_message.text
             assert error_text.startswith(
-                "<b>❌ Error</b>\nSchedule is unavailable right now.\n\n"
+                "<b>❌ Error</b>\nThis schedule range is unavailable; "
+                "no eligible cached copy is available.\n\n"
             )
             assert len(error_text.encode("utf-16-le")) // 2 <= 4096
-            assert "Schedule is unavailable" in error_text
+            assert "no eligible cached copy is available" in error_text
             assert "No events" not in error_text
-            assert "return home and reopen" in error_text
+            assert "return to the schedule menu" in error_text
             _assert_no_refresh(driver)
             assert driver.callback_data("Back to home")
 
             offline[0] = False
             await driver.click("Next week ▶")
             assert "This week's schedule" in driver.session.last_message.text
+            assert "OFFLINE — cached schedule" not in driver.session.last_message.text
             assert driver.session.last_message.text.count("No events") == 7
             await driver.click("Back to home")
             assert "TEACHER:" in driver.session.last_message.text
@@ -212,7 +215,7 @@ async def test_expired_token_recovers_and_inactive_account_gets_schedule_error(
         assert error_text.startswith("<b>❌ Error</b>\n")
         assert "cannot view a schedule" in error_text
         assert "No events" not in error_text
-        assert "return home and reopen" in error_text
+        assert "return to the schedule menu" in error_text
         _assert_no_refresh(driver)
         assert driver.callback_data("Back to home")
     finally:
@@ -525,10 +528,10 @@ async def test_invalid_schedule_output_has_home_and_period_recovery(
     invalid = [True]
     original_formatter = schedule_dialogs.format_schedule_pages
 
-    def maybe_invalid_formatter(*args):
+    def maybe_invalid_formatter(*args, **kwargs):
         if invalid[0]:
             raise ValueError("malformed")
-        return original_formatter(*args)
+        return original_formatter(*args, **kwargs)
 
     monkeypatch.setattr(
         schedule_dialogs, "format_schedule_pages", maybe_invalid_formatter
@@ -539,7 +542,7 @@ async def test_invalid_schedule_output_has_home_and_period_recovery(
         assert "schedule response could not be displayed" in (
             driver.session.last_message.text
         )
-        assert "return home and reopen" in driver.session.last_message.text
+        assert "return to the schedule menu" in driver.session.last_message.text
         _assert_no_refresh(driver)
         assert driver.callback_data("This week")
         assert driver.callback_data("Back to home")

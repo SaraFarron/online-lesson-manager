@@ -107,6 +107,60 @@ def test_week_includes_all_empty_days_and_snapshot_context() -> None:
     assert "Page " not in plain
 
 
+def test_cached_schedule_shows_local_snapshot_context_without_live_now() -> None:
+    response = _response(
+        [
+            ScheduleDay(
+                date=date(2026, 10, 19),
+                items=[
+                    _item(
+                        1,
+                        "2026-10-19T16:00:00+00:00",
+                        "2026-10-19T17:00:00+00:00",
+                        status="past",
+                    ),
+                    _item(
+                        2,
+                        "2026-10-19T19:00:00+00:00",
+                        "2026-10-19T20:00:00+00:00",
+                        status="ongoing",
+                    ),
+                    _item(
+                        3,
+                        "2026-10-19T21:00:00+00:00",
+                        "2026-10-19T22:00:00+00:00",
+                        status="upcoming",
+                    ),
+                ],
+            )
+        ],
+        timezone="America/Los_Angeles",
+        generated_at="2026-10-19T19:00:00+00:00",
+    )
+
+    teacher_text = _visible_text(
+        format_schedule_pages(response, "TEACHER", source="cached")[0]
+    )
+    student_text = _visible_text(
+        format_schedule_pages(response, "STUDENT", source="cached")[0]
+    )
+
+    for text in (teacher_text, student_text):
+        assert "OFFLINE — cached schedule" in text
+        assert "Schedule for Mon, Oct 19" in text
+        assert (
+            "Snapshot as of Mon, Oct 19 at 12:00 "
+            "(America/Los_Angeles); event statuses apply as of this time"
+        ) in text
+        assert "Today's schedule" not in text
+        assert "NOW" not in text
+        assert "[PAST]" in text
+        assert "[ONGOING]" in text
+        assert "⏳" in text
+    assert "Lesson — Student" in teacher_text
+    assert "Lesson — Student" not in student_text
+
+
 def test_automatic_break_schedule_items_require_parent_reference() -> None:
     item = ScheduleItem(
         source_kind="automatic_break",
@@ -369,6 +423,12 @@ def test_repeated_hour_times_include_fold_label_without_zone_offset() -> None:
     assert "1:30 (second occurrence)" in text
     assert "UTC-04:00" not in text
     assert "UTC-05:00" not in text
+    cached_text = _visible_text(
+        format_schedule_pages(response, "STUDENT", source="cached")[0]
+    )
+    assert "1:30 (first occurrence)" in cached_text
+    assert "1:30 (second occurrence)" in cached_text
+    assert "NOW" not in cached_text
 
 
 def test_cross_midnight_item_is_rendered_on_start_date_with_full_interval() -> None:
@@ -394,9 +454,14 @@ def test_cross_midnight_item_is_rendered_on_start_date_with_full_interval() -> N
     )
 
     text = _visible_text("\n".join(format_schedule_pages(response, "STUDENT")))
+    cached_text = _visible_text(
+        "\n".join(format_schedule_pages(response, "STUDENT", source="cached"))
+    )
 
     assert "Mon, Oct 19 23:30–Tue, Oct 20 1:30" in text
     assert text.count("Mon, Oct 19 23:30–Tue, Oct 20 1:30") == 1
+    assert "Mon, Oct 19 23:30–Tue, Oct 20 1:30" in cached_text
+    assert "NOW" not in cached_text
 
 
 def test_cross_midnight_interval_includes_year_at_year_boundary() -> None:
@@ -443,9 +508,25 @@ def test_oversized_week_paginates_complete_rows_with_safe_labels_and_budget() ->
 
     pages = format_schedule_pages(response, "TEACHER")
     visible_pages = [_visible_text(page) for page in pages]
+    cached_pages = format_schedule_pages(response, "TEACHER", source="cached")
+    cached_visible_pages = [_visible_text(page) for page in cached_pages]
 
     assert len(pages) > 1
     assert all(_utf16_length(page) <= MAX_MESSAGE_UTF16_UNITS for page in visible_pages)
+    assert len(cached_pages) > 1
+    assert all(
+        _utf16_length(page) <= MAX_MESSAGE_UTF16_UNITS for page in cached_visible_pages
+    )
+    assert all("OFFLINE — cached schedule" in page for page in cached_visible_pages)
+    assert (
+        sum(
+            line.count("Lesson — Student")
+            for page in cached_visible_pages
+            for line in page.splitlines()
+        )
+        == 160
+    )
+    assert all("NOW" not in page for page in cached_visible_pages)
     assert all(page.endswith("Timezone: UTC") for page in visible_pages)
     assert all("Page " not in page for page in visible_pages)
     assert (

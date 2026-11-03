@@ -4,7 +4,7 @@
 
 Previously authorized users can view bounded, clearly stale schedule snapshots during backend availability failures without enabling offline mutations or leaking another user's calendar.
 
-**Status:** Tasks 00–03 implemented and verified; Tasks 04–05 pending.
+**Status:** Tasks 00–04 implemented and verified; Task 05 pending.
 
 ## Scope (README.md sections covered)
 
@@ -145,7 +145,9 @@ Disable all mutation, homework and Settings actions in offline mode even when ol
 
 **Reuse:** Existing formatting/page-length bounds, period/week navigation and leading feedback.
 
-**Acceptance Criteria:** [ ] Both roles see correct stale labels/authorized rows, DST folds and cross-midnight dates. [ ] Long schedules retain all rows; no stale NOW marker presented as current. [ ] Reconnect refreshes the selected range and normal home.
+**Acceptance Criteria:** [x] Both roles see correct stale labels/authorized rows, DST folds and cross-midnight dates. [x] Long schedules retain all rows; no stale NOW marker presented as current. [x] Reconnect refreshes the selected range and normal home.
+
+**Execution (2026-11-03):** Cached schedules now carry an explicit offline label, exact date/week range, viewer-local snapshot time and status-as-of notice. Cached rendering omits NOW and uses absolute day labels; offline day lookup remains exact to the viewer's current local date, and previous/next week misses report that no eligible cached copy exists rather than substituting a range. Pagination retains all rows within the message budget. `uv run pytest -q tests/test_schedule_format.py tests/test_bot_schedule_dialogs.py tests/test_telegram_offline_entry.py tests/test_telegram_schedule_fallback.py tests/test_telegram_schedule_cache.py tests/test_bot_schedule_integration.py` passed (55 tests); `uv run ruff check telegram tests`, `uv run ruff format --check telegram tests`, and `uv run mypy telegram` passed.
 
 **Out of scope:** Arbitrary-date UI or background prefetch beyond approval. **Suitable for:** AI agent.
 

@@ -31,22 +31,50 @@ class _TextLine:
 
 
 def format_schedule_pages(
-    response: ScheduleResponse, role: ViewerRole
+    response: ScheduleResponse,
+    role: ViewerRole,
+    *,
+    source: Literal["live", "cached"] = "live",
 ) -> tuple[str, ...]:
     """Format a typed backend snapshot into complete, Telegram-safe HTML pages."""
     zone = ZoneInfo(response.timezone)
     current_date = response.generated_at.astimezone(zone).date()
     updated_at = response.generated_at.astimezone(zone)
     title = "Today's schedule" if response.period == "day" else "This week's schedule"
-    header_lines = (
-        _TextLine(f"<b>{title}</b>", title),
-        _TextLine(
-            f"Updated {escape(format_compact_schedule_date(current_date, reference_date=current_date))} "
-            f"at {escape(format_human_time(updated_at))}",
-            f"Updated {format_compact_schedule_date(current_date, reference_date=current_date)} "
-            f"at {format_human_time(updated_at)}",
-        ),
+    updated_date = format_compact_schedule_date(
+        current_date, reference_date=current_date
     )
+    updated_time = format_human_time(updated_at)
+    header_lines: tuple[_TextLine, ...]
+    if source == "cached":
+        range_start = format_compact_schedule_date(
+            response.days[0].date, reference_date=current_date
+        )
+        range_title = (
+            f"Schedule for {range_start}"
+            if response.period == "day"
+            else f"Week starting {range_start}"
+        )
+        snapshot_status = (
+            f"Snapshot as of {updated_date} at {updated_time} "
+            f"({escape(response.timezone)}); event statuses apply as of this time"
+        )
+        header_lines = (
+            _TextLine(
+                "<b>OFFLINE — cached schedule</b>",
+                "OFFLINE — cached schedule",
+            ),
+            _TextLine(f"<b>{escape(range_title)}</b>", range_title),
+            _TextLine(snapshot_status, snapshot_status),
+        )
+    else:
+        header_lines = (
+            _TextLine(f"<b>{title}</b>", title),
+            _TextLine(
+                f"Updated {updated_date} at {escape(updated_time)}",
+                f"Updated {updated_date} at {updated_time}",
+            ),
+        )
     header_markup = "\n".join(line.markup for line in header_lines)
     header_plain = "\n".join(line.plain for line in header_lines)
     empty_today = response.period == "day" and not any(
@@ -82,6 +110,7 @@ def format_schedule_pages(
                 current_date,
                 body_limit,
                 suppress_empty_today_now=empty_today,
+                show_now=source == "live",
             )
         )
     if not chunks:
@@ -102,6 +131,7 @@ def _day_chunks(
     body_limit: int,
     *,
     suppress_empty_today_now: bool,
+    show_now: bool,
 ) -> list[tuple[_TextLine, ...]]:
     heading = format_compact_schedule_date(day.date, reference_date=current_date)
     heading_line = _TextLine(f"<b>{heading}</b>", heading)
@@ -109,16 +139,21 @@ def _day_chunks(
 
     if not day.items:
         content = [_TextLine("No events", "No events")]
-        if is_current_day and not suppress_empty_today_now:
+        if is_current_day and show_now and not suppress_empty_today_now:
             content.append(_now_divider())
     elif is_current_day:
-        ended = [item for item in day.items if item.status == "past"]
-        not_ended = [item for item in day.items if item.status != "past"]
-        content = [_render_item(item, role, zone, current_date) for item in ended]
-        content.append(_now_divider())
-        content.extend(
-            _render_item(item, role, zone, current_date) for item in not_ended
-        )
+        content = [
+            _render_item(item, role, zone, current_date)
+            for item in day.items
+            if not show_now or item.status == "past"
+        ]
+        if show_now:
+            content.append(_now_divider())
+            content.extend(
+                _render_item(item, role, zone, current_date)
+                for item in day.items
+                if item.status != "past"
+            )
     else:
         content = [_render_item(item, role, zone, current_date) for item in day.items]
 

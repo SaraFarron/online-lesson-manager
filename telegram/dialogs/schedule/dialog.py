@@ -211,7 +211,7 @@ async def schedule_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
     else:
         schedule_text = feedback_block(error=state.error) + (
             "Use the available schedule-view buttons to switch views, "
-            "or return home and reopen the schedule."
+            "or return to the schedule menu."
         )
     return {
         "schedule_text": schedule_text,
@@ -249,7 +249,9 @@ async def _load_schedule(
             period,
             requested_date=requested_date,
         )
-        pages = format_schedule_pages(result.response, result.role)
+        pages = format_schedule_pages(
+            result.response, result.role, source=result.source
+        )
     except BackendContractError:
         return ScheduleDialogState(
             period=period,
@@ -269,7 +271,10 @@ async def _load_schedule(
             period=period,
             role=role,
             requested_date=requested_date if period == "week" else None,
-            error="Schedule is unavailable right now.",
+            error=(
+                "This schedule range is unavailable; "
+                "no eligible cached copy is available."
+            ),
         )
     except ValidationError, ValueError:
         return ScheduleDialogState(

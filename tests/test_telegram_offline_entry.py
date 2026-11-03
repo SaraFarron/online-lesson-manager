@@ -56,6 +56,8 @@ async def test_offline_start_is_schedule_only_and_requires_fresh_in_memory_ident
             ]
             await driver.click("Today")
             assert "Today's schedule" in driver.session.last_message.text
+            await driver.click("This week")
+            assert "This week's schedule" in driver.session.last_message.text
             await driver.click("Back to home")
             assert api.offline_schedule_identity(driver.user_id) is not None
 
@@ -76,13 +78,34 @@ async def test_offline_start_is_schedule_only_and_requires_fresh_in_memory_ident
             assert _button_labels(driver) == ["Today", "This week"]
 
             await driver.click("Today")
-            assert "Today's schedule" in driver.session.last_message.text
-            assert "Schedule is unavailable" not in driver.session.last_message.text
+            assert "OFFLINE — cached schedule" in driver.session.last_message.text
+            assert "Schedule for " in driver.session.last_message.text
+            assert "Today's schedule" not in driver.session.last_message.text
+            assert (
+                "no eligible cached copy is available"
+                not in driver.session.last_message.text
+            )
             await driver.click("Back to home")
             await driver.click("This week")
+            assert "OFFLINE — cached schedule" in driver.session.last_message.text
+            assert "This week's schedule" not in driver.session.last_message.text
+            await driver.click("◀ Previous week")
             assert (
-                "Schedule is unavailable right now." in driver.session.last_message.text
+                "no eligible cached copy is available"
+                in driver.session.last_message.text
             )
+            assert "OFFLINE — cached schedule" not in driver.session.last_message.text
+            await driver.click("Next week ▶")
+            assert "OFFLINE — cached schedule" in driver.session.last_message.text
+            assert "This week's schedule" not in driver.session.last_message.text
+            await driver.click("Next week ▶")
+            assert (
+                "no eligible cached copy is available"
+                in driver.session.last_message.text
+            )
+            assert "OFFLINE — cached schedule" not in driver.session.last_message.text
+            await driver.click("◀ Previous week")
+            assert "OFFLINE — cached schedule" in driver.session.last_message.text
 
             await unknown.text("/start")
             assert "No offline account is created." in unknown.session.last_message.text

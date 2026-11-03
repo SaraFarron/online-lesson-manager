@@ -260,6 +260,31 @@ async def test_cache_miss_and_expired_snapshot_remain_unavailable() -> None:
         await http.aclose()
 
 
+async def test_cached_day_is_not_substituted_for_a_different_local_date() -> None:
+    backend = _Backend()
+    clock = _Clock()
+    http, api = _client(backend, clock)
+    try:
+        await api.read_schedule_view(
+            SENDER_ID,
+            SENDER_ID,
+            "day",
+            requested_date=REQUESTED_DATE,
+        )
+        backend.outage = "server"
+        backend.outage_path = "/api/v1/auth/me"
+
+        with pytest.raises(BackendUnavailable):
+            await api.read_schedule_view(
+                SENDER_ID,
+                SENDER_ID,
+                "day",
+                requested_date=REQUESTED_DATE + timedelta(days=1),
+            )
+    finally:
+        await http.aclose()
+
+
 async def test_live_success_replaces_cached_snapshot_for_exact_range() -> None:
     backend = _Backend()
     clock = _Clock()
