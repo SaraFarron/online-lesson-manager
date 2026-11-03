@@ -888,3 +888,313 @@ async def test_rejoin_racing_removal_never_restores_the_removed_link(
         await session.refresh(current_student)
         assert current_student.teacher_id in {None, new_teacher_id}
         assert replay.operation_key == request.operation_key
+
+
+async def test_removal_preserves_approved_effect_matrix_on_each_database(
+    removal_session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(UTC).replace(second=0, microsecond=0)
+    teacher = User(role="TEACHER", timezone="UTC", full_name="Original teacher")
+    student = User(role="STUDENT", timezone="UTC", full_name="Detached student")
+    other_student = User(role="STUDENT", timezone="UTC", full_name="Other student")
+    committed_key = uuid.uuid4().hex
+    staged_key = uuid.uuid4().hex
+    committed_path = tmp_path / committed_key
+    staged_path = tmp_path / staged_key
+    committed_path.write_bytes(b"keep")
+    staged_path.write_bytes(b"revoke")
+
+    async with removal_session_factory() as session:
+        session.add_all([teacher, student, other_student])
+        await session.flush()
+        student.teacher_id = teacher.id
+        other_student.teacher_id = teacher.id
+        relationship = StudentTeacherRelationship(
+            teacher_id=teacher.id,
+            student_id=student.id,
+            linked_at=now - timedelta(days=30),
+        )
+        other_relationship = StudentTeacherRelationship(
+            teacher_id=teacher.id,
+            student_id=other_student.id,
+            linked_at=now - timedelta(days=10),
+        )
+        past_lesson = Event(
+            teacher_id=teacher.id,
+            user_id=student.id,
+            event_type=EventType.LESSON.value,
+            start=to_storage_utc(now - timedelta(days=2)),
+            end=to_storage_utc(now - timedelta(days=2) + timedelta(hours=1)),
+        )
+        ongoing_lesson = Event(
+            teacher_id=teacher.id,
+            user_id=student.id,
+            event_type=EventType.LESSON.value,
+            start=to_storage_utc(now - timedelta(minutes=30)),
+            end=to_storage_utc(now + timedelta(minutes=30)),
+        )
+        future_lesson = Event(
+            teacher_id=teacher.id,
+            user_id=student.id,
+            event_type=EventType.LESSON.value,
+            start=to_storage_utc(now + timedelta(days=1)),
+            end=to_storage_utc(now + timedelta(days=1, hours=1)),
+        )
+        unrelated_lesson = Event(
+            teacher_id=teacher.id,
+            user_id=other_student.id,
+            event_type=EventType.LESSON.value,
+            start=to_storage_utc(now + timedelta(days=1)),
+            end=to_storage_utc(now + timedelta(days=1, hours=1)),
+        )
+        recurring = RecurrentEvent(
+            teacher_id=teacher.id,
+            user_id=student.id,
+            event_type=EventType.LESSON.value,
+            start=to_storage_utc(now - timedelta(days=14)),
+            end=to_storage_utc(now - timedelta(days=14) + timedelta(hours=1)),
+            interval=7,
+            interval_end=to_storage_utc(now + timedelta(days=14)),
+            recurrence_mode=RecurrenceMode.UTC_STEP.value,
+            recurrence_timezone=None,
+        )
+        future_series = RecurrentEvent(
+            teacher_id=teacher.id,
+            user_id=student.id,
+            event_type=EventType.LESSON.value,
+            start=to_storage_utc(now + timedelta(days=7)),
+            end=to_storage_utc(now + timedelta(days=7, hours=1)),
+            interval=7,
+            interval_end=to_storage_utc(now + timedelta(days=28)),
+            recurrence_mode=RecurrenceMode.UTC_STEP.value,
+            recurrence_timezone=None,
+        )
+        retained_homework = Homework(
+            teacher_id=teacher.id,
+            student_id=student.id,
+            text="Retained completed task",
+            status="COMPLETE",
+            completion_source="TEACHER",
+            completed_at=now - timedelta(days=1),
+            operation_key=uuid.uuid4(),
+        )
+        unrelated_homework = Homework(
+            teacher_id=teacher.id,
+            student_id=other_student.id,
+            text="Unrelated task",
+            operation_key=uuid.uuid4(),
+        )
+        session.add_all(
+            [
+                relationship,
+                other_relationship,
+                past_lesson,
+                ongoing_lesson,
+                future_lesson,
+                unrelated_lesson,
+                recurring,
+                future_series,
+                retained_homework,
+                unrelated_homework,
+            ]
+        )
+        await session.flush()
+        past_cancel = RecurrentCancels(
+            recurrent_event_id=recurring.id,
+            start=to_storage_utc(now - timedelta(days=14)),
+            end=to_storage_utc(now - timedelta(days=14) + timedelta(hours=1)),
+        )
+        future_cancel = RecurrentCancels(
+            recurrent_event_id=recurring.id,
+            start=to_storage_utc(now + timedelta(days=7)),
+            end=to_storage_utc(now + timedelta(days=7, hours=1)),
+        )
+        submission = HomeworkSubmission(
+            homework_id=retained_homework.id,
+            student_id=student.id,
+            version=1,
+            text="Retained solution",
+            operation_key=uuid.uuid4(),
+        )
+        committed_attachment = HomeworkAttachment(
+            owner_user_id=teacher.id,
+            homework_id=retained_homework.id,
+            storage_key=committed_key,
+            file_name="committed.pdf",
+            byte_size=4,
+            staged_until=None,
+        )
+        staged_attachment = HomeworkAttachment(
+            owner_user_id=student.id,
+            storage_key=staged_key,
+            file_name="staged.pdf",
+            byte_size=6,
+            staged_until=now + timedelta(days=1),
+        )
+        session.add_all(
+            [
+                past_cancel,
+                future_cancel,
+                submission,
+                committed_attachment,
+                staged_attachment,
+                StudentAction(
+                    relationship_id=relationship.id,
+                    teacher_id=teacher.id,
+                    student_id=student.id,
+                    actor_id=student.id,
+                    action_type=StudentActionType.ACCOUNT_PROFILE_UPDATED.value,
+                    occurred_at=now - timedelta(days=1),
+                ),
+            ]
+        )
+        student_assignment_intent = _intent(
+            student.id,
+            NotificationType.ASSIGNMENT_CREATED,
+            f"student-assignment-{uuid.uuid4()}",
+            now,
+            source_id=retained_homework.id,
+        )
+        teacher_submission_intent = _intent(
+            teacher.id,
+            NotificationType.SUBMISSION_RECEIVED,
+            f"teacher-submission-{uuid.uuid4()}",
+            now,
+            source_id=retained_homework.id,
+        )
+        teacher_lesson_intent = _intent(
+            teacher.id,
+            NotificationType.LESSON_REMINDER,
+            f"teacher-lesson-{uuid.uuid4()}",
+            now,
+            occurrence_source_type="event",
+            occurrence_source_id=future_lesson.id,
+        )
+        sent_intent = _intent(
+            student.id,
+            NotificationType.DAILY_DIGEST,
+            f"sent-digest-{uuid.uuid4()}",
+            now,
+            state=NotificationState.SENT,
+        )
+        unrelated_intent = _intent(
+            teacher.id,
+            NotificationType.SUBMISSION_RECEIVED,
+            f"unrelated-submission-{uuid.uuid4()}",
+            now,
+            source_id=unrelated_homework.id,
+        )
+        session.add_all(
+            [
+                student_assignment_intent,
+                teacher_submission_intent,
+                teacher_lesson_intent,
+                sent_intent,
+                unrelated_intent,
+            ]
+        )
+        await session.commit()
+        ids = {
+            "teacher": teacher.id,
+            "student": student.id,
+            "relationship": relationship.id,
+            "past_lesson": past_lesson.id,
+            "ongoing_lesson": ongoing_lesson.id,
+            "future_lesson": future_lesson.id,
+            "unrelated_lesson": unrelated_lesson.id,
+            "recurring": recurring.id,
+            "future_series": future_series.id,
+            "past_cancel": past_cancel.id,
+            "future_cancel": future_cancel.id,
+            "homework": retained_homework.id,
+            "submission": submission.id,
+            "committed_attachment": committed_attachment.id,
+            "staged_attachment": staged_attachment.id,
+            "student_intent": student_assignment_intent.id,
+            "teacher_submission_intent": teacher_submission_intent.id,
+            "teacher_lesson_intent": teacher_lesson_intent.id,
+            "sent_intent": sent_intent.id,
+            "unrelated_intent": unrelated_intent.id,
+        }
+
+    async with removal_session_factory() as session:
+        teacher = await session.get(User, ids["teacher"])
+        assert teacher is not None
+        preview = await preview_student_removal(session, teacher, ids["student"])
+    assert preview.impact.one_off_lessons_to_delete == 2
+    assert preview.impact.recurring_series_to_truncate == 1
+    assert preview.impact.recurring_series_to_delete == 1
+    assert preview.impact.future_cancellations_to_delete == 1
+    assert preview.impact.staged_uploads_to_revoke == 1
+    assert preview.impact.notifications_to_suppress == 3
+
+    request = StudentRemovalConfirm(
+        preview_token=preview.confirmation_token,
+        operation_key=uuid.uuid4(),
+    )
+    async with removal_session_factory() as session:
+        teacher = await session.get(User, ids["teacher"])
+        assert teacher is not None
+        result = await confirm_student_removal(
+            session,
+            teacher,
+            ids["student"],
+            request,
+            HomeworkConfig(STORAGE_PATH=tmp_path),
+        )
+    assert result.cleanup_complete
+
+    async with removal_session_factory() as session:
+        student = await session.get(User, ids["student"])
+        relationship = await session.get(
+            StudentTeacherRelationship, ids["relationship"]
+        )
+        assert student is not None and student.is_active and student.teacher_id is None
+        assert relationship is not None and relationship.removed_at is not None
+        assert await session.get(Event, ids["past_lesson"]) is not None
+        assert await session.get(Event, ids["ongoing_lesson"]) is None
+        assert await session.get(Event, ids["future_lesson"]) is None
+        assert await session.get(Event, ids["unrelated_lesson"]) is not None
+        preserved_series = await session.get(RecurrentEvent, ids["recurring"])
+        assert preserved_series is not None
+        assert preserved_series.interval_end == to_storage_utc(
+            now - timedelta(days=7) + timedelta(microseconds=1)
+        )
+        assert await session.get(RecurrentEvent, ids["future_series"]) is None
+        assert await session.get(RecurrentCancels, ids["past_cancel"]) is not None
+        assert await session.get(RecurrentCancels, ids["future_cancel"]) is None
+        homework = await session.get(Homework, ids["homework"])
+        assert homework is not None
+        assert homework.status == "COMPLETE"
+        assert homework.completion_source == "TEACHER"
+        assert await session.get(HomeworkSubmission, ids["submission"]) is not None
+        assert (
+            await session.get(HomeworkAttachment, ids["committed_attachment"])
+            is not None
+        )
+        assert await session.get(HomeworkAttachment, ids["staged_attachment"]) is None
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(StudentAction)
+                .where(
+                    StudentAction.relationship_id == ids["relationship"],
+                    StudentAction.action_type
+                    == StudentActionType.ACCOUNT_PROFILE_UPDATED.value,
+                )
+            )
+            == 1
+        )
+        expected_states = {
+            "student_intent": NotificationState.SUPPRESSED.value,
+            "teacher_submission_intent": NotificationState.SUPPRESSED.value,
+            "teacher_lesson_intent": NotificationState.SUPPRESSED.value,
+            "sent_intent": NotificationState.SENT.value,
+            "unrelated_intent": NotificationState.PENDING.value,
+        }
+        for key, state in expected_states.items():
+            intent = await session.get(NotificationIntent, ids[key])
+            assert intent is not None and intent.state == state
+    assert committed_path.read_bytes() == b"keep"
+    assert not staged_path.exists()

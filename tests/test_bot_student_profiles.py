@@ -38,6 +38,7 @@ async def _seed_teacher_and_student(
     teacher_telegram_id: int = TEACHER_TELEGRAM_ID,
     student_telegram_id: int = STUDENT_TELEGRAM_ID,
     student_name: str = "Alice Learner",
+    include_action: bool = True,
 ) -> tuple[User, User, StudentTeacherRelationship]:
     teacher = User(
         id=uuid4(),
@@ -83,16 +84,17 @@ async def _seed_teacher_and_student(
         ]
     )
     await session.flush()
-    session.add(
-        StudentAction(
-            relationship_id=relationship.id,
-            teacher_id=teacher.id,
-            student_id=student.id,
-            actor_id=student.id,
-            action_type=StudentActionType.ACCOUNT_PROFILE_UPDATED,
-            occurred_at=datetime(2026, 2, 3, 4, 5, tzinfo=UTC),
+    if include_action:
+        session.add(
+            StudentAction(
+                relationship_id=relationship.id,
+                teacher_id=teacher.id,
+                student_id=student.id,
+                actor_id=student.id,
+                action_type=StudentActionType.ACCOUNT_PROFILE_UPDATED,
+                occurred_at=datetime(2026, 2, 3, 4, 5, tzinfo=UTC),
+            )
         )
-    )
     await session.commit()
     return teacher, student, relationship
 
@@ -379,3 +381,180 @@ async def test_ambiguous_student_removal_retries_same_operation(
         assert operation_count == 1
     finally:
         await _close(driver, driver_http)
+
+
+@pytest.mark.asyncio
+async def test_profile_history_survives_restart_and_scopes_rejoin(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    teacher, student, old_relationship = await _seed_teacher_and_student(
+        db_session, include_action=False
+    )
+    homework_id = await _create_homework(
+        client, teacher, student, "Retained after rejoin"
+    )
+    updated = await client.patch(
+        "/api/v1/auth/me",
+        headers=_auth(student),
+        json={"full_name": "Updated Learner"},
+    )
+    assert updated.status_code == 200, updated.text
+
+    driver, driver_http = await _make_driver(
+        client, bot_service_key, TEACHER_TELEGRAM_ID
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Students")
+        await driver.click(_button_with_prefix(driver, "Updated Learner"))
+        detail = driver.session.last_message.text
+        assert "Account profile updated" in detail
+        assert "Added: 2026-01-02 03:04 UTC" in detail
+        await driver.click("Remove student")
+        await driver.click("Cancel")
+        assert "Updated Learner" in driver.session.last_message.text
+        await driver.click("Remove student")
+        await driver.click("Confirm removal")
+        assert "Student removed from this teacher" in driver.session.last_message.text
+    finally:
+        await _close(driver, driver_http)
+
+    new_teacher = User(
+        id=uuid4(),
+        full_name="Rejoin Teacher",
+        role="TEACHER",
+        timezone="UTC",
+        telegram_user_id=TEACHER_TELEGRAM_ID + 20,
+        telegram_private_chat_id=TEACHER_TELEGRAM_ID + 20,
+        is_active=True,
+    )
+    db_session.add(new_teacher)
+    await db_session.flush()
+    db_session.add(TeacherProfile(teacher_id=new_teacher.id, code="REJOIN08"))
+    await db_session.commit()
+    rejoined = await client.post(
+        "/api/v1/auth/me/teacher",
+        headers=_auth(student),
+        json={"teacher_code": "REJOIN08"},
+    )
+    assert rejoined.status_code == 200, rejoined.text
+    student_id = student.id
+    old_teacher_id = teacher.id
+    new_teacher_id = new_teacher.id
+    student_headers = _auth(student)
+    old_teacher_headers = _auth(teacher)
+    new_teacher_headers = _auth(new_teacher)
+    await db_session.refresh(student)
+    assert student.teacher_id == new_teacher_id
+
+    old_relationship_id = old_relationship.id
+    db_session.expire_all()
+    relationships = list(
+        (
+            await db_session.scalars(
+                select(StudentTeacherRelationship)
+                .where(StudentTeacherRelationship.student_id == student_id)
+                .order_by(StudentTeacherRelationship.created_at)
+            )
+        ).all()
+    )
+    assert len(relationships) == 2
+    old_relationship = next(
+        item for item in relationships if item.teacher_id == old_teacher_id
+    )
+    new_relationship = next(
+        item for item in relationships if item.teacher_id == new_teacher_id
+    )
+    assert old_relationship.id == old_relationship_id
+    assert old_relationship.removed_at is not None
+    assert new_relationship.removed_at is None
+    assert new_relationship.linked_at is not None
+    assert new_relationship.linked_at != old_relationship.linked_at
+
+    old_actions = list(
+        (
+            await db_session.scalars(
+                select(StudentAction)
+                .where(StudentAction.relationship_id == old_relationship.id)
+                .order_by(StudentAction.occurred_at, StudentAction.id)
+            )
+        ).all()
+    )
+    new_actions = list(
+        (
+            await db_session.scalars(
+                select(StudentAction)
+                .where(StudentAction.relationship_id == new_relationship.id)
+                .order_by(StudentAction.occurred_at, StudentAction.id)
+            )
+        ).all()
+    )
+    assert [item.action_type for item in old_actions] == [
+        StudentActionType.ACCOUNT_PROFILE_UPDATED
+    ]
+    assert [item.action_type for item in new_actions] == [
+        StudentActionType.TEACHER_LINKED
+    ]
+
+    former_profile = await client.get(
+        f"/api/v1/auth/teacher/former-students/{old_relationship.id}",
+        headers=old_teacher_headers,
+    )
+    current_profile = await client.get(
+        f"/api/v1/auth/teacher/students/profiles/{student_id}",
+        headers=new_teacher_headers,
+    )
+    old_homework = await client.get(
+        f"/api/v1/homework/assignments/{homework_id}", headers=old_teacher_headers
+    )
+    student_homework = await client.get(
+        f"/api/v1/homework/assignments/{homework_id}", headers=student_headers
+    )
+    new_teacher_homework = await client.get(
+        f"/api/v1/homework/assignments/{homework_id}", headers=new_teacher_headers
+    )
+    assert former_profile.status_code == 200, former_profile.text
+    assert [item["action_type"] for item in former_profile.json()["actions"]] == [
+        StudentActionType.ACCOUNT_PROFILE_UPDATED
+    ]
+    assert current_profile.status_code == 200, current_profile.text
+    assert [item["action_type"] for item in current_profile.json()["actions"]] == [
+        StudentActionType.TEACHER_LINKED
+    ]
+    assert old_homework.status_code == student_homework.status_code == 200
+    assert new_teacher_homework.status_code == 404
+
+    old_teacher_restart, old_http = await _make_driver(
+        client, bot_service_key, TEACHER_TELEGRAM_ID
+    )
+    new_teacher_restart, new_http = await _make_driver(
+        client, bot_service_key, TEACHER_TELEGRAM_ID + 20
+    )
+    try:
+        await old_teacher_restart.text("/start")
+        await old_teacher_restart.click("Students")
+        assert "Page 1 of 1 · 0 student(s)" in (
+            old_teacher_restart.session.last_message.text
+        )
+        await old_teacher_restart.click("Former students")
+        await old_teacher_restart.click(
+            _button_with_prefix(old_teacher_restart, "Updated Learner")
+        )
+        assert (
+            "Account profile updated" in old_teacher_restart.session.last_message.text
+        )
+
+        await new_teacher_restart.text("/start")
+        await new_teacher_restart.click("Students")
+        await new_teacher_restart.click(
+            _button_with_prefix(new_teacher_restart, "Updated Learner")
+        )
+        assert "Account profile updated" not in (
+            new_teacher_restart.session.last_message.text
+        )
+        assert "Added: " in new_teacher_restart.session.last_message.text
+    finally:
+        await _close(old_teacher_restart, old_http)
+        await _close(new_teacher_restart, new_http)

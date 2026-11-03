@@ -4,7 +4,7 @@
 
 Teachers can view their own students' identity, association date, homework status and last ten actions, then explicitly confirm safe student removal from Telegram.
 
-**Status:** Policy approved 2026-11-03; implementation in progress.
+**Status:** Policy approved 2026-11-03; all implementation tasks complete 2026-11-04.
 
 ## Scope (README.md sections covered)
 
@@ -218,9 +218,11 @@ Define ten-action scope: proposed scheduling creates/moves/cancels/deletes, home
 
 **Reuse:** Auth/scheduling/homework integration fixtures and recording transport.
 
-**Acceptance Criteria:** [ ] Exact data-effect matrix is verified on both DBs and Telegram. [ ] No false historical data, unauthorized access or success-shaped cleanup failure; common checks pass.
+**Acceptance Criteria:** [x] Exact data-effect matrix is verified on both DBs and Telegram. [x] No false historical data, unauthorized access or success-shaped cleanup failure; common checks pass.
 
 **Out of scope:** HTMX. **Suitable for:** AI agent; human for approved live acceptance.
+
+**Execution (2026-11-04):** Added a SQLite/PostgreSQL retention-matrix test covering ongoing and future one-off lessons, recurring truncation/deletion and cancellations, retained homework/submission/completion and committed files, staged-file cleanup, relationship-scoped history, notification suppression, sent-history retention, and unrelated records. A recording-transport flow performs a real student profile update, teacher profile/history read, preview/cancel/confirm, process restart, and approved API rejoin; it verifies new link dates, non-transferred history/homework authorization, and former-profile access after restart. README and AGENTS now document missing legacy identity values, retention, cleanup, and guarded migration downgrades. Ruff check/format, backend and bot mypy passed; the full SQLite/PostgreSQL-enabled suite passed (602 passed).
 
 ## Open questions
 
