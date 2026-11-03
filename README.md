@@ -197,9 +197,10 @@ It changes only nonconforming codes in one transaction; existing shared links
 for replaced codes stop working and no aliases are retained. Do not run apply
 without owner approval and a backup.
 
-Backend outages show an unavailable/retry screen, never offline login or
-successful local signup. If a registration response is lost, the bot checks
-the backend session before resubmitting. Teacher workdays/hours, lesson
+For onboarding and account actions, backend outages show an unavailable/retry
+screen; offline state is never treated as login or successful local signup. If
+a registration response is lost, the bot checks the backend session before
+resubmitting. Teacher workdays/hours, lesson
 duration defaults, and daily/consecutive lesson limits are enforced by the
 backend. Automatic post-lesson breaks are derived from each lesson's saved
 duration snapshot and shown in Telegram booking and management flows.
@@ -209,8 +210,9 @@ write outcomes, accepted input that Telegram could not remove, and committed
 writes whose refresh failed. Drafts and recovery controls remain available;
 ordinary errors do not create extra messages or callback popups.
 Long homework text is paginated in the existing screen without truncation.
-Free-slot selection, offline schedule cache, and account linking/transfers
-remain unimplemented. Teachers can create text,
+Free-slot selection and account linking/transfers remain unimplemented.
+Offline schedule viewing uses a bounded in-memory cache for previously
+authorized exact day/week ranges. Teachers can create text,
 file, or mixed assignments for their own students through Telegram and
 optionally link an exact upcoming lesson occurrence. Students can browse
 authorized assignments, view their text, download materials as separate
@@ -452,10 +454,22 @@ Backend предоставляет авторизованные read-only endpoi
 распределяются целыми строками по страницам до 3 500 UTF-16 code units; кнопки
 Previous/Next появляются только при переполнении, числового счетчика страниц
 нет. Подписи длиннее 80 Unicode code points сокращаются и HTML-экранируются.
-Это live-запросы к backend: offline кэширования и показа расписания без backend
-нет.
+Обычный просмотр загружает live-данные. При сбое транспорта, ответе 5xx или
+открытом circuit breaker бот может показать только ранее успешно полученный
+снимок точного дня/недели: снимок младше часа и авторизация из последнего
+успешного `GET /api/v1/auth/me` младше 24 часов. Снимки хранятся только в
+памяти процесса: не более одного дня и одной недели на аккаунт и 1 000
+снимков в общем LRU; backend-среды изолированы. Они исчезают после перезапуска.
+Offline-экран дает только переход к расписанию; кешированный заголовок
+показывает диапазон, время снимка и применимость статусов «на момент»
+снимка, без устаревшего NOW.
+Ошибки доступа и изменения аккаунта, роли, связи или часового пояса,
+обнаруженные при live-проверке, отключают прежний снимок. Удаленное изменение
+связи во время недоступности backend может оставаться неизвестным до 24 часов.
+Offline-доступ не включает вход, профиль, настройки, домашние задания или
+изменение расписания.
 
-Будущие consumers (включая уведомления и кэш) должны сначала авторизовать
+Будущие consumers (включая уведомления) должны сначала авторизовать
 просмотр для конкретного пользователя и применять ту же ролевую фильтрацию.
 Нельзя выдавать или кэшировать сырые данные всего расписания учителя как
 результат для ученика. Правила записи/бронирования остаются отдельной задачей;
@@ -602,7 +616,17 @@ Telegram Settings. Текст строится при claim из повторн�
 The shared scheduling foundation and authorized backend day/week endpoints
 serve the live Telegram schedule views. The endpoint contract and current
 Telegram behavior are described in «Текущая реализация просмотра» above.
-There is no offline schedule cache.
+During transport/5xx/open-circuit failures, Telegram may show an exact
+previously fetched day/week snapshot only while it is under one hour old and
+the last successful active-account check is under 24 hours old. This
+memory-only cache keeps at most one day and one week per account, with a global
+1,000-snapshot LRU bound and backend-environment isolation; it is cleared on
+restart. Offline entry is schedule-only; it
+shows the exact range, local snapshot time and status-as-of notice, with no
+live NOW marker. A successful account revalidation invalidates snapshots when
+account, role, teacher link or timezone changes, and definitive access errors
+evict them. A remote revocation during an outage can remain unknown within the
+24-hour authorization window.
 
 #### Time and recurrence contract
 
@@ -733,8 +757,8 @@ from each lesson's snapshotted duration. Legacy lessons and series keep a
 zero-minute snapshot; preference changes apply to future writes only. A
 reservation may extend beyond work hours or local midnight, follows its parent
 lesson's cancellation and visibility, and does not count as a lesson.
-Free-slot selection, an arbitrary-date picker, an HTMX schedule UI, and offline
-schedule caching remain pending. Durable notification production,
+Free-slot selection, an arbitrary-date picker, and an HTMX schedule UI remain
+pending. Durable notification production,
 owner-editable Telegram settings, claim-time source-rich message
 formatting, and serial Telegram delivery are implemented. Telegram week
 navigation is available for earlier and later Monday–Sunday weeks.

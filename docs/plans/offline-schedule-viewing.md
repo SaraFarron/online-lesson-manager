@@ -4,7 +4,7 @@
 
 Previously authorized users can view bounded, clearly stale schedule snapshots during backend availability failures without enabling offline mutations or leaking another user's calendar.
 
-**Status:** Tasks 00–04 implemented and verified; Task 05 pending.
+**Status:** Tasks 00–05 implemented and verified.
 
 ## Scope (README.md sections covered)
 
@@ -12,8 +12,8 @@ Previously authorized users can view bounded, clearly stale schedule snapshots d
 
 ## Existing foundations and limitations
 
-- [BackendClient](../../telegram/api/client.py) uses shared HTTP, user JWT cache and [circuit breaker](../../telegram/api/circuit_breaker.py); there is no offline schedule store.
-- [Schedule dialog](../../telegram/dialogs/schedule/dialog.py) currently shows unavailable on `BackendUnavailable`. Home/restart routing also depends on backend account reads, so merely caching `_load_schedule` will not make offline viewing reachable.
+- [BackendClient](../../telegram/api/client.py) uses shared HTTP, user JWT cache, [circuit breaker](../../telegram/api/circuit_breaker.py), and a bounded memory-only cache for validated viewer-shaped day/week snapshots.
+- [Schedule dialog](../../telegram/dialogs/schedule/dialog.py) supports restricted offline entry for a previously authorized private sender. It shows only eligible exact cached ranges and rejects stale home actions.
 - [Backend schedule service](../../backend/schedule/service.py) authorizes the viewer, filters vacations/cancellations and returns a viewer-shaped snapshot. Cache only that result, never raw teacher occurrence data for student use.
 - Current UI has no Refresh control; recovery uses home/reopen or period/week switch. Preserve that approved contract unless this plan's Task 00 explicitly changes it.
 - Cached `past/ongoing/upcoming` statuses and NOW markers are from `generated_at`, not necessarily now. Label snapshot semantics; do not re-present an old divider as live.
@@ -161,7 +161,9 @@ Disable all mutation, homework and Settings actions in offline mode even when ol
 
 **Reuse:** Existing schedule/dispatcher/circuit fixtures and student-removal revalidation once implemented.
 
-**Acceptance Criteria:** [ ] Exact recipient/range/source/timestamp/UI behavior is asserted through the dispatcher. [ ] No cached file/mutation/account-success path exists. [ ] Operational cleanup and remaining revocation window are documented; common checks pass.
+**Acceptance Criteria:** [x] Exact recipient/range/source/timestamp/UI behavior is asserted through the dispatcher. [x] No cached file/mutation/account-success path exists. [x] Operational cleanup and remaining revocation window are documented; common checks pass.
+
+**Execution (2026-11-03):** Added real-database dispatcher coverage proving live teacher/student schedules remain viewer-shaped during transport outages, cached views show only the exact week with local snapshot time and status-as-of notice, stale callbacks make no backend requests, and expired snapshots remain unavailable. A real teacher-authorized removal is followed by account revalidation that evicts the former student's cache; additional live checks cover timezone and role changes. Existing cache/fallback/offline-entry regressions verify bounds, backend isolation, definitive failures, expiry, and restart loss. README and AGENTS now document the memory-only retention limits and the possible 24-hour remote-revocation window. `uv run pytest -q tests/test_telegram_offline_e2e.py tests/test_telegram_offline_entry.py tests/test_telegram_schedule_fallback.py tests/test_telegram_schedule_cache.py tests/test_bot_schedule_integration.py tests/test_bot_student_profiles.py` passed (40 tests); `uv run ruff check telegram tests`, `uv run ruff format --check telegram tests`, and `uv run mypy telegram` passed.
 
 **Out of scope:** HTMX or generic offline client synchronization. **Suitable for:** AI agent; human for approved live outage-free UX demonstration.
 
