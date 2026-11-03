@@ -328,7 +328,9 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
                 event.remove(engine, "before_cursor_execute", record_statement)
 
             assert requests == [
+                ("GET", "/api/v1/auth/me"),
                 ("GET", "/api/v1/schedule/day"),
+                ("GET", "/api/v1/auth/me"),
                 ("GET", "/api/v1/schedule/week"),
             ]
             assert 0 < day_select_count <= 12
@@ -436,7 +438,10 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             requests.clear()
             await alice_bot.click("Today")
             alice_text = alice_bot.session.last_message.text
-            assert requests == [("GET", "/api/v1/schedule/day")]
+            assert requests == [
+                ("GET", "/api/v1/auth/me"),
+                ("GET", "/api/v1/schedule/day"),
+            ]
             assert "Sun, Oct 18" in alice_text
             assert "19:00–20:00" in alice_text
             assert "Sun, Oct 18 23:00–Mon, Oct 19 0:00" in alice_text
@@ -448,7 +453,10 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             requests.clear()
             await bob_bot.click("Today")
             bob_text = bob_bot.session.last_message.text
-            assert requests == [("GET", "/api/v1/schedule/day")]
+            assert requests == [
+                ("GET", "/api/v1/auth/me"),
+                ("GET", "/api/v1/schedule/day"),
+            ]
             assert "Sun, Oct 18" in bob_text
             assert "20:00–21:00" in bob_text
             assert "Alice Learner" not in bob_text
@@ -654,7 +662,10 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
                 await driver.click(data=next_page)
                 initial_pages.append(driver.session.last_message.text)
 
-            assert requests == [("GET", "/api/v1/schedule/day")]
+            assert requests == [
+                ("GET", "/api/v1/auth/me"),
+                ("GET", "/api/v1/schedule/day"),
+            ]
             select_count = sum(
                 statement.lstrip().upper().startswith("SELECT")
                 for statement in query_statements
@@ -708,7 +719,10 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
                     break
                 await driver.click(data=next_page)
                 week_pages.append(driver.session.last_message.text)
-            assert requests == [("GET", "/api/v1/schedule/week")]
+            assert requests == [
+                ("GET", "/api/v1/auth/me"),
+                ("GET", "/api/v1/schedule/week"),
+            ]
             assert len(week_pages) > 1
             week_text = [_VisibleText().text(page) for page in week_pages]
             assert sum(page.count("Long <&> 😀") for page in week_text) == 123

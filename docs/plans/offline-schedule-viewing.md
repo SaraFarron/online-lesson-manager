@@ -4,7 +4,7 @@
 
 Previously authorized users can view bounded, clearly stale schedule snapshots during backend availability failures without enabling offline mutations or leaking another user's calendar.
 
-**Status:** Task 00 approved; Task 01 implemented and verified; Tasks 02–05 pending.
+**Status:** Tasks 00–02 implemented and verified; Tasks 03–05 pending.
 
 ## Scope (README.md sections covered)
 
@@ -111,7 +111,9 @@ Implement only the minimal approved backend authorization/version metadata, if n
 
 **Reuse:** `BackendClient.read`, `read_schedule_day/week`, safe token renewal and circuit breaker; preserve write uncertainty classes.
 
-**Acceptance Criteria:** [ ] Transport/5xx/open-circuit cases can use eligible cache. [ ] Permission/validation/malformed response failures never do. [ ] Cache miss/expiry gives an explicit unavailable result and live recovery replaces stale data.
+**Acceptance Criteria:** [x] Transport/5xx/open-circuit cases can use eligible cache. [x] Permission/validation/malformed response failures never do. [x] Cache miss/expiry gives an explicit unavailable result and live recovery replaces stale data.
+
+**Execution (2026-11-03):** Added strict account/schedule response classification and a live-first schedule-view API that revalidates the active account before each read, returns explicit live/cached source metadata, caches only authorized typed schedule responses, and falls back only on transport/5xx/open-circuit availability. Definitive access failures evict the sender's cache; existing live-only day/week APIs remain unchanged for non-view consumers. `uv run pytest -q tests/test_telegram_schedule_fallback.py tests/test_bot_client.py tests/test_bot_schedule_dialogs.py tests/test_bot_schedule_integration.py tests/test_bot_homework_creation.py tests/test_bot_onboarding.py tests/test_bot_runtime.py` passed (84 tests); Ruff check/format and `uv run mypy telegram` passed.
 
 **Out of scope:** Changing mutation retry behavior or hiding backend schema bugs. **Suitable for:** AI agent.
 

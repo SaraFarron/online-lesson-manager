@@ -77,6 +77,12 @@ class CachedScheduleSnapshot:
 
 
 @dataclass(frozen=True)
+class ScheduleReadResult:
+    response: ScheduleResponse
+    source: Literal["live", "cached"]
+
+
+@dataclass(frozen=True)
 class _Principal:
     backend_namespace: str
     sender_id: int

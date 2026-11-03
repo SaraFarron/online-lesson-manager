@@ -16,6 +16,11 @@ class BackendUnavailable(RuntimeError):
         )
 
 
+class BackendContractError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("The backend returned a response that could not be validated.")
+
+
 class BackendOutcomeUnknown(BackendUnavailable):
     def __init__(self) -> None:
         RuntimeError.__init__(

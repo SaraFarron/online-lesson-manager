@@ -1,6 +1,7 @@
 from .circuit_breaker import CircuitBreaker
 from .client import BackendClient
 from .errors import (
+    BackendContractError,
     BackendError,
     BackendOutcomeUnknown,
     BackendUnavailable,
@@ -99,6 +100,7 @@ from .schedule_cache import (
     CachedScheduleSnapshot,
     ScheduleCacheIdentity,
     ScheduleFetchTicket,
+    ScheduleReadResult,
     ScheduleSnapshotCache,
 )
 from .transfer import (
@@ -115,6 +117,7 @@ __all__ = [
     "NotificationProtocolError",
     "CircuitBreaker",
     "BackendError",
+    "BackendContractError",
     "BackendOutcomeUnknown",
     "BackendUnavailable",
     "BroadcastOutcomeUnknown",
@@ -137,6 +140,7 @@ __all__ = [
     "CachedScheduleSnapshot",
     "ScheduleCacheIdentity",
     "ScheduleFetchTicket",
+    "ScheduleReadResult",
     "ScheduleSnapshotCache",
     "HOMEWORK_TRANSFER_TIMEOUT_SECONDS",
     "MAX_HOMEWORK_ATTACHMENT_BYTES",

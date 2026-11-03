@@ -6,9 +6,21 @@ from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
 from aiogram_dialog.widgets.kbd import Button, Row
 from aiogram_dialog.widgets.text import Const, Format
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_validator,
+)
 
-from telegram.api import BackendError, BackendUnavailable, SessionView
+from telegram.api import (
+    BackendContractError,
+    BackendError,
+    BackendUnavailable,
+    SessionView,
+)
 from telegram.dialogs.schedule.formatting import ViewerRole, format_schedule_pages
 from telegram.shared.access import backend
 from telegram.shared.feedback import feedback_block
@@ -29,6 +41,8 @@ class ScheduleDialogState(BaseModel):
     pages: list[str] = Field(default_factory=list)
     page: int = Field(default=0, ge=0)
     error: str = ""
+    source: Literal["live", "cached"] | None = None
+    snapshot_generated_at: AwareDatetime | None = None
 
     @model_validator(mode="after")
     def validate_state(self) -> ScheduleDialogState:
@@ -176,6 +190,8 @@ async def schedule_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
         )
     return {
         "schedule_text": schedule_text,
+        "schedule_source": state.source,
+        "snapshot_generated_at": state.snapshot_generated_at,
         "has_previous": state.page > 0,
         "has_next": state.page + 1 < len(state.pages),
         "show_today": state.period != "day",
@@ -202,18 +218,20 @@ async def _load_schedule(
         raise ValueError("Schedule viewing requires a private chat")
     client = backend(manager)
     try:
-        response = (
-            await client.read_schedule_day(
-                callback.from_user.id, callback.message.chat.id
-            )
-            if period == "day"
-            else await client.read_schedule_week(
-                callback.from_user.id,
-                callback.message.chat.id,
-                requested_date=requested_date,
-            )
+        result = await client.read_schedule_view(
+            callback.from_user.id,
+            callback.message.chat.id,
+            period,
+            requested_date=requested_date,
         )
-        pages = format_schedule_pages(response, role)
+        pages = format_schedule_pages(result.response, role)
+    except BackendContractError:
+        return ScheduleDialogState(
+            period=period,
+            role=role,
+            requested_date=requested_date if period == "week" else None,
+            error="The schedule response could not be displayed.",
+        )
     except BackendError as exc:
         return ScheduleDialogState(
             period=period,
@@ -238,8 +256,10 @@ async def _load_schedule(
     return ScheduleDialogState(
         period=period,
         role=role,
-        requested_date=response.days[0].date if period == "week" else None,
+        requested_date=(result.response.days[0].date if period == "week" else None),
         pages=list(pages),
+        source=result.source,
+        snapshot_generated_at=result.response.generated_at,
     )
 
 

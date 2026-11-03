@@ -17,6 +17,7 @@ from backend.main import app
 from backend.notifications.models import TeacherBroadcast
 from telegram.api import (
     BackendClient,
+    BackendContractError,
     BackendError,
     BackendOutcomeUnknown,
     BackendUnavailable,
@@ -250,7 +251,9 @@ async def test_schedule_session_failure_uses_schedule_specific_message() -> None
     assert "invitation" not in str(error.value)
 
 
-async def test_schedule_server_and_malformed_responses_are_unavailable() -> None:
+async def test_schedule_server_errors_are_unavailable_and_malformed_is_contract_error() -> (
+    None
+):
     status = [503]
 
     async def transport(_request: httpx.Request) -> httpx.Response:
@@ -266,7 +269,7 @@ async def test_schedule_server_and_malformed_responses_are_unavailable() -> None
         with pytest.raises(BackendUnavailable):
             await api.read_schedule_day(123, 456)
         status[0] = 0
-        with pytest.raises(BackendUnavailable):
+        with pytest.raises(BackendContractError):
             await api.read_schedule_day(123, 456)
 
 

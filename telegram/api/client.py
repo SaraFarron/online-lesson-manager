@@ -5,6 +5,7 @@ import uuid
 from collections.abc import AsyncIterable, AsyncIterator, Callable
 from datetime import date, datetime
 from typing import Any, Literal, TypeVar
+from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import AwareDatetime, BaseModel, ValidationError
@@ -12,6 +13,7 @@ from pydantic import AwareDatetime, BaseModel, ValidationError
 from . import transfer
 from .circuit_breaker import CircuitBreaker
 from .errors import (
+    BackendContractError,
     BackendError,
     BackendOutcomeUnknown,
     BackendUnavailable,
@@ -75,6 +77,12 @@ from .models import (
     TeacherStudentProfilePage,
     Token,
 )
+from .schedule_cache import (
+    ScheduleCacheIdentity,
+    SchedulePeriod,
+    ScheduleReadResult,
+    ScheduleSnapshotCache,
+)
 
 Model = TypeVar("Model", bound=BaseModel)
 
@@ -85,16 +93,27 @@ class BackendClient:
         http: httpx.AsyncClient,
         credential: str,
         breaker: CircuitBreaker | None = None,
+        schedule_cache: ScheduleSnapshotCache | None = None,
     ) -> None:
         self.http = http
         self.credential = credential
         self.breaker = breaker or CircuitBreaker()
+        self.schedule_cache = (
+            schedule_cache if schedule_cache is not None else ScheduleSnapshotCache()
+        )
         self.tokens: dict[int, str] = {}
         self.telegram_usernames: dict[int, str | None] = {}
         self.pending_registrations: set[int] = set()
         self.pending_broadcast_operations: dict[
             int, tuple[uuid.UUID, TeacherBroadcastPublishRequest]
         ] = {}
+
+    @property
+    def _backend_namespace(self) -> str:
+        base_url = self.http.base_url
+        host = f"[{base_url.host}]" if ":" in base_url.host else base_url.host
+        port = f":{base_url.port}" if base_url.port is not None else ""
+        return f"{base_url.scheme}://{host}{port}{base_url.path.rstrip('/')}"
 
     async def request(
         self,
@@ -110,6 +129,7 @@ class BackendClient:
         headers: dict[str, str] | None = None,
         timeout: float | httpx.Timeout | None = None,
         error_context: ErrorContext = "default",
+        _strict_response: bool = False,
         _ambiguous_write: bool = False,
     ) -> Model:
         if body is not None and content is not None:
@@ -153,21 +173,30 @@ class BackendClient:
             if response.status_code == httpx.codes.NO_CONTENT:
                 if model is NoContent:
                     return model()
-                failed = True
                 if _ambiguous_write:
+                    failed = True
                     raise BackendOutcomeUnknown()
+                if _strict_response:
+                    raise BackendContractError()
+                failed = True
                 raise BackendUnavailable()
             if model is NoContent:
-                failed = True
                 if _ambiguous_write:
+                    failed = True
                     raise BackendOutcomeUnknown()
+                if _strict_response:
+                    raise BackendContractError()
+                failed = True
                 raise BackendUnavailable()
             try:
                 return model.model_validate_json(response.content)
             except ValidationError as exc:
-                failed = True
                 if _ambiguous_write:
+                    failed = True
                     raise BackendOutcomeUnknown() from exc
+                if _strict_response:
+                    raise BackendContractError() from exc
+                failed = True
                 raise BackendUnavailable() from exc
         except asyncio.CancelledError:
             failed = True
@@ -269,6 +298,7 @@ class BackendClient:
         telegram_username: str | None = None,
         sync_username: bool = False,
         error_context: ErrorContext = "default",
+        strict_response: bool = False,
     ) -> Token:
         if sync_username:
             self.telegram_usernames[sender_id] = telegram_username
@@ -285,11 +315,13 @@ class BackendClient:
                 Token,
                 service=True,
                 error_context=error_context,
+                _strict_response=strict_response,
                 body=body,
             )
         except BackendError as exc:
             if exc.status in {400, 404}:
                 self.tokens.pop(sender_id, None)
+                self.schedule_cache.invalidate(self._backend_namespace, sender_id)
             raise
         self.tokens[sender_id] = token.access_token
         return token
@@ -303,9 +335,15 @@ class BackendClient:
         *,
         params: dict[str, str] | None = None,
         error_context: ErrorContext = "default",
+        strict_response: bool = False,
     ) -> Model:
         if sender_id not in self.tokens:
-            await self.session(sender_id, chat_id, error_context=error_context)
+            await self.session(
+                sender_id,
+                chat_id,
+                error_context=error_context,
+                strict_response=strict_response,
+            )
         try:
             return await self.request(
                 "GET",
@@ -314,11 +352,17 @@ class BackendClient:
                 token=self.tokens[sender_id],
                 params=params,
                 error_context=error_context,
+                _strict_response=strict_response,
             )
         except BackendError as exc:
             if exc.status != 401:
                 raise
-            await self.session(sender_id, chat_id, error_context=error_context)
+            await self.session(
+                sender_id,
+                chat_id,
+                error_context=error_context,
+                strict_response=strict_response,
+            )
             return await self.request(
                 "GET",
                 path,
@@ -326,6 +370,7 @@ class BackendClient:
                 token=self.tokens[sender_id],
                 params=params,
                 error_context=error_context,
+                _strict_response=strict_response,
             )
 
     async def resolve_local_interval(
@@ -1170,18 +1215,7 @@ class BackendClient:
         chat_id: int,
         requested_date: date | None = None,
     ) -> ScheduleResponse:
-        params = {"date": requested_date.isoformat()} if requested_date else None
-        result = await self.read(
-            "/api/v1/schedule/day",
-            ScheduleResponse,
-            sender_id,
-            chat_id,
-            params=params,
-            error_context="schedule",
-        )
-        if result.period != "day":
-            raise BackendUnavailable()
-        return result
+        return await self._request_schedule(sender_id, chat_id, "day", requested_date)
 
     async def read_schedule_week(
         self,
@@ -1189,36 +1223,178 @@ class BackendClient:
         chat_id: int,
         requested_date: date | None = None,
     ) -> ScheduleResponse:
+        return await self._request_schedule(sender_id, chat_id, "week", requested_date)
+
+    async def read_schedule_view(
+        self,
+        sender_id: int,
+        chat_id: int,
+        period: SchedulePeriod,
+        requested_date: date | None = None,
+    ) -> ScheduleReadResult:
+        namespace = self._backend_namespace
+        try:
+            account, identity = await self._read_authorized_account(
+                sender_id, chat_id, error_context="schedule"
+            )
+        except BackendUnavailable:
+            identity = self.schedule_cache.identity_for_sender(namespace, sender_id)
+            if identity is None:
+                raise
+            cached = self._cached_schedule(identity, period, requested_date)
+            if cached is None:
+                raise
+            return cached
+
+        if account.role not in {"TEACHER", "STUDENT"}:
+            raise BackendError(403, "This account does not have schedule access.")
+
+        fetch_ticket = (
+            self.schedule_cache.begin_fetch(identity, period)
+            if identity is not None
+            else None
+        )
+        try:
+            response = await self._request_schedule(
+                sender_id, chat_id, period, requested_date
+            )
+        except BackendError:
+            self.schedule_cache.invalidate(namespace, sender_id)
+            raise
+        except BackendUnavailable:
+            if identity is not None:
+                cached = self._cached_schedule(identity, period, requested_date)
+                if cached is not None:
+                    return cached
+            raise
+
+        if fetch_ticket is not None:
+            try:
+                self.schedule_cache.store(fetch_ticket, response)
+            except (ValidationError, ValueError) as exc:
+                raise BackendContractError() from exc
+        return ScheduleReadResult(response=response, source="live")
+
+    async def _request_schedule(
+        self,
+        sender_id: int,
+        chat_id: int,
+        period: SchedulePeriod,
+        requested_date: date | None,
+    ) -> ScheduleResponse:
         params = {"date": requested_date.isoformat()} if requested_date else None
         result = await self.read(
-            "/api/v1/schedule/week",
+            f"/api/v1/schedule/{period}",
             ScheduleResponse,
             sender_id,
             chat_id,
             params=params,
             error_context="schedule",
+            strict_response=True,
         )
-        if result.period != "week":
-            raise BackendUnavailable()
+        if result.period != period:
+            raise BackendContractError()
         return result
 
+    async def _read_authorized_account(
+        self,
+        sender_id: int,
+        chat_id: int,
+        *,
+        error_context: ErrorContext = "default",
+    ) -> tuple[Account, ScheduleCacheIdentity | None]:
+        namespace = self._backend_namespace
+        ticket = self.schedule_cache.begin_authorization(namespace, sender_id)
+        authorized = False
+        try:
+            try:
+                account = await self.read(
+                    "/api/v1/auth/me",
+                    Account,
+                    sender_id,
+                    chat_id,
+                    error_context=error_context,
+                    strict_response=True,
+                )
+            except BackendError:
+                self.schedule_cache.invalidate(namespace, sender_id)
+                raise
+
+            identity = self._schedule_identity(namespace, sender_id, account)
+            if identity is None:
+                self.schedule_cache.invalidate(namespace, sender_id)
+            elif not self.schedule_cache.authorize(ticket, identity):
+                raise BackendContractError()
+            else:
+                authorized = True
+            return account, identity
+        finally:
+            if not authorized:
+                self.schedule_cache.cancel_authorization(ticket)
+
+    @staticmethod
+    def _schedule_identity(
+        namespace: str, sender_id: int, account: Account
+    ) -> ScheduleCacheIdentity | None:
+        if account.role == "TEACHER":
+            role: Literal["TEACHER", "STUDENT"] = "TEACHER"
+            teacher_id = None
+        elif account.role == "STUDENT" and account.teacher_id is not None:
+            role = "STUDENT"
+            teacher_id = account.teacher_id
+        else:
+            return None
+        try:
+            return ScheduleCacheIdentity(
+                backend_namespace=namespace,
+                sender_id=sender_id,
+                account_id=account.id,
+                role=role,
+                teacher_id=teacher_id,
+                timezone=account.timezone,
+            )
+        except ValueError as exc:
+            raise BackendContractError() from exc
+
+    def _cached_schedule(
+        self,
+        identity: ScheduleCacheIdentity,
+        period: SchedulePeriod,
+        requested_date: date | None,
+    ) -> ScheduleReadResult | None:
+        local_date = requested_date or datetime.now(ZoneInfo(identity.timezone)).date()
+        snapshot = self.schedule_cache.get(identity, period, local_date)
+        if snapshot is None:
+            return None
+        return ScheduleReadResult(response=snapshot.response, source="cached")
+
     async def view(self, sender_id: int, chat_id: int) -> SessionView:
-        account = await self.read("/api/v1/auth/me", Account, sender_id, chat_id)
+        account, _identity = await self._read_authorized_account(sender_id, chat_id)
         view = SessionView(account=account)
         if account.role == "TEACHER":
-            view.teacher = await self.read(
-                f"/api/v1/auth/users/{account.id}/teacher-profile",
-                TeacherProfile,
-                sender_id,
-                chat_id,
-            )
+            try:
+                view.teacher = await self.read(
+                    f"/api/v1/auth/users/{account.id}/teacher-profile",
+                    TeacherProfile,
+                    sender_id,
+                    chat_id,
+                    strict_response=True,
+                )
+            except BackendError:
+                self.schedule_cache.invalidate(self._backend_namespace, sender_id)
+                raise
         elif account.role == "STUDENT":
-            view.student = await self.read(
-                f"/api/v1/auth/users/{account.id}/student-profile",
-                StudentProfile,
-                sender_id,
-                chat_id,
-            )
+            try:
+                view.student = await self.read(
+                    f"/api/v1/auth/users/{account.id}/student-profile",
+                    StudentProfile,
+                    sender_id,
+                    chat_id,
+                    strict_response=True,
+                )
+            except BackendError:
+                self.schedule_cache.invalidate(self._backend_namespace, sender_id)
+                raise
         return view
 
     async def login(
@@ -1235,6 +1411,7 @@ class BackendClient:
                 chat_id,
                 telegram_username=telegram_username,
                 sync_username=sync_username,
+                strict_response=True,
             )
         except BackendError as exc:
             if exc.status == 404:

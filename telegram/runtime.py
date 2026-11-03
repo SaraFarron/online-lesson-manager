@@ -8,7 +8,12 @@ from aiogram.types import CallbackQuery, ErrorEvent, Message, TelegramObject
 from aiogram_dialog import DialogManager, ShowMode, StartMode, setup_dialogs
 from aiogram_dialog.api.exceptions import OutdatedIntent, UnknownIntent
 
-from telegram.api import BackendClient, BackendError, BackendUnavailable
+from telegram.api import (
+    BackendClient,
+    BackendContractError,
+    BackendError,
+    BackendUnavailable,
+)
 from telegram.dialogs.breaks import build_break_dialog
 from telegram.dialogs.broadcast import build_broadcast_dialog
 from telegram.dialogs.home import Screens, build_dialog
@@ -55,7 +60,7 @@ async def start(
             telegram_username=message.from_user.username,
             sync_username=True,
         )
-    except (BackendError, BackendUnavailable) as exc:
+    except (BackendContractError, BackendError, BackendUnavailable) as exc:
         dialog_manager.dialog_data["error"] = str(exc)
         await dialog_manager.switch_to(Screens.unavailable, show_mode=ShowMode.EDIT)
         await dialog_manager.show(show_mode=ShowMode.EDIT)
