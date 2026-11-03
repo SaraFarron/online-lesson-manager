@@ -81,6 +81,7 @@ from .schedule_cache import (
     ScheduleCacheIdentity,
     SchedulePeriod,
     ScheduleReadResult,
+    ScheduleRole,
     ScheduleSnapshotCache,
 )
 
@@ -114,6 +115,11 @@ class BackendClient:
         host = f"[{base_url.host}]" if ":" in base_url.host else base_url.host
         port = f":{base_url.port}" if base_url.port is not None else ""
         return f"{base_url.scheme}://{host}{port}{base_url.path.rstrip('/')}"
+
+    def offline_schedule_identity(self, sender_id: int) -> ScheduleCacheIdentity | None:
+        return self.schedule_cache.identity_for_sender(
+            self._backend_namespace, sender_id
+        )
 
     async def request(
         self,
@@ -1273,7 +1279,8 @@ class BackendClient:
                 self.schedule_cache.store(fetch_ticket, response)
             except (ValidationError, ValueError) as exc:
                 raise BackendContractError() from exc
-        return ScheduleReadResult(response=response, source="live")
+        role: ScheduleRole = "TEACHER" if account.role == "TEACHER" else "STUDENT"
+        return ScheduleReadResult(response=response, source="live", role=role)
 
     async def _request_schedule(
         self,
@@ -1366,7 +1373,9 @@ class BackendClient:
         snapshot = self.schedule_cache.get(identity, period, local_date)
         if snapshot is None:
             return None
-        return ScheduleReadResult(response=snapshot.response, source="cached")
+        return ScheduleReadResult(
+            response=snapshot.response, source="cached", role=identity.role
+        )
 
     async def view(self, sender_id: int, chat_id: int) -> SessionView:
         account, _identity = await self._read_authorized_account(sender_id, chat_id)

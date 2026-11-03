@@ -4,7 +4,7 @@
 
 Previously authorized users can view bounded, clearly stale schedule snapshots during backend availability failures without enabling offline mutations or leaking another user's calendar.
 
-**Status:** Tasks 00–02 implemented and verified; Tasks 03–05 pending.
+**Status:** Tasks 00–03 implemented and verified; Tasks 04–05 pending.
 
 ## Scope (README.md sections covered)
 
@@ -129,7 +129,9 @@ Disable all mutation, homework and Settings actions in offline mode even when ol
 
 **Reuse:** Existing `/start`, private-chat filters, per-user isolation, stale callback handling and access helpers.
 
-**Acceptance Criteria:** [ ] Known/unknown/expired/restarted-user cases match policy. [ ] Forged stale callbacks cannot invoke offline mutations or another account's cache. [ ] Home/onboarding regressions pass.
+**Acceptance Criteria:** [x] Known/unknown/expired/restarted-user cases match policy. [x] Forged stale callbacks cannot invoke offline mutations or another account's cache. [x] Home/onboarding regressions pass.
+
+**Execution (2026-11-03):** `/start` now offers an offline-only screen only for a trusted private-chat sender with an unexpired in-memory authorization identity. It exposes only Today/week schedule navigation; unavailable ranges stay unavailable, restart/expiry/unknown senders do not enter, and stale home mutation/settings/homework callbacks are rejected after the stack reset. Live account revalidation supplies the role used to render a refreshed schedule. The focused cache/fallback/client/schedule/homework/onboarding/runtime/flow suite passed (109 tests); `uv run ruff check telegram tests`, `uv run ruff format --check telegram tests`, and `uv run mypy telegram` passed.
 
 **Out of scope:** Offline registration or role switching. **Suitable for:** AI agent.
 

@@ -80,6 +80,7 @@ class CachedScheduleSnapshot:
 class ScheduleReadResult:
     response: ScheduleResponse
     source: Literal["live", "cached"]
+    role: ScheduleRole
 
 
 @dataclass(frozen=True)

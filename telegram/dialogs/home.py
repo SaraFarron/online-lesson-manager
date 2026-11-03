@@ -32,6 +32,7 @@ class Screens(StatesGroup):
     details = State()
     timezone = State()
     home = State()
+    offline_schedule = State()
     unavailable = State()
 
 
@@ -260,6 +261,17 @@ def build_dialog() -> Dialog:
                 ),
             ),
             state=Screens.home,
+        ),
+        Window(
+            Format(
+                "{feedback}Only previously cached schedules are available here. "
+                "Send /start when the backend is reachable to restore account actions."
+            ),
+            Row(
+                Button(Const("Today"), id="offline_today", on_click=open_today),
+                Button(Const("This week"), id="offline_week", on_click=open_week),
+            ),
+            state=Screens.offline_schedule,
         ),
         Window(
             Format("{feedback}Send /start to retry. No offline account is created."),

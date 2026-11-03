@@ -60,7 +60,24 @@ async def start(
             telegram_username=message.from_user.username,
             sync_username=True,
         )
-    except (BackendContractError, BackendError, BackendUnavailable) as exc:
+    except BackendUnavailable as exc:
+        identity = client.offline_schedule_identity(message.from_user.id)
+        if identity is not None:
+            dialog_manager.dialog_data.update(
+                offline_schedule=True,
+                offline_sender_id=message.from_user.id,
+                error="",
+            )
+            await dialog_manager.switch_to(
+                Screens.offline_schedule, show_mode=ShowMode.EDIT
+            )
+            await dialog_manager.show(show_mode=ShowMode.EDIT)
+            return
+        dialog_manager.dialog_data["error"] = str(exc)
+        await dialog_manager.switch_to(Screens.unavailable, show_mode=ShowMode.EDIT)
+        await dialog_manager.show(show_mode=ShowMode.EDIT)
+        return
+    except (BackendContractError, BackendError) as exc:
         dialog_manager.dialog_data["error"] = str(exc)
         await dialog_manager.switch_to(Screens.unavailable, show_mode=ShowMode.EDIT)
         await dialog_manager.show(show_mode=ShowMode.EDIT)

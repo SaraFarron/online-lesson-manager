@@ -279,3 +279,24 @@ async def test_live_success_replaces_cached_snapshot_for_exact_range() -> None:
         assert cached.response.generated_at == refreshed.response.generated_at
     finally:
         await http.aclose()
+
+
+async def test_live_schedule_uses_role_from_revalidated_account() -> None:
+    backend = _Backend()
+    clock = _Clock()
+    http, api = _client(backend, clock)
+    try:
+        teacher_result = await _fetch_live(api)
+        assert teacher_result.role == "TEACHER"
+
+        backend.account_role = "STUDENT"
+        backend.teacher_id = UUID(int=2)
+        student_result = await _fetch_live(api)
+
+        assert student_result.source == "live"
+        assert student_result.role == "STUDENT"
+        identity = api.offline_schedule_identity(SENDER_ID)
+        assert identity is not None
+        assert identity.role == "STUDENT"
+    finally:
+        await http.aclose()

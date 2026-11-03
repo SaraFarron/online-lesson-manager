@@ -79,10 +79,14 @@ async def _open_schedule(
     period: SchedulePeriod,
     requested_date: date | None = None,
 ) -> None:
-    view = SessionView.model_validate(manager.dialog_data["view"])
-    if view.account.role not in {"TEACHER", "STUDENT"}:
-        raise ValueError("This account cannot view a schedule")
-    role: ViewerRole = view.account.role
+    role = _schedule_role(callback, manager)
+    if role is None:
+        manager.dialog_data["error"] = (
+            "Previously authorized schedule access is no longer available. "
+            "Send /start to reconnect."
+        )
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
     state = await _load_schedule(
         callback, manager, period, role, requested_date=requested_date
     )
@@ -92,6 +96,27 @@ async def _open_schedule(
         mode=StartMode.NORMAL,
         show_mode=ShowMode.EDIT,
     )
+
+
+def _schedule_role(
+    callback: CallbackQuery, manager: DialogManager
+) -> ViewerRole | None:
+    raw_view = manager.dialog_data.get("view")
+    if raw_view is not None:
+        view = SessionView.model_validate(raw_view)
+        if view.account.role in {"TEACHER", "STUDENT"}:
+            return view.account.role
+        return None
+
+    if (
+        manager.dialog_data.get("offline_schedule") is not True
+        or manager.dialog_data.get("offline_sender_id") != callback.from_user.id
+    ):
+        return None
+    identity = backend(manager).offline_schedule_identity(callback.from_user.id)
+    if identity is None:
+        return None
+    return identity.role
 
 
 async def schedule_started(start_data: Any, manager: DialogManager) -> None:
@@ -224,7 +249,7 @@ async def _load_schedule(
             period,
             requested_date=requested_date,
         )
-        pages = format_schedule_pages(result.response, role)
+        pages = format_schedule_pages(result.response, result.role)
     except BackendContractError:
         return ScheduleDialogState(
             period=period,
@@ -255,7 +280,7 @@ async def _load_schedule(
         )
     return ScheduleDialogState(
         period=period,
-        role=role,
+        role=result.role,
         requested_date=(result.response.days[0].date if period == "week" else None),
         pages=list(pages),
         source=result.source,
