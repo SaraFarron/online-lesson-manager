@@ -14,8 +14,10 @@ from pydantic import (
     model_validator,
 )
 
+from backend.activity.schemas import StudentActionHistoryItem
 from backend.auth.constants import Roles
 from backend.auth.utils import string_to_time
+from backend.events.time_utils import normalize_utc
 
 
 def validate_timezone(value: str) -> str:
@@ -141,6 +143,43 @@ class StudentPickerItem(BaseModel):
 
 class StudentPickerPage(BaseModel):
     items: list[StudentPickerItem]
+    total: int
+
+
+class StudentHomeworkSummary(BaseModel):
+    assigned: int
+    completed: int
+    incomplete: int
+    completed_by_student: int
+    completed_by_teacher: int
+
+
+class TeacherStudentProfileSummary(BaseModel):
+    relationship_id: uuid.UUID
+    student_id: uuid.UUID
+    display_name: str = Field(
+        description="Uses 'Name unavailable' when the student has no display name."
+    )
+    username_display: str = Field(
+        description="Uses 'No username' when no Telegram username is recorded."
+    )
+    linked_at: datetime | None = Field(
+        description="Null means the historical association date is unknown."
+    )
+    removed_at: datetime | None
+    homework: StudentHomeworkSummary
+
+    @field_serializer("linked_at", "removed_at", when_used="json-unless-none")
+    def serialize_relationship_datetimes(self, value: datetime) -> str:
+        return normalize_utc(value).isoformat()
+
+
+class TeacherStudentProfileDetail(TeacherStudentProfileSummary):
+    actions: list[StudentActionHistoryItem]
+
+
+class TeacherStudentProfilePage(BaseModel):
+    items: list[TeacherStudentProfileSummary]
     total: int
 
 

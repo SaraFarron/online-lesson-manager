@@ -4,6 +4,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 
+from backend.activity import service as activity_service
 from backend.auth import service
 from backend.auth.constants import Roles
 from backend.auth.dependencies import (
@@ -18,6 +19,7 @@ from backend.auth.exceptions import (
     UserNotFound,
 )
 from backend.auth.schemas import (
+    StudentHomeworkSummary,
     StudentJoinTeacher,
     StudentPickerItem,
     StudentPickerPage,
@@ -28,6 +30,9 @@ from backend.auth.schemas import (
     TeacherProfileCreate,
     TeacherProfilePublic,
     TeacherProfileUpdate,
+    TeacherStudentProfileDetail,
+    TeacherStudentProfilePage,
+    TeacherStudentProfileSummary,
     Token,
     UserCreate,
     UserList,
@@ -51,6 +56,26 @@ router = APIRouter(
         422: {"description": "Invalid preferences or forbidden input fields"},
     },
 )
+
+
+def _student_profile_summary(
+    data: service.TeacherStudentProfileData,
+) -> TeacherStudentProfileSummary:
+    return TeacherStudentProfileSummary(
+        relationship_id=data.relationship_id,
+        student_id=data.student_id,
+        display_name=data.display_name,
+        username_display=data.username_display,
+        linked_at=data.linked_at,
+        removed_at=data.removed_at,
+        homework=StudentHomeworkSummary(
+            assigned=data.homework_assigned,
+            completed=data.homework_completed,
+            incomplete=data.homework_incomplete,
+            completed_by_student=data.homework_completed_by_student,
+            completed_by_teacher=data.homework_completed_by_teacher,
+        ),
+    )
 
 
 # ── Authentication ────────────────────────────────────────────────────────────
@@ -201,6 +226,102 @@ async def list_teacher_students(
             for student in students
         ],
         total=total,
+    )
+
+
+@router.get(
+    "/teacher/students/profiles",
+    response_model=TeacherStudentProfilePage,
+    summary="List the authenticated teacher's active student profile summaries",
+)
+async def list_teacher_student_profiles(
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+) -> TeacherStudentProfilePage:
+    if current_user.role != Roles.TEACHER:
+        raise InsufficientPermissions()
+
+    profiles, total = await service.get_active_teacher_student_profiles(
+        session, current_user.id, skip=skip, limit=limit
+    )
+    return TeacherStudentProfilePage(
+        items=[_student_profile_summary(profile) for profile in profiles],
+        total=total,
+    )
+
+
+@router.get(
+    "/teacher/students/profiles/{student_id}",
+    response_model=TeacherStudentProfileDetail,
+    summary="Get an active student's profile and latest ten actions",
+)
+async def get_teacher_student_profile(
+    session: SessionDep, current_user: CurrentUser, student_id: uuid.UUID
+) -> TeacherStudentProfileDetail:
+    if current_user.role != Roles.TEACHER:
+        raise InsufficientPermissions()
+
+    profile = await service.get_active_teacher_student_profile(
+        session, current_user.id, student_id
+    )
+    if profile is None:
+        raise UserNotFound()
+    actions = await activity_service.get_recent_student_actions(
+        session, profile.relationship_id, current_user.id, profile.student_id
+    )
+    return TeacherStudentProfileDetail(
+        **_student_profile_summary(profile).model_dump(),
+        actions=actions,
+    )
+
+
+@router.get(
+    "/teacher/former-students",
+    response_model=TeacherStudentProfilePage,
+    summary="List the authenticated teacher's former student profiles",
+)
+async def list_former_teacher_student_profiles(
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+) -> TeacherStudentProfilePage:
+    if current_user.role != Roles.TEACHER:
+        raise InsufficientPermissions()
+
+    profiles, total = await service.get_former_teacher_student_profiles(
+        session, current_user.id, skip=skip, limit=limit
+    )
+    return TeacherStudentProfilePage(
+        items=[_student_profile_summary(profile) for profile in profiles],
+        total=total,
+    )
+
+
+@router.get(
+    "/teacher/former-students/{relationship_id}",
+    response_model=TeacherStudentProfileDetail,
+    summary="Get a former student's read-only profile and latest ten actions",
+)
+async def get_former_teacher_student_profile(
+    session: SessionDep, current_user: CurrentUser, relationship_id: uuid.UUID
+) -> TeacherStudentProfileDetail:
+    if current_user.role != Roles.TEACHER:
+        raise InsufficientPermissions()
+
+    profile = await service.get_former_teacher_student_profile(
+        session, current_user.id, relationship_id
+    )
+    if profile is None:
+        raise UserNotFound()
+    actions = await activity_service.get_recent_student_actions(
+        session, profile.relationship_id, current_user.id, profile.student_id
+    )
+    return TeacherStudentProfileDetail(
+        **_student_profile_summary(profile).model_dump(),
+        actions=actions,
     )
 
 

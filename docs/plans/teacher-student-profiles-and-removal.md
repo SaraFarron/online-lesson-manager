@@ -170,9 +170,11 @@ Define ten-action scope: proposed scheduling creates/moves/cancels/deletes, home
 
 **Reuse:** `get_teacher_students`, homework status/provenance and history query indexes.
 
-**Acceptance Criteria:** [ ] Active/former teacher, student, new teacher and unrelated teacher tests show exact summaries, access boundaries and ten-action order. [ ] Missing metadata, no homework and longer history work; query count is bounded and owner-profile rules remain unchanged.
+**Acceptance Criteria:** [x] Active/former teacher, student, new teacher and unrelated teacher tests show exact summaries, access boundaries and ten-action order. [x] Missing metadata, no homework and longer history work; query count is bounded and owner-profile rules remain unchanged.
 
 **Out of scope:** Admin dashboards or analytics endpoints. **Suitable for:** AI agent.
+
+**Execution (2026-11-03):** Added paginated active and former-student summaries plus relationship-scoped detail reads with the latest ten actions, deterministic ordering, homework completion-source counts, and availability flags for referenced resources. Missing names/usernames use the approved labels; a null association date means “Unknown.” The projections omit credentials, Telegram routing IDs and private settings, and do not change owner-only profile routes. Verified 13 focused profile/auth/scheduling tests and 5 homework-read regressions; Ruff check/format and backend mypy passed.
 
 ## Task 06: Implement confirmation-bound student removal
 

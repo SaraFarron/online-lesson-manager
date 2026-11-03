@@ -13,3 +13,7 @@ class Roles(StrEnum):
     ADMIN = "ADMIN"
     TEACHER = "TEACHER"
     STUDENT = "STUDENT"
+
+
+STUDENT_NAME_UNAVAILABLE_LABEL = "Name unavailable"
+STUDENT_USERNAME_UNAVAILABLE_LABEL = "No username"

@@ -2,20 +2,26 @@ import re
 import secrets
 import string
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
 from backend.activity import service as activity_service
 from backend.activity.constants import StudentActionType
-from backend.auth.constants import Roles
+from backend.auth.constants import (
+    STUDENT_NAME_UNAVAILABLE_LABEL,
+    STUDENT_USERNAME_UNAVAILABLE_LABEL,
+    Roles,
+)
 from backend.auth.exceptions import (
     NotAStudent,
     StudentAlreadyLinked,
@@ -46,6 +52,23 @@ from backend.auth.utils import (
     verify_password,
 )
 from backend.exceptions import Conflict
+from backend.homework.models import Homework
+
+
+@dataclass(frozen=True)
+class TeacherStudentProfileData:
+    relationship_id: uuid.UUID
+    student_id: uuid.UUID
+    display_name: str
+    username_display: str
+    linked_at: datetime | None
+    removed_at: datetime | None
+    homework_assigned: int
+    homework_completed: int
+    homework_incomplete: int
+    homework_completed_by_student: int
+    homework_completed_by_teacher: int
+
 
 DUMMY_PASSWORD_HASH = (
     "$argon2id$v=19$m=65536,t=3,p=4$H7HFOyCv3KslcnJb9IzN6w$"
@@ -180,6 +203,189 @@ async def get_teacher_students(
         .limit(limit)
     )
     return list(students_result.scalars().all()), total
+
+
+def _teacher_student_profile_query(teacher_id: uuid.UUID) -> Select[Any]:
+    homework_counts = (
+        select(
+            Homework.student_id.label("student_id"),
+            func.count(Homework.id).label("assigned"),
+            func.sum(case((Homework.status == "COMPLETE", 1), else_=0)).label(
+                "completed"
+            ),
+            func.sum(
+                case(
+                    (
+                        (Homework.status == "COMPLETE")
+                        & (Homework.completion_source == "STUDENT_SUBMISSION"),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("completed_by_student"),
+            func.sum(
+                case(
+                    (
+                        (Homework.status == "COMPLETE")
+                        & (Homework.completion_source == "TEACHER"),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("completed_by_teacher"),
+        )
+        .where(
+            Homework.teacher_id == teacher_id,
+            Homework.deleted_at.is_(None),
+            Homework.cleanup_pending.is_(False),
+        )
+        .group_by(Homework.student_id)
+        .subquery()
+    )
+    return (
+        select(
+            StudentTeacherRelationship.id.label("relationship_id"),
+            StudentTeacherRelationship.student_id.label("student_id"),
+            User.full_name.label("full_name"),
+            User.telegram_username.label("telegram_username"),
+            StudentTeacherRelationship.linked_at.label("linked_at"),
+            StudentTeacherRelationship.removed_at.label("removed_at"),
+            func.coalesce(homework_counts.c.assigned, 0).label("homework_assigned"),
+            func.coalesce(homework_counts.c.completed, 0).label("homework_completed"),
+            func.coalesce(homework_counts.c.completed_by_student, 0).label(
+                "homework_completed_by_student"
+            ),
+            func.coalesce(homework_counts.c.completed_by_teacher, 0).label(
+                "homework_completed_by_teacher"
+            ),
+            (
+                func.coalesce(homework_counts.c.assigned, 0)
+                - func.coalesce(homework_counts.c.completed, 0)
+            ).label("homework_incomplete"),
+        )
+        .join(User, User.id == StudentTeacherRelationship.student_id)
+        .outerjoin(homework_counts, homework_counts.c.student_id == User.id)
+        .where(StudentTeacherRelationship.teacher_id == teacher_id)
+    )
+
+
+def _teacher_student_profile_data(row: Any) -> TeacherStudentProfileData:
+    display_name = row.full_name.strip() if row.full_name else ""
+    username = row.telegram_username.strip() if row.telegram_username else ""
+    return TeacherStudentProfileData(
+        relationship_id=row.relationship_id,
+        student_id=row.student_id,
+        display_name=display_name or STUDENT_NAME_UNAVAILABLE_LABEL,
+        username_display=username or STUDENT_USERNAME_UNAVAILABLE_LABEL,
+        linked_at=row.linked_at,
+        removed_at=row.removed_at,
+        homework_assigned=int(row.homework_assigned),
+        homework_completed=int(row.homework_completed),
+        homework_incomplete=int(row.homework_incomplete),
+        homework_completed_by_student=int(row.homework_completed_by_student),
+        homework_completed_by_teacher=int(row.homework_completed_by_teacher),
+    )
+
+
+async def get_active_teacher_student_profiles(
+    session: AsyncSession,
+    teacher_id: uuid.UUID,
+    *,
+    skip: int = 0,
+    limit: int = 100,
+) -> tuple[list[TeacherStudentProfileData], int]:
+    filters = (
+        User.teacher_id == teacher_id,
+        User.role == Roles.STUDENT,
+        User.is_active.is_(True),
+        StudentTeacherRelationship.removed_at.is_(None),
+    )
+    total = await session.scalar(
+        select(func.count(StudentTeacherRelationship.id))
+        .select_from(StudentTeacherRelationship)
+        .join(User, User.id == StudentTeacherRelationship.student_id)
+        .where(StudentTeacherRelationship.teacher_id == teacher_id, *filters)
+    )
+    rows = await session.execute(
+        _teacher_student_profile_query(teacher_id)
+        .where(*filters)
+        .order_by(User.full_name, User.id, StudentTeacherRelationship.id)
+        .offset(skip)
+        .limit(limit)
+    )
+    return [_teacher_student_profile_data(row) for row in rows], int(total or 0)
+
+
+async def get_active_teacher_student_profile(
+    session: AsyncSession,
+    teacher_id: uuid.UUID,
+    student_id: uuid.UUID,
+) -> TeacherStudentProfileData | None:
+    row = (
+        await session.execute(
+            _teacher_student_profile_query(teacher_id)
+            .where(
+                StudentTeacherRelationship.student_id == student_id,
+                StudentTeacherRelationship.removed_at.is_(None),
+                User.teacher_id == teacher_id,
+                User.role == Roles.STUDENT,
+                User.is_active.is_(True),
+            )
+            .limit(1)
+        )
+    ).first()
+    return _teacher_student_profile_data(row) if row is not None else None
+
+
+async def get_former_teacher_student_profiles(
+    session: AsyncSession,
+    teacher_id: uuid.UUID,
+    *,
+    skip: int = 0,
+    limit: int = 100,
+) -> tuple[list[TeacherStudentProfileData], int]:
+    filters = (
+        StudentTeacherRelationship.removed_at.is_not(None),
+        User.role == Roles.STUDENT,
+    )
+    total = await session.scalar(
+        select(func.count(StudentTeacherRelationship.id))
+        .select_from(StudentTeacherRelationship)
+        .join(User, User.id == StudentTeacherRelationship.student_id)
+        .where(StudentTeacherRelationship.teacher_id == teacher_id, *filters)
+    )
+    rows = await session.execute(
+        _teacher_student_profile_query(teacher_id)
+        .where(*filters)
+        .order_by(
+            StudentTeacherRelationship.removed_at.desc(),
+            User.full_name,
+            User.id,
+            StudentTeacherRelationship.id,
+        )
+        .offset(skip)
+        .limit(limit)
+    )
+    return [_teacher_student_profile_data(row) for row in rows], int(total or 0)
+
+
+async def get_former_teacher_student_profile(
+    session: AsyncSession,
+    teacher_id: uuid.UUID,
+    relationship_id: uuid.UUID,
+) -> TeacherStudentProfileData | None:
+    row = (
+        await session.execute(
+            _teacher_student_profile_query(teacher_id)
+            .where(
+                StudentTeacherRelationship.id == relationship_id,
+                StudentTeacherRelationship.removed_at.is_not(None),
+                User.role == Roles.STUDENT,
+            )
+            .limit(1)
+        )
+    ).first()
+    return _teacher_student_profile_data(row) if row is not None else None
 
 
 async def get_teacher_student_roster(
