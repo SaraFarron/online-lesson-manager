@@ -91,6 +91,16 @@ from .models import (
     Token,
 )
 from .notifications import NotificationClient, NotificationProtocolError
+from .schedule_cache import (
+    AUTHORIZATION_TTL_SECONDS,
+    MAX_SCHEDULE_SNAPSHOTS,
+    SCHEDULE_SNAPSHOT_TTL_SECONDS,
+    AuthorizationTicket,
+    CachedScheduleSnapshot,
+    ScheduleCacheIdentity,
+    ScheduleFetchTicket,
+    ScheduleSnapshotCache,
+)
 from .transfer import (
     HOMEWORK_TRANSFER_TIMEOUT_SECONDS,
     MAX_HOMEWORK_ATTACHMENT_BYTES,
@@ -120,6 +130,14 @@ __all__ = [
     "SCHEDULE_ERROR_MESSAGES",
     "SCHEDULING_ERROR_MESSAGES",
     "SETTINGS_ERROR_MESSAGES",
+    "AUTHORIZATION_TTL_SECONDS",
+    "SCHEDULE_SNAPSHOT_TTL_SECONDS",
+    "MAX_SCHEDULE_SNAPSHOTS",
+    "AuthorizationTicket",
+    "CachedScheduleSnapshot",
+    "ScheduleCacheIdentity",
+    "ScheduleFetchTicket",
+    "ScheduleSnapshotCache",
     "HOMEWORK_TRANSFER_TIMEOUT_SECONDS",
     "MAX_HOMEWORK_ATTACHMENT_BYTES",
     "MAX_HOMEWORK_ATTACHMENT_TOTAL_BYTES",

@@ -4,7 +4,7 @@
 
 Previously authorized users can view bounded, clearly stale schedule snapshots during backend availability failures without enabling offline mutations or leaking another user's calendar.
 
-**Status:** Task 00 policy approved (2026-11-03); implementation not started.
+**Status:** Task 00 approved; Task 01 implemented and verified; Tasks 02–05 pending.
 
 ## Scope (README.md sections covered)
 
@@ -95,7 +95,9 @@ Implement only the minimal approved backend authorization/version metadata, if n
 
 **Reuse:** Existing strict `ScheduleResponse`/account models and local date boundaries.
 
-**Acceptance Criteria:** [ ] Key collision, expiry boundary, clock changes, corruption, LRU/bounds and racing-response tests pass. [ ] No cross-account/teacher/role/timezone reuse; schema/migration checks pass if applicable.
+**Acceptance Criteria:** [x] Key collision, expiry boundary, wall-clock changes, monotonic rollback, LRU/bounds and racing-response tests pass; persistent-store corruption handling is not applicable because storage is memory-only. [x] No cross-account/teacher/role/timezone reuse; schema/migration checks pass if applicable.
+
+**Execution (2026-11-03):** Added a bounded in-memory cache keyed by backend namespace, trusted sender, account, role, teacher link, timezone, period and actual local range. Authorization and snapshot freshness use monotonic time; identity changes, environment changes, invalidation and out-of-order results are fenced. The cache keeps one day and one week per identity and a global LRU bound; it revalidates typed responses and stores no credentials. `uv run pytest -q tests/test_telegram_schedule_cache.py` passed (14 tests); Ruff check/format and `uv run mypy telegram` passed. No backend schema or migration was needed. Persistence corruption/restart checks do not apply; restart empties this in-memory cache.
 
 **Out of scope:** Shared Redis/platform abstraction unless approved. **Suitable for:** AI agent.
 
