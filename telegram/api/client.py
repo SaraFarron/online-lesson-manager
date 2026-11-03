@@ -19,6 +19,7 @@ from .errors import (
     BroadcastPreviewStale,
     HomeworkAttachmentTooLarge,
     HomeworkOutcomeUnknown,
+    StudentRemovalOutcomeUnknown,
 )
 from .messages import (
     BROADCAST_ERROR_MESSAGES,
@@ -58,6 +59,9 @@ from .models import (
     StudentPickerPage,
     StudentProfile,
     StudentProfileUpdate,
+    StudentRemovalConfirmRequest,
+    StudentRemovalPreview,
+    StudentRemovalResult,
     TeacherBookingContext,
     TeacherBroadcastPreview,
     TeacherBroadcastPreviewRequest,
@@ -67,6 +71,8 @@ from .models import (
     TeacherConfirmation,
     TeacherProfile,
     TeacherProfileUpdate,
+    TeacherStudentProfileDetail,
+    TeacherStudentProfilePage,
     Token,
 )
 
@@ -871,6 +877,106 @@ class BackendClient:
             params={"skip": str(skip), "limit": str(limit)},
             error_context="scheduling",
         )
+
+    async def read_teacher_student_profiles(
+        self,
+        sender_id: int,
+        chat_id: int,
+        *,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> TeacherStudentProfilePage:
+        return await self.read(
+            "/api/v1/auth/teacher/students/profiles",
+            TeacherStudentProfilePage,
+            sender_id,
+            chat_id,
+            params={"skip": str(skip), "limit": str(limit)},
+            error_context="settings",
+        )
+
+    async def read_former_student_profiles(
+        self,
+        sender_id: int,
+        chat_id: int,
+        *,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> TeacherStudentProfilePage:
+        return await self.read(
+            "/api/v1/auth/teacher/former-students",
+            TeacherStudentProfilePage,
+            sender_id,
+            chat_id,
+            params={"skip": str(skip), "limit": str(limit)},
+            error_context="settings",
+        )
+
+    async def read_teacher_student_profile(
+        self,
+        sender_id: int,
+        chat_id: int,
+        student_id: uuid.UUID,
+    ) -> TeacherStudentProfileDetail:
+        return await self.read(
+            f"/api/v1/auth/teacher/students/profiles/{student_id}",
+            TeacherStudentProfileDetail,
+            sender_id,
+            chat_id,
+            error_context="settings",
+        )
+
+    async def read_former_student_profile(
+        self,
+        sender_id: int,
+        chat_id: int,
+        relationship_id: uuid.UUID,
+    ) -> TeacherStudentProfileDetail:
+        return await self.read(
+            f"/api/v1/auth/teacher/former-students/{relationship_id}",
+            TeacherStudentProfileDetail,
+            sender_id,
+            chat_id,
+            error_context="settings",
+        )
+
+    async def preview_teacher_student_removal(
+        self,
+        sender_id: int,
+        chat_id: int,
+        student_id: uuid.UUID,
+    ) -> StudentRemovalPreview:
+        return await self.write(
+            "POST",
+            f"/api/v1/auth/teacher/students/{student_id}/removal/preview",
+            StudentRemovalPreview,
+            sender_id,
+            chat_id,
+            NoContent(),
+            error_context="settings",
+            ambiguous_write=False,
+        )
+
+    async def confirm_teacher_student_removal(
+        self,
+        sender_id: int,
+        chat_id: int,
+        student_id: uuid.UUID,
+        request: StudentRemovalConfirmRequest,
+    ) -> StudentRemovalResult:
+        try:
+            return await self.write(
+                "POST",
+                f"/api/v1/auth/teacher/students/{student_id}/removal/confirm",
+                StudentRemovalResult,
+                sender_id,
+                chat_id,
+                request,
+                headers={"Idempotency-Key": str(request.operation_key)},
+                error_context="settings",
+            )
+        except BackendOutcomeUnknown as exc:
+            raise StudentRemovalOutcomeUnknown(request) from exc
 
     async def read_teacher_booking_context(
         self, sender_id: int, chat_id: int

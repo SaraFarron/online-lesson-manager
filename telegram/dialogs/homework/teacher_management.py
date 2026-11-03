@@ -41,15 +41,8 @@ class TeacherHomeworkScreens(StatesGroup):
     unavailable = State()
 
 
-async def open_teacher_homework_management(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if callback.message is None:
-        raise ValueError("Homework management requires a private chat")
-    view = SessionView.model_validate(manager.dialog_data["view"])
-    if view.account.role != "TEACHER":
-        raise ValueError("Only teachers can manage homework")
-    data: dict[str, Any] = {
+def _initial_homework_data(view: SessionView) -> dict[str, Any]:
+    return {
         "view": view.model_dump(mode="json"),
         "students": [],
         "student_total": 0,
@@ -73,7 +66,20 @@ async def open_teacher_homework_management(
         "notice": "",
         "assignment_text_page": 0,
         "submission_text_page": 0,
+        "read_only": False,
+        "profile_student_id": None,
     }
+
+
+async def open_teacher_homework_management(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Homework management requires a private chat")
+    view = SessionView.model_validate(manager.dialog_data["view"])
+    if view.account.role != "TEACHER":
+        raise ValueError("Only teachers can manage homework")
+    data = _initial_homework_data(view)
     try:
         page = await backend(manager).read_student_picker(
             callback.from_user.id,
@@ -85,6 +91,50 @@ async def open_teacher_homework_management(
     except (BackendError, BackendUnavailable) as exc:
         data["error"] = str(exc)
         state = TeacherHomeworkScreens.unavailable
+    await manager.start(
+        state,
+        data=data,
+        mode=StartMode.NORMAL,
+        show_mode=ShowMode.EDIT,
+    )
+
+
+async def open_teacher_homework_for_student(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Homework details require a private chat")
+    raw_profile = manager.dialog_data.get("profile")
+    if not isinstance(raw_profile, dict):
+        manager.dialog_data["error"] = "Select a student profile first."
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    view = SessionView.model_validate(manager.dialog_data["view"])
+    if view.account.role != "TEACHER":
+        raise ValueError("Only teachers can view student homework")
+    student_id = UUID(str(raw_profile["student_id"]))
+    is_former = manager.dialog_data.get("list_kind") == "former"
+    data = _initial_homework_data(view)
+    data.update(
+        student_id=str(student_id),
+        student_label=str(raw_profile.get("display_name") or "Student"),
+        profile_student_id=str(student_id),
+        read_only=is_former,
+    )
+    try:
+        page = await backend(manager).read_homework_assignments(
+            callback.from_user.id,
+            callback.message.chat.id,
+            skip=0,
+            limit=ASSIGNMENT_PAGE_SIZE,
+            student_id=student_id,
+        )
+    except (BackendError, BackendUnavailable) as exc:
+        data["error"] = str(exc)
+        state = TeacherHomeworkScreens.unavailable
+    else:
+        _store_assignment_page(data, page, 0)
+        state = TeacherHomeworkScreens.assignments
     await manager.start(
         state,
         data=data,
@@ -295,16 +345,25 @@ async def teacher_homework_data(
         ),
         "downloads": download_options,
         "has_downloads": bool(download_options),
+        "read_only": bool(data.get("read_only")),
+        "read_only_notice": (
+            "Former-student homework is read-only.\n" if data.get("read_only") else ""
+        ),
+        "is_profile_view": bool(data.get("profile_student_id")),
+        "can_change_student": not bool(data.get("profile_student_id")),
         "can_complete": assignment is not None
         and status == "INCOMPLETE"
         and not busy
+        and not data.get("read_only")
         and not data.get("outcome_unknown"),
         "can_delete": assignment is not None
         and not busy
+        and not data.get("read_only")
         and not data.get("outcome_unknown"),
         "can_cancel_delete": not busy and not data.get("outcome_unknown"),
         "can_confirm_delete": assignment is not None
         and not busy
+        and not data.get("read_only")
         and not data.get("outcome_unknown"),
         "can_check_delete": bool(data.get("outcome_unknown")) and not busy,
         "student_count": student_total,
@@ -782,6 +841,10 @@ async def mark_complete(
         or data.get("outcome_unknown")
     ):
         return
+    if data.get("read_only"):
+        data["error"] = "Former-student homework is read-only."
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
     assignment_id = UUID(assignment["id"])
     data.update(submitting=True, error="", warning="", notice="")
     await manager.show(show_mode=ShowMode.EDIT)
@@ -880,6 +943,10 @@ async def mark_complete(
 async def begin_delete(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    if manager.dialog_data.get("read_only"):
+        manager.dialog_data["error"] = "Former-student homework is read-only."
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
     manager.dialog_data.update(error="", warning="", notice="", outcome_unknown=False)
     await manager.switch_to(
         TeacherHomeworkScreens.confirm_delete, show_mode=ShowMode.EDIT
@@ -999,6 +1066,7 @@ async def confirm_delete(
     assignment = data.get("assignment")
     if (
         not isinstance(assignment, dict)
+        or data.get("read_only")
         or data.get("submitting")
         or data.get("outcome_unknown")
     ):
@@ -1050,6 +1118,17 @@ async def retry_management(
 ) -> None:
     if callback.message is None:
         raise ValueError("Homework management requires a private chat")
+    if manager.dialog_data.get("profile_student_id"):
+        loaded = await _load_assignment_page(
+            callback.from_user.id, callback.message.chat.id, manager, 0
+        )
+        if loaded:
+            await manager.switch_to(
+                TeacherHomeworkScreens.assignments, show_mode=ShowMode.EDIT
+            )
+        else:
+            await manager.show(show_mode=ShowMode.EDIT)
+        return
     page_loaded = await _load_student_page(
         callback.from_user.id, callback.message.chat.id, manager, 0
     )
@@ -1071,7 +1150,8 @@ def build_homework_teacher_management_dialog() -> Dialog:
     return Dialog(
         Window(
             Format(
-                "{feedback}Choose a student to manage homework, or view all students.\n"
+                "{feedback}{read_only_notice}"
+                "Choose a student to manage homework, or view all students.\n"
                 "{student_page}"
             ),
             Select(
@@ -1105,7 +1185,8 @@ def build_homework_teacher_management_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{feedback}Homework for {student_label} — {status_filter}\n"
+                "{feedback}{read_only_notice}"
+                "Homework for {student_label} — {status_filter}\n"
                 "{assignment_page}\n{notice}"
             ),
             Select(
@@ -1141,6 +1222,13 @@ def build_homework_teacher_management_dialog() -> Dialog:
                     Const("Change student"),
                     id="change_student",
                     on_click=retry_management,
+                    when="can_change_student",
+                ),
+                Button(
+                    Const("Back to profile"),
+                    id="back_to_profile",
+                    on_click=close_management,
+                    when="is_profile_view",
                 ),
                 Button(
                     Const("Refresh"), id="refresh", on_click=refresh_assignment_list
@@ -1151,7 +1239,7 @@ def build_homework_teacher_management_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{feedback}{detail_student_label}\n"
+                "{feedback}{read_only_notice}{detail_student_label}\n"
                 "{assignment_text_heading}{assignment_text}\n"
                 "Status: {assignment_status}\n{completion_label}\n"
                 "Submission: {submission_version}\n"

@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     ConfigDict,
     EmailStr,
@@ -53,6 +54,90 @@ class StudentPickerPage(BaseModel):
 
     items: list[StudentPickerItem]
     total: int = Field(ge=0)
+
+
+class StudentHomeworkSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    assigned: int = Field(ge=0)
+    completed: int = Field(ge=0)
+    incomplete: int = Field(ge=0)
+    completed_by_student: int = Field(ge=0)
+    completed_by_teacher: int = Field(ge=0)
+
+
+class TeacherStudentProfileSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    relationship_id: uuid.UUID
+    student_id: uuid.UUID
+    display_name: str
+    username_display: str
+    linked_at: AwareDatetime | None
+    removed_at: AwareDatetime | None
+    homework: StudentHomeworkSummary
+
+
+class StudentActionHistoryItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    action_type: str
+    occurred_at: AwareDatetime
+    resource_type: str | None
+    resource_id: uuid.UUID | None
+    resource_occurrence_at: AwareDatetime | None
+    resource_available: bool | None
+
+
+class TeacherStudentProfileDetail(TeacherStudentProfileSummary):
+    actions: list[StudentActionHistoryItem]
+
+
+class TeacherStudentProfilePage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[TeacherStudentProfileSummary]
+    total: int = Field(ge=0)
+
+
+class StudentRemovalImpact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    one_off_lessons_to_delete: int = Field(ge=0)
+    recurring_series_to_truncate: int = Field(ge=0)
+    recurring_series_to_delete: int = Field(ge=0)
+    future_cancellations_to_delete: int = Field(ge=0)
+    staged_uploads_to_revoke: int = Field(ge=0)
+    notifications_to_suppress: int = Field(ge=0)
+
+
+class StudentRemovalPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    student_id: uuid.UUID
+    relationship_id: uuid.UUID
+    impact: StudentRemovalImpact
+    confirmation_token: str
+    expires_at: AwareDatetime
+
+
+class StudentRemovalConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preview_token: str = Field(min_length=1, max_length=1024)
+    operation_key: uuid.UUID
+
+
+class StudentRemovalResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    student_id: uuid.UUID
+    relationship_id: uuid.UUID
+    operation_key: uuid.UUID
+    removed_at: AwareDatetime
+    impact: StudentRemovalImpact
+    cleanup_complete: bool = True
 
 
 class TeacherBookingContext(BaseModel):

@@ -202,9 +202,11 @@ Define ten-action scope: proposed scheduling creates/moves/cancels/deletes, home
 
 **Reuse:** Existing typed client, escaped leading feedback, `ShowMode.EDIT` and confirmation patterns.
 
-**Acceptance Criteria:** [ ] Every README profile item and approved former-student flow is reachable, including missing-data labels. [ ] Students cannot forge teacher actions; no extra normal screen sends; removal cancel/confirm/stale/error paths are tested.
+**Acceptance Criteria:** [x] Every README profile item and approved former-student flow is reachable, including missing-data labels. [x] Students cannot forge teacher actions; no extra normal screen sends; removal cancel/confirm/stale/error paths are tested.
 
 **Out of scope:** Teacher transfer or chat messaging. **Suitable for:** AI agent.
+
+**Execution (2026-11-04):** Added the teacher Students entry point, paginated active/former profiles, escaped identity and action history, homework summary and history views, and read-only former-student homework browsing. Removal uses a fresh impact preview, explicit cancel/confirm, stale-preview refresh, authoritative result display, and same-operation retry after an ambiguous response. Recording-transport tests verify pagination, active/former authorization and controls, edit-in-place behavior, stale/cancel/confirm paths, and idempotent retry. Bot Ruff check/format and mypy passed; the full suite passed (585 passed, 14 skipped).
 
 ## Task 08: Verify lifecycle and publish retention contract
 

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 if TYPE_CHECKING:
+    from .models.accounts import StudentRemovalConfirmRequest
     from .models.events import BreakDisplacementPreview
     from .models.notifications import TeacherBroadcastPublishRequest
 
@@ -54,6 +55,15 @@ class BroadcastOutcomeUnknown(BackendOutcomeUnknown):
             self,
             "The broadcast outcome is unknown. Reconcile this operation before "
             "starting another broadcast.",
+        )
+
+
+class StudentRemovalOutcomeUnknown(BackendOutcomeUnknown):
+    def __init__(self, request: StudentRemovalConfirmRequest) -> None:
+        self.request = request
+        RuntimeError.__init__(
+            self,
+            "The removal outcome is unknown. Retry only this same confirmation.",
         )
 
 
