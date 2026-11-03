@@ -6,7 +6,12 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import StudentProfile, TeacherProfile, User
+from backend.auth.models import (
+    StudentProfile,
+    StudentTeacherRelationship,
+    TeacherProfile,
+    User,
+)
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
@@ -56,6 +61,10 @@ async def _seed_pair(session: AsyncSession) -> tuple[User, User]:
                 max_lessons_per_day=6,
             ),
             StudentProfile(student_id=student.id),
+            StudentTeacherRelationship(
+                student_id=student.id,
+                teacher_id=teacher.id,
+            ),
         ]
     )
     await session.commit()

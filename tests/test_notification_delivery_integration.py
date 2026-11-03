@@ -14,7 +14,12 @@ from pydantic import SecretStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import StudentProfile, TeacherProfile, User
+from backend.auth.models import (
+    StudentProfile,
+    StudentTeacherRelationship,
+    TeacherProfile,
+    User,
+)
 from backend.auth.utils import create_access_token
 from backend.constants import EventType
 from backend.events.models import Event
@@ -148,6 +153,10 @@ async def test_preferences_to_recorded_delivery_for_every_notification_type(
                 student,
                 student_profile,
                 teacher_profile,
+                StudentTeacherRelationship(
+                    student_id=student.id,
+                    teacher_id=teacher.id,
+                ),
                 today_lesson,
                 due_lesson,
             ]

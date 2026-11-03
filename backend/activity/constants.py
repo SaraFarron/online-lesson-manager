@@ -20,6 +20,8 @@ class StudentActionType(StrEnum):
     VACATION_CREATED = "vacation_created"
     VACATION_UPDATED = "vacation_updated"
     VACATION_DELETED = "vacation_deleted"
+    HOMEWORK_SUBMISSION_CREATED = "homework_submission_created"
+    HOMEWORK_COMPLETED = "homework_completed"
 
 
 class ScheduleMutation(StrEnum):

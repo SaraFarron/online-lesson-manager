@@ -9,7 +9,7 @@ import pytest
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from backend.auth.models import User
+from backend.auth.models import StudentTeacherRelationship, User
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.models import Homework, HomeworkSubmission
@@ -1022,7 +1022,16 @@ async def test_homework_client_streams_backend_workflow(
         timezone="UTC",
         teacher_id=teacher.id,
     )
-    db_session.add_all([teacher, student])
+    db_session.add_all(
+        [
+            teacher,
+            student,
+            StudentTeacherRelationship(
+                student_id=student.id,
+                teacher_id=teacher.id,
+            ),
+        ]
+    )
     await db_session.commit()
 
     async def transport(request: httpx.Request) -> httpx.Response:
@@ -1282,7 +1291,17 @@ async def test_homework_submission_unknown_outcome_retries_same_operation_key(
         text="Complete the exercise",
         operation_key=uuid4(),
     )
-    db_session.add_all([teacher, student, homework])
+    db_session.add_all(
+        [
+            teacher,
+            student,
+            homework,
+            StudentTeacherRelationship(
+                student_id=student.id,
+                teacher_id=teacher.id,
+            ),
+        ]
+    )
     await db_session.commit()
     submissions = 0
 

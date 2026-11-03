@@ -11,7 +11,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import backend.homework.services.management as management_service
-from backend.auth.models import User
+from backend.activity.constants import StudentActionType
+from backend.activity.models import StudentAction
+from backend.auth.models import StudentTeacherRelationship, User
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
@@ -44,6 +46,12 @@ async def _linked_pair(session: AsyncSession) -> tuple[User, User]:
     teacher = await _user(session, "TEACHER")
     student = await _user(session, "STUDENT")
     student.teacher_id = teacher.id
+    session.add(
+        StudentTeacherRelationship(
+            student_id=student.id,
+            teacher_id=teacher.id,
+        )
+    )
     await session.commit()
     return teacher, student
 
@@ -147,6 +155,17 @@ async def test_manual_completion_is_idempotent_and_preserves_provenance(
     repeated = await client.post(url, headers=_auth(teacher))
     assert repeated.status_code == 200
     assert repeated.json() == completed.json()
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(StudentAction)
+            .where(
+                StudentAction.student_id == student.id,
+                StudentAction.action_type == StudentActionType.HOMEWORK_COMPLETED,
+            )
+        )
+        == 0
+    )
     await db_session.refresh(homework)
     assert homework.completion_source == "TEACHER"
 
@@ -254,6 +273,42 @@ async def test_delete_and_submission_race_never_leaves_assignment_or_submission(
     assert (
         await db_session.scalar(
             select(func.count())
+            .select_from(StudentAction)
+            .where(StudentAction.student_id == student.id)
+        )
+        == 0
+    )
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(StudentAction)
+            .where(StudentAction.student_id == student.id)
+        )
+        == 0
+    )
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(StudentAction)
+            .where(StudentAction.student_id == student.id)
+        )
+        == 0
+    )
+    actions = list(
+        await db_session.scalars(
+            select(StudentAction).where(StudentAction.student_id == student.id)
+        )
+    )
+    if submission.status_code == 201:
+        assert {action.action_type for action in actions} == {
+            StudentActionType.HOMEWORK_SUBMISSION_CREATED,
+            StudentActionType.HOMEWORK_COMPLETED,
+        }
+    else:
+        assert actions == []
+    assert (
+        await db_session.scalar(
+            select(func.count())
             .select_from(HomeworkSubmission)
             .where(HomeworkSubmission.homework_id == homework.id)
         )
@@ -291,6 +346,14 @@ async def test_concurrent_delete_requests_are_safe(
     assert (
         await db_session.scalar(
             select(func.count()).select_from(Homework).where(Homework.id == homework.id)
+        )
+        == 0
+    )
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(StudentAction)
+            .where(StudentAction.student_id == student.id)
         )
         == 0
     )
@@ -431,6 +494,14 @@ async def test_failed_delete_cleanup_keeps_tombstone_and_retries(
     await db_session.refresh(tombstone)
     assert tombstone.deleted_at is not None
     assert tombstone.cleanup_pending is True
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(StudentAction)
+            .where(StudentAction.student_id == student.id)
+        )
+        == 0
+    )
     assert (await client.get(url, headers=_auth(teacher))).status_code == 404
     assert (
         await client.get(
@@ -450,6 +521,14 @@ async def test_failed_delete_cleanup_keeps_tombstone_and_retries(
     assert (
         await db_session.scalar(
             select(func.count()).select_from(Homework).where(Homework.id == homework.id)
+        )
+        == 0
+    )
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(StudentAction)
+            .where(StudentAction.student_id == student.id)
         )
         == 0
     )

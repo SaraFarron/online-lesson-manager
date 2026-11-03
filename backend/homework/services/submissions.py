@@ -8,6 +8,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.activity import service as activity_service
+from backend.activity.constants import StudentActionType
 from backend.auth.constants import Roles
 from backend.auth.models import User
 from backend.exceptions import Conflict, Forbidden, NotFound
@@ -206,6 +208,23 @@ async def create_submission(
             attachment.homework_id = homework_id
             attachment.submission_id = submission.id
             attachment.staged_until = None
+        await activity_service.record_student_action(
+            session,
+            active_student,
+            StudentActionType.HOMEWORK_SUBMISSION_CREATED,
+            resource_type="homework_submission",
+            resource_id=submission.id,
+            occurred_at=submitted_at,
+        )
+        if completion_source is not None:
+            await activity_service.record_student_action(
+                session,
+                active_student,
+                StudentActionType.HOMEWORK_COMPLETED,
+                resource_type="homework",
+                resource_id=homework.id,
+                occurred_at=submitted_at,
+            )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()

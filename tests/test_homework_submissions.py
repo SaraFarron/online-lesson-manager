@@ -11,7 +11,9 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import TeacherProfile, User
+from backend.activity.constants import StudentActionType
+from backend.activity.models import StudentAction
+from backend.auth.models import StudentTeacherRelationship, TeacherProfile, User
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.constants import (
@@ -53,6 +55,12 @@ async def _linked_pair(session: AsyncSession) -> tuple[User, User]:
     teacher = await _user(session, "TEACHER")
     student = await _user(session, "STUDENT")
     student.teacher_id = teacher.id
+    session.add(
+        StudentTeacherRelationship(
+            student_id=student.id,
+            teacher_id=teacher.id,
+        )
+    )
     await session.commit()
     return teacher, student
 
@@ -131,6 +139,35 @@ async def test_text_submission_completes_and_resubmissions_are_versioned(
     retry = await client.post(url, headers=_auth(student), json=payload)
     assert retry.status_code == 201
     assert retry.json() == submitted.json()
+    actions = list(
+        await db_session.scalars(
+            select(StudentAction)
+            .where(StudentAction.student_id == student.id)
+            .order_by(StudentAction.occurred_at, StudentAction.id)
+        )
+    )
+    assert len(actions) == 2
+    submission_action = next(
+        action
+        for action in actions
+        if action.action_type == StudentActionType.HOMEWORK_SUBMISSION_CREATED
+    )
+    completion_action = next(
+        action
+        for action in actions
+        if action.action_type == StudentActionType.HOMEWORK_COMPLETED
+    )
+    submission_ids = list(
+        await db_session.scalars(
+            select(HomeworkSubmission.id)
+            .where(HomeworkSubmission.homework_id == homework.id)
+            .order_by(HomeworkSubmission.version)
+        )
+    )
+    assert submission_action.resource_type == "homework_submission"
+    assert submission_action.resource_id == submission_ids[0]
+    assert completion_action.resource_type == "homework"
+    assert completion_action.resource_id == homework.id
     assert (
         await db_session.scalar(select(func.count()).select_from(HomeworkSubmission))
         == 1
@@ -167,6 +204,33 @@ async def test_text_submission_completes_and_resubmissions_are_versioned(
         await db_session.scalar(select(func.count()).select_from(HomeworkSubmission))
         == 2
     )
+    actions = list(
+        await db_session.scalars(
+            select(StudentAction)
+            .where(StudentAction.student_id == student.id)
+            .order_by(StudentAction.occurred_at, StudentAction.id)
+        )
+    )
+    assert len(actions) == 3
+    submission_ids = list(
+        await db_session.scalars(
+            select(HomeworkSubmission.id)
+            .where(HomeworkSubmission.homework_id == homework.id)
+            .order_by(HomeworkSubmission.version)
+        )
+    )
+    submission_actions = [
+        action
+        for action in actions
+        if action.action_type == StudentActionType.HOMEWORK_SUBMISSION_CREATED
+    ]
+    assert [action.resource_id for action in submission_actions] == submission_ids
+    completion_actions = [
+        action
+        for action in actions
+        if action.action_type == StudentActionType.HOMEWORK_COMPLETED
+    ]
+    assert [action.resource_id for action in completion_actions] == [homework.id]
     intents = list(await db_session.scalars(select(NotificationIntent)))
     assert len(intents) == 2
     assert {intent.source_version for intent in intents} == {1, 2}
@@ -315,6 +379,7 @@ async def test_empty_and_unauthorized_submissions_are_rejected(
         await db_session.scalar(select(func.count()).select_from(HomeworkSubmission))
         == 0
     )
+    assert await db_session.scalar(select(func.count()).select_from(StudentAction)) == 0
 
 
 async def test_unlinked_and_teacher_completed_homework_cannot_be_submitted(
@@ -519,6 +584,7 @@ async def test_failed_finalization_preserves_staged_files_and_unknown_ack_reconc
         await db_session.scalar(select(func.count()).select_from(HomeworkSubmission))
         == 0
     )
+    assert await db_session.scalar(select(func.count()).select_from(StudentAction)) == 0
     unchanged = await db_session.get(HomeworkAttachment, attachment_id)
     assert unchanged is not None
     assert unchanged.submission_id is None
@@ -547,6 +613,7 @@ async def test_failed_finalization_preserves_staged_files_and_unknown_ack_reconc
         await db_session.scalar(select(func.count()).select_from(NotificationIntent))
         == 1
     )
+    assert await db_session.scalar(select(func.count()).select_from(StudentAction)) == 2
 
 
 async def test_concurrent_retries_with_one_operation_key_create_one_version(

@@ -7,7 +7,12 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.models import StudentProfile, TeacherProfile, User
+from backend.auth.models import (
+    StudentProfile,
+    StudentTeacherRelationship,
+    TeacherProfile,
+    User,
+)
 from backend.auth.utils import create_access_token
 from backend.homework.config import HomeworkConfig, get_homework_settings
 from backend.homework.models import Homework, HomeworkAttachment, HomeworkSubmission
@@ -96,6 +101,18 @@ async def _seed(session: AsyncSession) -> tuple[User, User, User, User, User]:
             StudentProfile(student_id=student.id),
             StudentProfile(student_id=second_student.id),
             StudentProfile(student_id=outsider_student.id),
+            StudentTeacherRelationship(
+                student_id=student.id,
+                teacher_id=teacher.id,
+            ),
+            StudentTeacherRelationship(
+                student_id=second_student.id,
+                teacher_id=teacher.id,
+            ),
+            StudentTeacherRelationship(
+                student_id=outsider_student.id,
+                teacher_id=outsider_teacher.id,
+            ),
         ]
     )
     await session.commit()

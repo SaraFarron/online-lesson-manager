@@ -154,9 +154,11 @@ Define ten-action scope: proposed scheduling creates/moves/cancels/deletes, home
 
 **Reuse:** Homework operation-key reconciliation and recoverable cleanup services.
 
-**Acceptance Criteria:** [ ] Replay, rollback and cleanup retry do not add actions; new solution versions do. [ ] Existing completion/file persistence behavior and common checks pass.
+**Acceptance Criteria:** [x] Replay, rollback and cleanup retry do not add actions; new solution versions do. [x] Existing completion/file persistence behavior and common checks pass.
 
 **Out of scope:** Notification delivery. **Suitable for:** AI agent.
+
+**Execution (2026-11-03):** Recorded each committed student submission version and the initial student-triggered completion in the submission transaction, referencing the submission/assignment IDs without text or file data. Idempotent and unknown-outcome retries do not duplicate actions; failed finalization rolls actions back. Teacher completion/deletion and cleanup retries remain unrecorded. The full suite passed (573 passed, 10 skipped); Ruff check/format and backend mypy passed.
 
 ## Task 05: Expose teacher-owned profile and history reads
 
