@@ -812,3 +812,44 @@ async def test_unknown_publish_outcome_blocks_text_edits_on_compose(
     finally:
         await _close_driver(driver, http)
         app.dependency_overrides.pop(get_homework_settings, None)
+
+
+async def test_publish_notice_is_formatted_once_and_cleared_by_later_flows(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    _teacher, _students = await _seed(db_session)
+    driver, http, _api, _requests = await _make_driver(client, bot_service_key)
+    try:
+        await driver.text("/start")
+        await _open_assignment(driver, "Alice Learner")
+        await driver.text("Published once")
+        await driver.click("Publish assignment")
+
+        lines = driver.session.last_message.text.split("\n")
+        assert lines[0] == "TEACHER: Homework Teacher"
+        assert lines[1] == "Timezone: UTC"
+        assert lines[2] == "Daily digest (local): off"
+        assert lines[3] == ""
+        assert lines[4] == "Homework assignment published."
+        assert lines[5] == "Teacher code: t_HOMWRK"
+        assert driver.session.last_message.text.count("published") == 1
+
+        await driver.click("Manage homework")
+        await driver.click("Alice Learner")
+        await driver.click(
+            next(label for label in _labels(driver) if "Published once" in label)
+        )
+        await driver.click("Mark complete")
+        await driver.click("Back to list")
+        await driver.click("Close")
+
+        text = driver.session.last_message.text
+        assert "Homework assignment published." not in text
+        assert text.startswith(
+            "TEACHER: Homework Teacher\nTimezone: UTC\nDaily digest (local): off\n"
+            "Teacher code: t_HOMWRK\n"
+        )
+    finally:
+        await _close_driver(driver, http)

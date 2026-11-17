@@ -45,24 +45,27 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         warnings.append(warning)
     if view is not None:
         account = view.account
-        home = (
-            f"{account.role}: {account.full_name or 'Registered account'}\n"
-            f"Timezone: {account.timezone}\n"
-            f"Daily digest (local): {digest_clock(account.notification_lessons_today)}\n"
-        )
+        lines = [
+            f"{account.role}: {account.full_name or 'Registered account'}",
+            f"Timezone: {account.timezone}",
+            f"Daily digest (local): {digest_clock(account.notification_lessons_today)}",
+        ]
         if dialog_manager.dialog_data.get("homework_notice"):
-            home += f"\n{dialog_manager.dialog_data['homework_notice']}"
+            lines += ["", str(dialog_manager.dialog_data["homework_notice"])]
         if dialog_manager.dialog_data.get("existing_invitation"):
-            home += "\nAlready registered. This invitation did not change your role or teacher."
+            lines += [
+                "",
+                "Already registered. This invitation did not change your role or teacher.",
+            ]
         if view.teacher is not None:
             profile = view.teacher
-            home += (
-                f"Teacher code: {profile.code}\n"
-                f"Work hours: {profile.work_start}–{profile.work_end}\n"
-                f"Workdays: {format_working_days(profile.working_days)}\n"
-                f"Lesson/break minutes: {profile.lesson_length}/{profile.between_lessons_break}\n"
-                f"Consecutive/daily limits: {profile.max_consecutive_lessons}/{profile.max_lessons_per_day}\n"
-            )
+            lines += [
+                f"Teacher code: {profile.code}",
+                f"Work hours: {profile.work_start}–{profile.work_end}",
+                f"Workdays: {format_working_days(profile.working_days)}",
+                f"Lesson/break minutes: {profile.lesson_length}/{profile.between_lessons_break}",
+                f"Consecutive/daily limits: {profile.max_consecutive_lessons}/{profile.max_lessons_per_day}",
+            ]
         elif account.role == "TEACHER":
             warnings.append("Teacher profile unavailable.")
         if view.student is not None:
@@ -76,22 +79,23 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
                 if view.student.notification_homework is None
                 else f"{view.student.notification_homework} days"
             )
-            home += f"Lesson reminder: {lesson}\nHomework reminder: {homework}\n"
+            lines += [f"Lesson reminder: {lesson}", f"Homework reminder: {homework}"]
         elif account.role == "STUDENT":
             warnings.append("Student profile unavailable.")
         if account.role == "STUDENT":
-            home += (
+            lines.append(
                 "Preferences saved. Lesson booking and schedule viewing are available. "
                 "Existing events can be managed. "
                 "Notifications are not active yet."
             )
         elif account.role == "ADMIN":
-            home += (
+            lines.append(
                 "Preferences saved. Booking rules and notifications are not active yet."
             )
         invitation = dialog_manager.dialog_data.get("invitation", "")
         if invitation:
-            home += f"\nStudent invitation: {invitation}"
+            lines += ["", f"Student invitation: {invitation}"]
+        home = "\n".join(lines)
     return {
         "timezone": escape(dialog_manager.dialog_data.get("timezone", "not confirmed")),
         "feedback": feedback_block(
@@ -157,6 +161,7 @@ async def open_home(manager: DialogManager, view: SessionView) -> None:
 
 
 async def wizard_result(_start_data: Any, result: Any, manager: DialogManager) -> None:
+    manager.dialog_data.pop("homework_notice", None)
     if result is not None:
         manager.dialog_data.update(result)
         await manager.switch_to(Screens.home, show_mode=ShowMode.EDIT)
