@@ -126,6 +126,7 @@ async def test_teacher_edits_account_and_merged_profile_fields_without_touching_
         await _open_settings(driver)
         assert "settings" in driver.session.last_message.text.lower()
         assert "Automatic breaks are pending" not in driver.session.last_message.text
+        assert driver.session.last_message.text == "TEACHER settings\n"
         await driver.click("Account settings")
         await driver.click("Change timezone")
         await driver.text("Asia/Bangkok")
@@ -148,10 +149,12 @@ async def test_teacher_edits_account_and_merged_profile_fields_without_touching_
         invitation_before = updated.teacher.code
 
         await driver.click("Teacher settings")
+        teacher_text = driver.session.last_message.text
+        assert teacher_text.startswith("Teacher preferences\n")
+        assert "Break changes apply to new lessons only" not in teacher_text
+        assert "Student solution alerts apply" not in teacher_text
+        assert "\n\n\n" not in teacher_text
         assert "Automatic breaks are pending" not in driver.session.last_message.text
-        assert "Break changes apply to new lessons only" in (
-            driver.session.last_message.text
-        )
         await driver.click("Work starts")
         await driver.text("09:30")
         await driver.click("Work ends")

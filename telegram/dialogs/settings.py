@@ -848,14 +848,7 @@ async def unavailable_data(dialog_manager: DialogManager, **_: Any) -> dict[str,
 def build_settings_dialog() -> Dialog:
     return Dialog(
         Window(
-            Format(
-                "{feedback}{role} settings\n"
-                "Account and role preferences save separately. Messages require "
-                "a reachable Telegram private chat. Stale or no-longer-visible "
-                "items are suppressed; an uncertain Telegram response can cause "
-                "a duplicate.\n"
-                "{notice}"
-            ),
+            Format("{feedback}{role} settings\n{notice}"),
             Button(
                 Const("Account settings"),
                 id="account",
@@ -933,14 +926,7 @@ def build_settings_dialog() -> Dialog:
             getter=account_data,
         ),
         Window(
-            Format(
-                "{feedback}Teacher preferences\n{profile}\n"
-                "Break changes apply to new lessons only; existing lessons and "
-                "series keep their saved break duration.\n"
-                "Student solution alerts apply to newly submitted versions; "
-                "pending alerts are checked again before sending.\n"
-                "{notice}"
-            ),
+            Format("{feedback}Teacher preferences\n{profile}\n{notice}"),
             Button(
                 Const("Work starts"),
                 id="work_start",
