@@ -20,6 +20,7 @@ from telegram.api import (
     StudentProfileUpdate,
     TeacherProfileUpdate,
 )
+from telegram.dialogs.home import open_home
 from telegram.shared.feedback import feedback_block
 from telegram.shared.inputs import (
     DAY_NAMES,
@@ -145,6 +146,7 @@ async def start_settings(view: SessionView, manager: DialogManager) -> None:
         state = SettingsScreens.menu
     except ValueError as exc:
         data = {
+            "view": view.model_dump(mode="json"),
             "error": str(exc),
             "warning": "",
             "notice": "",
@@ -155,7 +157,7 @@ async def start_settings(view: SessionView, manager: DialogManager) -> None:
     await manager.start(
         state,
         data=data,
-        mode=StartMode.NORMAL,
+        mode=StartMode.RESET_STACK,
         show_mode=ShowMode.EDIT,
     )
 
@@ -218,14 +220,7 @@ async def cancel_section(
 async def return_home(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    data = manager.dialog_data
-    if data.get("needs_reload") or not data.get("view"):
-        await manager.done(show_mode=ShowMode.EDIT)
-    else:
-        await manager.done(
-            result={"view": data["view"]},
-            show_mode=ShowMode.EDIT,
-        )
+    await open_home(manager, SessionView.model_validate(manager.dialog_data["view"]))
 
 
 async def back_to_section(

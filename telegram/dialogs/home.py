@@ -3,7 +3,7 @@ from typing import Any
 
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
-from aiogram_dialog import Dialog, DialogManager, ShowMode, Window
+from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Row, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
@@ -21,6 +21,7 @@ from telegram.dialogs.lessons.management import open_event_management
 from telegram.dialogs.onboarding import begin_student, begin_teacher
 from telegram.dialogs.schedule.dialog import open_today, open_week
 from telegram.dialogs.student_profiles import open_teacher_student_profiles
+from telegram.invitations import create_teacher_invitation
 from telegram.shared.feedback import feedback_block
 from telegram.shared.inputs import digest_clock, format_working_days, parse_timezone
 
@@ -139,6 +140,20 @@ async def confirm_utc(
 ) -> None:
     manager.dialog_data.update(timezone="UTC", error="")
     await manager.switch_to(Screens.details, show_mode=ShowMode.EDIT)
+
+
+async def open_home(manager: DialogManager, view: SessionView) -> None:
+    """Replace the whole stack with the home screen for an already loaded view."""
+    await manager.start(
+        Screens.welcome, mode=StartMode.RESET_STACK, show_mode=ShowMode.NO_UPDATE
+    )
+    manager.dialog_data["view"] = view.model_dump(mode="json")
+    if view.teacher is not None:
+        manager.dialog_data["invitation"] = await create_teacher_invitation(
+            manager.middleware_data["bot"], view.teacher.code
+        )
+    await manager.switch_to(Screens.home, show_mode=ShowMode.EDIT)
+    await manager.show(show_mode=ShowMode.EDIT)
 
 
 async def wizard_result(_start_data: Any, result: Any, manager: DialogManager) -> None:

@@ -23,6 +23,7 @@ from telegram.api import (
     EventWriteResult,
     SessionView,
 )
+from telegram.dialogs.home import open_home
 from telegram.shared.access import backend
 from telegram.shared.date_cleanup import (
     delete_accepted_date_message,
@@ -85,7 +86,7 @@ async def start_vacation_management(view: SessionView, manager: DialogManager) -
             "picker_skip": 0,
             "picker_items": [],
         },
-        mode=StartMode.NORMAL,
+        mode=StartMode.RESET_STACK,
         show_mode=ShowMode.EDIT,
     )
 
@@ -953,7 +954,7 @@ async def cancel_delete(
 async def return_home(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    await manager.done(show_mode=ShowMode.EDIT)
+    await open_home(manager, SessionView.model_validate(manager.dialog_data["view"]))
 
 
 async def menu_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:

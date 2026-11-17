@@ -153,15 +153,6 @@ async def _open_from_command(
     if view.account.role not in {"TEACHER", "STUDENT"}:
         await message.answer(f"{feature} are available to teachers and students.")
         return
-    await dialog_manager.start(
-        Screens.welcome, mode=StartMode.RESET_STACK, show_mode=ShowMode.NO_UPDATE
-    )
-    dialog_manager.dialog_data["view"] = view.model_dump(mode="json")
-    if view.teacher is not None:
-        dialog_manager.dialog_data["invitation"] = await create_teacher_invitation(
-            dialog_manager.middleware_data["bot"], view.teacher.code
-        )
-    await dialog_manager.switch_to(Screens.home, show_mode=ShowMode.NO_UPDATE)
     await starter(view, dialog_manager)
 
 
