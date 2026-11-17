@@ -139,18 +139,11 @@ def _changed(original: dict[str, Any], draft: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in draft.items() if original.get(key) != value}
 
 
-async def open_settings(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if callback.message is None:
-        raise ValueError("Settings require a private chat")
+async def start_settings(view: SessionView, manager: DialogManager) -> None:
     try:
-        view = await _backend(manager).view(
-            callback.from_user.id, callback.message.chat.id
-        )
         data = _settings_data(view)
         state = SettingsScreens.menu
-    except (BackendError, BackendUnavailable, ValueError) as exc:
+    except ValueError as exc:
         data = {
             "error": str(exc),
             "warning": "",

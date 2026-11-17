@@ -207,9 +207,9 @@ async def test_teacher_two_students_and_unrelated_teacher_cross_flow(
         try:
             for driver in (teacher_bot, alice_bot, bob_bot, other_bot):
                 await driver.text("/start")
-            stale_settings = alice_bot.callback_data("Settings")
+            stale_settings = alice_bot.callback_data("Manage events")
 
-            await teacher_bot.click("Settings")
+            await teacher_bot.text("/settings")
             await teacher_bot.click("Account settings")
             await teacher_bot.click("Change daily digest")
             await teacher_bot.text("06:45")
@@ -292,7 +292,7 @@ async def test_teacher_two_students_and_unrelated_teacher_cross_flow(
             assert "Alice Learner" not in other_bot.session.last_message.text
             await other_bot.click("Back to home")
 
-            await teacher_bot.click("Vacations")
+            await teacher_bot.text("/vacations")
             await _create_student_vacation(teacher_bot)
             vacation = (
                 await db_session.scalars(

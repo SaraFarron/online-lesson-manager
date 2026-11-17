@@ -20,9 +20,7 @@ from telegram.dialogs.lessons.creation import open_lesson_creation
 from telegram.dialogs.lessons.management import open_event_management
 from telegram.dialogs.onboarding import begin_student, begin_teacher
 from telegram.dialogs.schedule.dialog import open_today, open_week
-from telegram.dialogs.settings import open_settings
 from telegram.dialogs.student_profiles import open_teacher_student_profiles
-from telegram.dialogs.vacations import open_vacation_management
 from telegram.shared.feedback import feedback_block
 from telegram.shared.inputs import digest_clock, format_working_days, parse_timezone
 
@@ -108,10 +106,6 @@ async def screen_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         "can_manage_events": view is not None
         and view.account.role in {"TEACHER", "STUDENT"},
         "can_manage_breaks": view is not None and view.account.role == "TEACHER",
-        "can_manage_vacations": view is not None
-        and view.account.role in {"TEACHER", "STUDENT"},
-        "can_edit_settings": view is not None
-        and view.account.role in {"TEACHER", "STUDENT"},
         "can_manage_homework": view is not None and view.account.role == "TEACHER",
         "can_view_student_profiles": view is not None
         and view.account.role == "TEACHER",
@@ -233,18 +227,6 @@ def build_dialog() -> Dialog:
                 id="manage_breaks",
                 on_click=open_break_management,
                 when="can_manage_breaks",
-            ),
-            Button(
-                Const("Vacations"),
-                id="manage_vacations",
-                on_click=open_vacation_management,
-                when="can_manage_vacations",
-            ),
-            Button(
-                Const("Settings"),
-                id="settings",
-                on_click=open_settings,
-                when="can_edit_settings",
             ),
             Row(
                 Button(

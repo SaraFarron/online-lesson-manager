@@ -9,7 +9,7 @@ from telegram.api import BackendClient, CircuitBreaker, NotificationClient
 from telegram.config import BotConfig
 from telegram.notifications.rate_limit import OutboundRateLimiter
 from telegram.notifications.worker import NotificationWorker
-from telegram.runtime import build_dispatcher
+from telegram.runtime import build_dispatcher, publish_commands
 
 
 async def main() -> None:
@@ -29,6 +29,7 @@ async def main() -> None:
             http, config.NOTIFICATION_SERVICE_CREDENTIAL.get_secret_value()
         )
         dispatcher = build_dispatcher(client)
+        await publish_commands(bot)
         bot.session.middleware.register(OutboundRateLimiter())
         worker = NotificationWorker(bot, notification_client)
 

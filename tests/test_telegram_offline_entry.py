@@ -50,7 +50,7 @@ async def test_offline_start_is_schedule_only_and_requires_fresh_in_memory_ident
             await driver.click("Register")
             stale_actions = [
                 driver.callback_data("Add lesson"),
-                driver.callback_data("Settings"),
+                driver.callback_data("Manage events"),
                 driver.callback_data("Homework"),
                 driver.callback_data("Manage homework"),
             ]

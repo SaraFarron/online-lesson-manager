@@ -152,8 +152,7 @@ def _telegram_id(user: User) -> int:
 
 
 async def _open_vacations(driver: BotDriver) -> None:
-    await driver.text("/start")
-    await driver.click("Vacations")
+    await driver.text("/vacations")
 
 
 async def _create_vacation(

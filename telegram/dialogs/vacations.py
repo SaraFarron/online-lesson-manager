@@ -57,12 +57,7 @@ class VacationScreens(StatesGroup):
     confirm_delete = State()
 
 
-async def open_vacation_management(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if callback.message is None:
-        raise ValueError("Vacation management requires a private chat")
-    view = SessionView.model_validate(manager.dialog_data["view"])
+async def start_vacation_management(view: SessionView, manager: DialogManager) -> None:
     if view.account.role not in {"TEACHER", "STUDENT"}:
         raise ValueError("This account cannot manage vacations")
     await manager.start(

@@ -106,8 +106,7 @@ async def _close_bot(driver: BotDriver, http: httpx.AsyncClient) -> None:
 
 
 async def _open_settings(driver: BotDriver) -> None:
-    await driver.text("/start")
-    await driver.click("Settings")
+    await driver.text("/settings")
 
 
 def _request_body(request: httpx.Request) -> dict:
@@ -422,7 +421,7 @@ async def test_settings_cancel_discards_draft_and_expired_token_renews_safely(
         await driver.text("Europe/Paris")
         await driver.click("Cancel changes")
         await driver.click("Back to home")
-        await driver.click("Settings")
+        await driver.text("/settings")
         await driver.click("Account settings")
         assert "Timezone: UTC" in driver.session.last_message.text
 

@@ -1,10 +1,24 @@
 import logging
+from collections.abc import Awaitable, Callable
+from html import escape
 from typing import Any
 
-from aiogram import BaseMiddleware, Dispatcher, F, Router
-from aiogram.filters import CommandObject, CommandStart, ExceptionTypeFilter
+from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
+from aiogram.filters import (
+    Command,
+    CommandObject,
+    CommandStart,
+    ExceptionTypeFilter,
+)
 from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
-from aiogram.types import CallbackQuery, ErrorEvent, Message, TelegramObject
+from aiogram.types import (
+    BotCommand,
+    BotCommandScopeAllPrivateChats,
+    CallbackQuery,
+    ErrorEvent,
+    Message,
+    TelegramObject,
+)
 from aiogram_dialog import DialogManager, ShowMode, StartMode, setup_dialogs
 from aiogram_dialog.api.exceptions import OutdatedIntent, UnknownIntent
 
@@ -13,6 +27,7 @@ from telegram.api import (
     BackendContractError,
     BackendError,
     BackendUnavailable,
+    SessionView,
 )
 from telegram.dialogs.breaks import build_break_dialog
 from telegram.dialogs.broadcast import build_broadcast_dialog
@@ -26,12 +41,22 @@ from telegram.dialogs.lessons.creation import build_lesson_dialog
 from telegram.dialogs.lessons.management import build_event_management_dialog
 from telegram.dialogs.onboarding import Wizard, build_wizard
 from telegram.dialogs.schedule.dialog import build_schedule_dialog
-from telegram.dialogs.settings import build_settings_dialog
+from telegram.dialogs.settings import build_settings_dialog, start_settings
 from telegram.dialogs.student_profiles import build_student_profiles_dialog
-from telegram.dialogs.vacations import build_vacation_dialog
+from telegram.dialogs.vacations import build_vacation_dialog, start_vacation_management
 from telegram.invitations import create_teacher_invitation, parse_teacher_start_payload
 
 logger = logging.getLogger(__name__)
+
+BOT_COMMANDS = [
+    BotCommand(command="start", description="Open the main menu"),
+    BotCommand(command="settings", description="Account and notification settings"),
+    BotCommand(command="vacations", description="Manage vacations"),
+]
+
+
+async def publish_commands(bot: Bot) -> None:
+    await bot.set_my_commands(BOT_COMMANDS, scope=BotCommandScopeAllPrivateChats())
 
 
 class EditInputMiddleware(BaseMiddleware):
@@ -104,6 +129,52 @@ async def start(
         )
 
 
+async def _open_from_command(
+    message: Message,
+    dialog_manager: DialogManager,
+    starter: Callable[[SessionView, DialogManager], Awaitable[None]],
+    feature: str,
+) -> None:
+    client = dialog_manager.middleware_data.get("backend_client")
+    sender = message.from_user
+    if client is None or sender is None:
+        return
+    try:
+        view = await client.view(sender.id, message.chat.id)
+    except BackendError as exc:
+        if exc.status in {401, 403, 404}:
+            await message.answer(f"{feature} are unavailable. Send /start to register.")
+        else:
+            await message.answer(f"{escape(str(exc))}\nSend /start to retry.")
+        return
+    except (BackendUnavailable, BackendContractError) as exc:
+        await message.answer(f"{escape(str(exc))}\nSend /start to retry.")
+        return
+    if view.account.role not in {"TEACHER", "STUDENT"}:
+        await message.answer(f"{feature} are available to teachers and students.")
+        return
+    await dialog_manager.start(
+        Screens.welcome, mode=StartMode.RESET_STACK, show_mode=ShowMode.NO_UPDATE
+    )
+    dialog_manager.dialog_data["view"] = view.model_dump(mode="json")
+    if view.teacher is not None:
+        dialog_manager.dialog_data["invitation"] = await create_teacher_invitation(
+            dialog_manager.middleware_data["bot"], view.teacher.code
+        )
+    await dialog_manager.switch_to(Screens.home, show_mode=ShowMode.NO_UPDATE)
+    await starter(view, dialog_manager)
+
+
+async def settings_command(message: Message, dialog_manager: DialogManager) -> None:
+    await _open_from_command(message, dialog_manager, start_settings, "Settings")
+
+
+async def vacations_command(message: Message, dialog_manager: DialogManager) -> None:
+    await _open_from_command(
+        message, dialog_manager, start_vacation_management, "Vacations"
+    )
+
+
 async def stale_callback(event: ErrorEvent) -> bool:
     callback = event.update.callback_query
     if callback is not None:
@@ -126,6 +197,12 @@ def build_dispatcher(client: BackendClient | None = None) -> Dispatcher:
         dispatcher["backend_client"] = client
     commands = Router(name="commands")
     commands.message.register(start, CommandStart(), F.chat.type == "private")
+    commands.message.register(
+        settings_command, Command("settings"), F.chat.type == "private"
+    )
+    commands.message.register(
+        vacations_command, Command("vacations"), F.chat.type == "private"
+    )
     dispatcher.include_router(commands)
     dispatcher.include_router(build_dialog())
     dispatcher.include_router(build_broadcast_dialog())

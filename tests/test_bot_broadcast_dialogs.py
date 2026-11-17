@@ -124,8 +124,7 @@ async def test_preview_cancel_is_nonpublishing_and_broadcast_is_teacher_only(
         dispatcher=teacher_driver.dispatcher,
     )
     try:
-        await student_driver.text("/start")
-        await student_driver.click("Settings")
+        await student_driver.text("/settings")
         student_screen_text = student_driver.session.last_message.text
         student_screen_id = student_driver.session.last_message.message_id
 
