@@ -8,3 +8,9 @@ def page_label(page_number: int, pages: int, summary: str = "") -> str:
         return ""
     label = f"Page {page_number} of {pages}"
     return f"{label} {summary}" if summary else label
+
+
+def page_line(page_number: int, pages: int, summary: str = "") -> str:
+    """Return the page indicator as its own line, or nothing for a single page."""
+    label = page_label(page_number, pages, summary)
+    return f"{label}\n" if label else ""

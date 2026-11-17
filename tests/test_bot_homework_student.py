@@ -183,8 +183,13 @@ async def test_student_downloads_material_and_finishes_then_resubmits(
         assert "Sent worksheet.pdf" in driver.session.last_message.text
 
         await driver.click("Submit solution")
+        answer_message_id = driver.update_id + 1
         await driver.text("My answer")
+        assert driver.deleted_message_ids()[-1] == answer_message_id
+        assert "My answer" in driver.session.last_message.text
+        document_message_id = driver.update_id + 1
         await driver.document("solution.pdf", b"solution attachment bytes")
+        assert document_message_id not in driver.deleted_message_ids()
         await driver.click("Review")
         assert "My answer" in driver.session.last_message.text
         assert "solution.pdf" in driver.session.last_message.text
@@ -548,10 +553,10 @@ async def test_student_assignment_list_paginates_and_filters_status(
         await driver.click("Next")
         assert "Page 2 of 2 (21 assignments)" in driver.session.last_message.text
         await driver.click("Complete")
-        assert "Page 1 of 1 (1 assignments)" in driver.session.last_message.text
+        assert "Page " not in driver.session.last_message.text
         assert "complete" in _button_with_prefix(driver, "Assignment").lower()
         await driver.click("Incomplete")
-        assert "Page 1 of 1 (20 assignments)" in driver.session.last_message.text
+        assert "Page " not in driver.session.last_message.text
     finally:
         await _close_driver(driver, http)
 

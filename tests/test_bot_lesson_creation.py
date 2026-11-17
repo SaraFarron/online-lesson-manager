@@ -192,6 +192,7 @@ async def test_teacher_books_student_and_omits_default_duration(
         )
         await driver.click("Change assignee")
         assert "Current assignee: Personal lesson." in driver.session.last_message.text
+        assert "Page " not in driver.session.last_message.text
         await driver.click("Back")
         assert "personal lesson is assigned to you by default" in (
             driver.session.last_message.text

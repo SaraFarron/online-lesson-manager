@@ -43,6 +43,7 @@ from telegram.shared.inputs import (
     parse_schedule_date,
     parse_schedule_time,
 )
+from telegram.shared.pagination import page_count, page_label
 
 STUDENT_PAGE_SIZE = 20
 
@@ -227,8 +228,11 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     items = data.get("picker_items", [])
     total = int(data.get("picker_total", 0))
     skip = int(data.get("picker_skip", 0))
-    page_count = max(1, (total + STUDENT_PAGE_SIZE - 1) // STUDENT_PAGE_SIZE)
-    page_number = skip // STUDENT_PAGE_SIZE + 1
+    picker_label = page_label(
+        skip // STUDENT_PAGE_SIZE + 1,
+        page_count(total, STUDENT_PAGE_SIZE),
+        f"({total} students)",
+    )
     students = [(escape(item["display_label"]), str(item["id"])) for item in items]
 
     start_date = data.get("start_date")
@@ -247,7 +251,7 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         kind_assignee_text = f"Assigned to {data.get('subject_label') or 'you'}."
     return {
         "students": students,
-        "picker_page": f"Page {page_number} of {page_count} ({total} students)",
+        "picker_page": f"\n{picker_label}" if picker_label else "",
         "personal_label": "personal lesson",
         "default_duration": format_duration(int(data.get("default_duration") or 0)),
         "duration_summary": duration_summary,
@@ -947,7 +951,7 @@ def build_lesson_dialog() -> Dialog:
         Window(
             Format(
                 "{feedback}Choose a student or book a {personal_label}.\n"
-                "Current assignee: {subject_label}.\n{picker_page}"
+                "Current assignee: {subject_label}.{picker_page}"
             ),
             Column(
                 Select(

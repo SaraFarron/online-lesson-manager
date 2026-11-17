@@ -33,7 +33,9 @@ from telegram.dialogs.homework.text import (
 )
 from telegram.dialogs.homework.transfer import HomeworkDownloadFile
 from telegram.shared.access import backend
+from telegram.shared.date_cleanup import delete_accepted_input_message
 from telegram.shared.feedback import feedback_block
+from telegram.shared.pagination import page_count, page_line
 
 ASSIGNMENT_PAGE_SIZE = 20
 
@@ -142,7 +144,6 @@ async def student_homework_data(
     data = dialog_manager.dialog_data
     skip = int(data.get("skip", 0))
     total = int(data.get("total", 0))
-    page_count = max(1, (total + ASSIGNMENT_PAGE_SIZE - 1) // ASSIGNMENT_PAGE_SIZE)
     assignments = [
         {
             "id": str(item["id"]),
@@ -197,7 +198,11 @@ async def student_homework_data(
     )
     return {
         "assignments": assignments,
-        "page": f"Page {skip // ASSIGNMENT_PAGE_SIZE + 1} of {page_count} ({total} assignments)",
+        "page": page_line(
+            skip // ASSIGNMENT_PAGE_SIZE + 1,
+            page_count(total, ASSIGNMENT_PAGE_SIZE),
+            f"({total} assignments)",
+        ),
         "has_previous": skip > 0,
         "has_next": skip + len(assignments) < total,
         "status_filter": data.get("status_filter") or "ALL",
@@ -531,7 +536,7 @@ async def begin_submission(
 
 
 async def set_solution_text(
-    _message: Message,
+    message: Message,
     _widget: ManagedTextInput[str],
     manager: DialogManager,
     value: str,
@@ -549,6 +554,7 @@ async def set_solution_text(
             warning="",
             operation_key=None,
         )
+        await delete_accepted_input_message(message, manager, "text")
     await manager.show(show_mode=ShowMode.EDIT)
 
 
@@ -959,7 +965,7 @@ def build_homework_student_dialog() -> Dialog:
     return Dialog(
         Window(
             Format(
-                "{feedback}Your homework — {status_filter}\n{page}\n"
+                "{feedback}Your homework — {status_filter}\n{page}"
                 "Choose an assignment to open it.\n{notice}"
             ),
             Select(

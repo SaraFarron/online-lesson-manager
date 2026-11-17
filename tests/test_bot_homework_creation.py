@@ -2,6 +2,7 @@ import json
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
@@ -139,21 +140,18 @@ async def test_teacher_publishes_text_file_and_mixed_assignments(
         original_message_id = driver.session.last_message.message_id
         await _open_assignment(driver, "Alice Learner")
         await driver.text("Read chapter 3")
-        await driver.click("Review")
         assert "Read chapter 3" in driver.session.last_message.text
         await driver.click("Publish assignment")
 
         await _open_assignment(driver, "Alice Learner")
         await driver.document("worksheet.pdf", b"worksheet contents")
         assert "worksheet.pdf" in driver.session.last_message.text
-        await driver.click("Review")
         await driver.click("Publish assignment")
 
         await _open_assignment(driver, "Alice Learner")
         await driver.text("Complete the worksheet")
         await driver.document("page-one.pdf", b"page one", media_group_id="album-1")
         await driver.document("page-two.pdf", b"page two", media_group_id="album-1")
-        await driver.click("Review")
         assert "Complete the worksheet" in driver.session.last_message.text
         await driver.click("Publish assignment")
 
@@ -287,7 +285,6 @@ async def test_assignment_can_link_exact_upcoming_lesson_occurrence(
         assert "Tue, Nov 5 9:00 (event)" in driver.session.last_message.text
         assert "2030-11-05" not in driver.session.last_message.text
         assert "(UTC" not in driver.session.last_message.text
-        await driver.click("Review")
         await driver.click("Publish assignment")
 
         assignments = await _student_assignments(api, student)
@@ -327,7 +324,6 @@ async def test_assignment_can_link_exact_upcoming_lesson_occurrence(
             if "Tue, Nov 5 11:00 (recurrent event)" in button.text
         )
         await driver.click(recurring_choice)
-        await driver.click("Review")
         await driver.click("Publish assignment")
 
         assignments = await _student_assignments(api, student)
@@ -616,7 +612,6 @@ async def test_unknown_upload_and_publish_retry_reuses_operation_keys(
         assert driver.session.last_message.text.startswith("<b>⚠️ Attention</b>\n")
         driver.callback_data("Retry upload: retry.pdf")
         await driver.click("Retry upload: retry.pdf")
-        await driver.click("Review")
         await driver.click("Publish assignment")
         assert driver.session.last_message.text.startswith("<b>⚠️ Attention</b>\n")
         driver.callback_data("Retry publish (same operation)")
@@ -676,11 +671,144 @@ async def test_long_assignment_text_paginates_with_feedback_and_edit_in_place(
         assert rendered_utf16_length(visible) <= 4096
         assert driver.session.last_message.message_id == message_id
 
-        await driver.click("Review")
-        visible = driver.session.last_message.text
-        assert "Review assignment" in visible
-        assert "Text (page 2 of 5):" in visible
-        assert "❌ Error" not in visible
-        assert rendered_utf16_length(visible) <= 4096
+        assert driver.callback_data("Publish assignment")
+        assert "Review" not in [
+            button.text
+            for row in driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+        ]
     finally:
         await _close_driver(driver, http)
+
+
+def _labels(driver: BotDriver) -> list[str]:
+    return [
+        button.text
+        for row in driver.session.last_message.reply_markup.inline_keyboard
+        for button in row
+    ]
+
+
+async def test_assignment_text_message_is_removed_and_compose_publishes_directly(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    _teacher, students = await _seed(db_session)
+    driver, http, api, _requests = await _make_driver(client, bot_service_key)
+    try:
+        await driver.text("/start")
+        await driver.click("Homework")
+        assert "Page " not in driver.session.last_message.text
+        await driver.click("Alice Learner")
+        assert "Publish assignment" not in _labels(driver)
+
+        blank_message_id = driver.update_id + 1
+        await driver.text("   ")
+        assert blank_message_id not in driver.deleted_message_ids()
+
+        text_message_id = driver.update_id + 1
+        await driver.text("Read chapter 4")
+        assert driver.deleted_message_ids()[-1] == text_message_id
+        assert "Read chapter 4" in driver.session.last_message.text
+        assert "Review" not in _labels(driver)
+        assert "Publish assignment" in _labels(driver)
+
+        await driver.click("Publish assignment")
+        assignments = await _student_assignments(api, students[0])
+        assert [assignment.text for assignment in assignments] == ["Read chapter 4"]
+        assert "Homework assignment published." in driver.session.last_message.text
+    finally:
+        await _close_driver(driver, http)
+
+
+async def test_assignment_text_delete_failure_warns_and_keeps_draft(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    await _seed(db_session)
+    driver, http, _api, _requests = await _make_driver(client, bot_service_key)
+    try:
+        await driver.text("/start")
+        await _open_assignment(driver, "Alice Learner")
+        driver.session.delete_failure = "Bad Request: message to delete not found"
+        await driver.text("Keep this draft")
+        text = driver.session.last_message.text
+        assert "Text accepted, but Telegram could not remove your message" in text
+        assert "Keep this draft" in text
+        assert "Publish assignment" in _labels(driver)
+    finally:
+        await _close_driver(driver, http)
+
+
+async def test_publish_rejects_empty_and_oversized_drafts_without_an_api_call() -> None:
+    class Manager:
+        def __init__(self, data: dict) -> None:
+            self.dialog_data = data
+            self.middleware_data: dict = {}
+            self.shows = 0
+
+        async def show(self, **_: object) -> None:
+            self.shows += 1
+
+    callback = SimpleNamespace(message=SimpleNamespace(), from_user=SimpleNamespace())
+    empty = Manager({"text": " ", "attachments": [], "student_id": str(uuid4())})
+    oversized = Manager(
+        {
+            "text": None,
+            "student_id": str(uuid4()),
+            "attachments": [
+                {"id": str(uuid4()), "byte_size": 51 * 1024 * 1024, "file_name": "a"}
+            ],
+        }
+    )
+
+    # An API call would need a backend client, which these managers do not provide.
+    await homework_dialogs.publish_assignment(callback, None, empty)
+    await homework_dialogs.publish_assignment(callback, None, oversized)
+
+    assert "Add assignment text or at least one file" in empty.dialog_data["error"]
+    assert "50 MiB" in oversized.dialog_data["error"]
+    assert not empty.dialog_data.get("submitting")
+    assert not oversized.dialog_data.get("submitting")
+
+
+async def test_unknown_publish_outcome_blocks_text_edits_on_compose(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    await _seed(db_session)
+    lost = False
+
+    async def lose_publish(request: httpx.Request) -> httpx.Response:
+        nonlocal lost
+        response = await client.send(request)
+        if (
+            request.method == "POST"
+            and request.url.path == "/api/v1/homework/assignments"
+            and not lost
+        ):
+            lost = True
+            raise httpx.ReadTimeout("Publish response lost")
+        return response
+
+    driver, http, _api, _requests = await _make_driver(
+        client, bot_service_key, forward=lose_publish
+    )
+    try:
+        await driver.text("/start")
+        await _open_assignment(driver, "Alice Learner")
+        await driver.text("Original text")
+        await driver.click("Publish assignment")
+        assert "Retry publish (same operation)" in _labels(driver)
+        assert "Cancel" not in _labels(driver)
+
+        await driver.text("Replacement text")
+        assert "Retry the pending publish" in driver.session.last_message.text
+        assert "Original text" in driver.session.last_message.text
+        assert "Replacement text" not in driver.session.last_message.text
+    finally:
+        await _close_driver(driver, http)
+        app.dependency_overrides.pop(get_homework_settings, None)

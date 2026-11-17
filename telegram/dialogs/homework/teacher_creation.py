@@ -38,8 +38,10 @@ from telegram.dialogs.homework.text import (
     homework_text_page,
 )
 from telegram.shared.access import backend
+from telegram.shared.date_cleanup import delete_accepted_input_message
 from telegram.shared.feedback import feedback_block
 from telegram.shared.inputs import format_compact_schedule_date
+from telegram.shared.pagination import page_count, page_label
 
 STUDENT_PAGE_SIZE = 20
 LESSON_PAGE_SIZE = 10
@@ -49,7 +51,6 @@ class HomeworkScreens(StatesGroup):
     students = State()
     compose = State()
     lessons = State()
-    review = State()
     unavailable = State()
 
 
@@ -142,8 +143,11 @@ async def homework_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
     ]
     skip = int(data.get("picker_skip", 0))
     total = int(data.get("picker_total", 0))
-    page_count = max(1, (total + STUDENT_PAGE_SIZE - 1) // STUDENT_PAGE_SIZE)
-    page_number = skip // STUDENT_PAGE_SIZE + 1
+    picker_label = page_label(
+        skip // STUDENT_PAGE_SIZE + 1,
+        page_count(total, STUDENT_PAGE_SIZE),
+        f"({total} students)",
+    )
     attachments = data.get("attachments", [])
     attachment_lines = [
         f"{escape(str(item['file_name']))} ({int(item['byte_size'])} bytes)"
@@ -184,7 +188,7 @@ async def homework_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
     ]
     return {
         "students": students,
-        "picker_page": f"Page {page_number} of {page_count} ({total} students)",
+        "picker_page": f"\n{picker_label}" if picker_label else "",
         "has_previous_students": skip > 0,
         "has_next_students": skip + len(students) < total,
         "student_label": escape(str(data.get("student_label", ""))),
@@ -201,10 +205,6 @@ async def homework_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
         "has_previous_text_page": text_page.has_previous,
         "has_next_text_page": text_page.has_next,
         "upload_status": upload_status,
-        "can_review": bool(text.strip() or attachments)
-        and not pending_upload
-        and not active
-        and not data.get("outcome_unknown"),
         "can_publish": bool(text.strip() or attachments)
         and not pending_upload
         and not active,
@@ -217,7 +217,6 @@ async def homework_data(dialog_manager: DialogManager, **_: Any) -> dict[str, An
         "pending_file_name": escape(
             str(pending_upload.get("file_name", "file")) if pending_upload else "file"
         ),
-        "can_edit_review": not bool(data.get("outcome_unknown")) and not active,
         "lesson_label": lesson_label,
         "lesson_options": lesson_option_page,
         "lesson_week_label": escape(str(data.get("lesson_week_label", ""))),
@@ -525,18 +524,23 @@ async def next_lesson_options(
 
 
 async def set_assignment_text(
-    _message: Message,
+    message: Message,
     _widget: ManagedTextInput[str],
     manager: DialogManager,
     value: str,
 ) -> None:
     text = value.strip()
-    if not text:
+    if manager.dialog_data.get("outcome_unknown"):
+        manager.dialog_data["error"] = (
+            "Retry the pending publish with the same operation before editing it."
+        )
+    elif not text:
         manager.dialog_data["error"] = "Assignment text cannot be blank."
     else:
         manager.dialog_data.update(
             text=text, text_page=0, error="", warning="", operation_key=None
         )
+        await delete_accepted_input_message(message, manager, "text")
     await manager.show(show_mode=ShowMode.EDIT)
 
 
@@ -733,35 +737,6 @@ async def remove_attachment(
     await manager.show(show_mode=ShowMode.EDIT)
 
 
-async def review_assignment(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    data = manager.dialog_data
-    if data.get("outcome_unknown") or data.get("pending_upload"):
-        return
-    text = str(data.get("text") or "").strip()
-    attachments = data.get("attachments", [])
-    if not text and not attachments:
-        data["error"] = "Add assignment text or at least one file before reviewing."
-        await manager.show(show_mode=ShowMode.EDIT)
-        return
-    total_size = sum(int(item["byte_size"]) for item in attachments)
-    if total_size > MAX_HOMEWORK_ATTACHMENT_TOTAL_BYTES:
-        data["error"] = "Remove files until the assignment is within the 50 MiB limit."
-        await manager.show(show_mode=ShowMode.EDIT)
-        return
-    data["error"] = ""
-    await manager.switch_to(HomeworkScreens.review, show_mode=ShowMode.EDIT)
-
-
-async def return_to_compose(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if manager.dialog_data.get("outcome_unknown"):
-        return
-    await manager.switch_to(HomeworkScreens.compose, show_mode=ShowMode.EDIT)
-
-
 async def publish_assignment(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
@@ -776,7 +751,23 @@ async def publish_assignment(
         return
     if not data.get("outcome_unknown"):
         text = str(data.get("text") or "").strip() or None
-        attachment_ids = [UUID(item["id"]) for item in data.get("attachments", [])]
+        attachments = data.get("attachments", [])
+        if text is None and not attachments:
+            data["error"] = (
+                "Add assignment text or at least one file before publishing."
+            )
+            await manager.show(show_mode=ShowMode.EDIT)
+            return
+        if (
+            sum(int(item["byte_size"]) for item in attachments)
+            > MAX_HOMEWORK_ATTACHMENT_TOTAL_BYTES
+        ):
+            data["error"] = (
+                "Remove files until the assignment is within the 50 MiB limit."
+            )
+            await manager.show(show_mode=ShowMode.EDIT)
+            return
+        attachment_ids = [UUID(item["id"]) for item in attachments]
         try:
             raw_lesson = data.get("lesson_occurrence")
             lesson_occurrence = (
@@ -906,7 +897,7 @@ async def back_to_home(
 def build_homework_teacher_dialog() -> Dialog:
     return Dialog(
         Window(
-            Format("{feedback}Choose a student for the assignment.\n{picker_page}"),
+            Format("{feedback}Choose a student for the assignment.{picker_page}"),
             Select(
                 Format("{item[0]}"),
                 id="student",
@@ -995,10 +986,10 @@ def build_homework_teacher_dialog() -> Dialog:
             ),
             Row(
                 Button(
-                    Const("Review"),
-                    id="review",
-                    on_click=review_assignment,
-                    when="can_review",
+                    Format("{submit_label}"),
+                    id="publish",
+                    on_click=publish_assignment,
+                    when="can_publish",
                 ),
                 Button(
                     Const("Cancel"),
@@ -1061,46 +1052,6 @@ def build_homework_teacher_dialog() -> Dialog:
                 on_click=return_from_lesson_picker,
             ),
             state=HomeworkScreens.lessons,
-        ),
-        Window(
-            Format(
-                "{feedback}Review assignment for {student_label}\n"
-                "{text_heading}{text}\nFiles:\n{attachment_summary}\n"
-                "Lesson: {lesson_label}"
-            ),
-            Row(
-                Button(
-                    Const("Previous text"),
-                    id="previous_text",
-                    on_click=previous_text_page,
-                    when="has_previous_text_page",
-                ),
-                Button(
-                    Const("Next text"),
-                    id="next_text",
-                    on_click=next_text_page,
-                    when="has_next_text_page",
-                ),
-            ),
-            Button(
-                Format("{submit_label}"),
-                id="publish",
-                on_click=publish_assignment,
-                when="can_publish",
-            ),
-            Button(
-                Const("Back"),
-                id="back",
-                on_click=return_to_compose,
-                when="can_edit_review",
-            ),
-            Button(
-                Const("Cancel"),
-                id="cancel",
-                on_click=cancel_assignment,
-                when="can_cancel",
-            ),
-            state=HomeworkScreens.review,
         ),
         Window(
             Format("{feedback}Return home and retry when the backend is available."),

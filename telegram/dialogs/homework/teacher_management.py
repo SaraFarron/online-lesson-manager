@@ -27,6 +27,7 @@ from telegram.dialogs.homework.text import (
 from telegram.dialogs.homework.transfer import HomeworkDownloadFile
 from telegram.shared.access import backend
 from telegram.shared.feedback import feedback_block
+from telegram.shared.pagination import page_count, page_label, page_line
 
 STUDENT_PAGE_SIZE = 20
 ASSIGNMENT_PAGE_SIZE = 20
@@ -297,19 +298,19 @@ async def teacher_homework_data(
     )
     return {
         "students": students,
-        "student_page": (
-            f"Page {student_skip // STUDENT_PAGE_SIZE + 1} of "
-            f"{max(1, (student_total + STUDENT_PAGE_SIZE - 1) // STUDENT_PAGE_SIZE)} "
-            f"({student_total} students)"
+        "student_page": page_label(
+            student_skip // STUDENT_PAGE_SIZE + 1,
+            page_count(student_total, STUDENT_PAGE_SIZE),
+            f"({student_total} students)",
         ),
         "has_previous_students": student_skip > 0,
         "has_next_students": student_skip + len(students) < student_total,
         "student_label": escape(str(data.get("student_label") or "All students")),
         "assignments": assignments,
-        "assignment_page": (
-            f"Page {assignment_skip // ASSIGNMENT_PAGE_SIZE + 1} of "
-            f"{max(1, (assignment_total + ASSIGNMENT_PAGE_SIZE - 1) // ASSIGNMENT_PAGE_SIZE)} "
-            f"({assignment_total} assignments)"
+        "assignment_page": page_line(
+            assignment_skip // ASSIGNMENT_PAGE_SIZE + 1,
+            page_count(assignment_total, ASSIGNMENT_PAGE_SIZE),
+            f"({assignment_total} assignments)",
         ),
         "has_previous_assignments": assignment_skip > 0,
         "has_next_assignments": assignment_skip + len(assignments) < assignment_total,
@@ -1187,7 +1188,7 @@ def build_homework_teacher_management_dialog() -> Dialog:
             Format(
                 "{feedback}{read_only_notice}"
                 "Homework for {student_label} — {status_filter}\n"
-                "{assignment_page}\n{notice}"
+                "{assignment_page}{notice}"
             ),
             Select(
                 Format("{item[label]}"),

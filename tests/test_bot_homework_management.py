@@ -265,7 +265,9 @@ async def test_teacher_reviews_versions_downloads_completes_and_deletes(
     try:
         await driver.text("/start")
         await driver.click("Manage homework")
+        assert "Page " not in driver.session.last_message.text
         await driver.click("Alice Learner")
+        assert "Page " not in driver.session.last_message.text
         assert _button_with_prefix(driver, "Review the essay")
         assignment_buttons = [
             button.text
@@ -585,13 +587,11 @@ async def test_homework_survives_bot_restarts_and_scopes_every_role(
         await teacher_driver.click("Alice Learner")
         await teacher_driver.text(assignment_text)
         await teacher_driver.document("chapter.pdf", b"chapter bytes")
-        await teacher_driver.click("Review")
         await teacher_driver.click("Publish assignment")
 
         await teacher_driver.click("Homework")
         await teacher_driver.click("Bob Learner")
         await teacher_driver.text(manual_text)
-        await teacher_driver.click("Review")
         await teacher_driver.click("Publish assignment")
     finally:
         await _close(teacher_driver, teacher_http)
@@ -819,7 +819,6 @@ async def test_teacher_upload_recovers_from_interrupted_and_unavailable_storage(
         assert "outcome is unknown" in driver.session.last_message.text.lower()
         await driver.click("Retry upload: interrupted.pdf")
         await driver.text("Interrupted upload recovery")
-        await driver.click("Review")
         await driver.click("Publish assignment")
         assignment = await db_session.scalar(
             select(Homework).where(Homework.text == "Interrupted upload recovery")
