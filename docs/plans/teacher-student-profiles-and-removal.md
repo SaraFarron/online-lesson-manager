@@ -53,6 +53,10 @@ Teachers can reopen closed relationships from a read-only “Former students”
 list. A former teacher may read that relationship's profile, history, retained
 homework and past lessons, but cannot act on the former student through it.
 
+> **Superseded in the bot UI (2026-11-17):** the [Telegram UI cleanup](./telegram-ui-cleanup.md)
+> no longer exposes the "Former students" list in Telegram; the backend
+> former-profile endpoints and read-only rules are unchanged.
+
 Action history is teacher-visible only. Record every successful,
 student-initiated state change while the student is linked to that teacher,
 including unrelated account/settings and credential changes. Do not record

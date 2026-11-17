@@ -9,6 +9,11 @@ instants, booking rules, or authorization.
 **Status:** Implemented and verified. All nine tasks are complete; see the
 execution record below.
 
+**Superseded in part (2026-11-17):** the [Telegram UI cleanup](./telegram-ui-cleanup.md)
+removes the schedule title line, puts a blank line before `Timezone:` with
+`Updated` after it (only for snapshots over one hour old), and replaces the
+`[PAST]`/`[ONGOING]` markers with `✅`/`▶️`. The rest of this contract stands.
+
 ## Scope (README.md sections covered)
 
 - [Bot interface](../../README.md#интерфейс-бота): edit-in-place navigation,

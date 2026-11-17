@@ -63,7 +63,7 @@ Apply these in addition to each task's checks:
 
 **Approved contract:** The product owner approved these recommendations on 2026-10-24:
 
-- Role homes expose Schedule, Add lesson, Manage events, and Settings; teachers also get Breaks, and both roles get Vacations.
+- Role homes expose Schedule, Add lesson, Manage events, and Settings; teachers also get Breaks, and both roles get Vacations. *(Superseded 2026-11-17: Settings and Vacations are now the `/settings` and `/vacations` commands; see [Telegram UI cleanup](./telegram-ui-cleanup.md).)*
 - Lesson creation supports one-off and weekly events. New weekly series use `interval=7` and an explicit end date; edits preserve the existing interval.
 - Occurrence cancellation/move is distinct from whole-series edit/delete. A move atomically cancels the original occurrence and creates a one-off replacement.
 - Date and time use separate, bounded prompts: dates accept `MM DD`, `MM:DD`, or `MM/DD`, with an optional year; times accept `HH MM` or `HH:MM`. If an omitted year would make the date past, infer the next year and require confirmation. Displayed recurrence/vacation end dates are inclusive and map to exclusive backend cutoffs.

@@ -221,7 +221,7 @@ completes the assignment. Teachers can review current and prior submissions,
 mark assignments complete, and confirm assignment deletion through Telegram;
 uncertain writes retain their retry or status-reconciliation safeguards.
 Teachers and students can edit their saved account and role preferences from
-Settings in the Telegram role home. Account and role preferences are saved
+the Telegram `/settings` command. Account and role preferences are saved
 separately; timezone changes do not move stored event instants, and notification
 preferences do not imply delivery. Authenticated day/week schedule reads are
 available through the backend and Telegram bot as described below. Shared
@@ -230,9 +230,22 @@ described in the scheduling handoff below.
 Telegram date-entry prompts omit timezone labels, but entered dates still use
 the viewer's saved IANA timezone; reviews and schedule views retain timezone
 context. Schedule weekday abbreviations are capitalized, upcoming rows use
-`⏳`, and automatic-break row labels omit `(read-only)` while the derived
-reservations remain non-editable. These display changes do not enable
-notifications or change schedule status values.
+`⏳`, past rows use `✅`, ongoing rows use `▶️`, and automatic-break row labels
+omit `(read-only)` while the derived reservations remain non-editable. Live
+schedule pages have no title line; a blank line precedes the `Timezone:` footer
+and an `Updated` line follows it only when the snapshot is more than one hour
+old. These display changes do not enable notifications or change schedule
+status values.
+
+The role home no longer has Settings or Vacations buttons. The bot publishes
+`/start`, `/settings` and `/vacations` to Telegram's private-chat command menu
+at startup, so no manual BotFather command setup is needed; the commands work
+without prior dialog state and ask unregistered users to send `/start`.
+Single-page lists, broadcast results and homework lists omit the page label;
+accepted broadcast, assignment and solution text messages are removed from the
+chat after the screen shows the stored text. Teachers publish an assignment
+directly from the compose screen, and the "Former students" list is not
+currently exposed in the bot (the backend endpoints remain).
 
 Verification: `uv run pytest -q tests` covers simulated Telegram updates with
 recorded Bot API calls, the real ASGI backend, and an isolated SQLite database,
