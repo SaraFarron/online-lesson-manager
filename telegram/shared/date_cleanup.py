@@ -16,7 +16,7 @@ _EXPECTED_DELETE_FAILURES = (
 async def delete_accepted_input_message(
     message: Message,
     manager: DialogManager,
-    input_type: Literal["date", "time"],
+    input_type: Literal["date", "time", "text"],
 ) -> bool:
     try:
         await message.delete()

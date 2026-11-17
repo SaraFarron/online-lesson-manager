@@ -403,3 +403,57 @@ async def test_backend_outage_during_preview_keeps_broadcast_unpublished(
         )
     finally:
         await _close(driver, http)
+
+
+async def test_accepted_broadcast_text_is_removed_and_single_page_results_have_no_label(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    await _seed(db_session, student_count=2)
+    driver, _api, http, _requests = await _make_driver(client, bot_service_key)
+    try:
+        await driver.text("/start")
+        await driver.click("Broadcast")
+
+        invalid_message_id = driver.update_id + 1
+        await driver.text("x" * 4097)
+        assert invalid_message_id not in driver.deleted_message_ids()
+        assert "Error" in driver.session.last_message.text
+
+        message_id = driver.update_id + 1
+        await driver.text("Draft stays visible")
+        assert driver.deleted_message_ids()[-1] == message_id
+        assert "Draft stays visible" in driver.session.last_message.text
+
+        await driver.click("Preview")
+        await driver.click("Confirm broadcast")
+        assert "Queued for delivery" in driver.session.last_message.text
+        assert "Page " not in driver.session.last_message.text
+        assert "Broadcast Student 00: Pending" in driver.session.last_message.text
+    finally:
+        await _close(driver, http)
+
+
+async def test_broadcast_text_delete_failure_warns_without_failing(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    bot_service_key: str,
+) -> None:
+    await _seed(db_session, student_count=1)
+    driver, _api, http, _requests = await _make_driver(client, bot_service_key)
+    try:
+        await driver.text("/start")
+        await driver.click("Broadcast")
+        driver.session.delete_failure = "Bad Request: message to delete not found"
+        await driver.text("Still accepted")
+        text = driver.session.last_message.text
+        assert "Text accepted, but Telegram could not remove your message" in text
+        assert "Still accepted" in text
+        assert "Preview" in [
+            button.text
+            for row in driver.session.last_message.reply_markup.inline_keyboard
+            for button in row
+        ]
+    finally:
+        await _close(driver, http)

@@ -24,7 +24,9 @@ from telegram.api import (
 )
 from telegram.dialogs.homework.text import homework_text_page
 from telegram.shared.access import backend
+from telegram.shared.date_cleanup import delete_accepted_input_message
 from telegram.shared.feedback import feedback_block
+from telegram.shared.pagination import page_count, page_label
 
 RESULT_PAGE_SIZE = 10
 _STATUS_LABELS = {
@@ -88,7 +90,7 @@ def _validate_broadcast_text(value: str) -> str:
 
 
 async def set_broadcast_text(
-    _message: Message,
+    message: Message,
     _widget: ManagedTextInput[str],
     manager: DialogManager,
     value: str,
@@ -104,6 +106,7 @@ async def set_broadcast_text(
         error="",
         warning="",
     )
+    await delete_accepted_input_message(message, manager, "text")
     await manager.show(show_mode=ShowMode.EDIT)
 
 
@@ -477,6 +480,14 @@ async def broadcast_data(dialog_manager: DialogManager, **_: Any) -> dict[str, A
             f"{escape(item.student_name or 'Student')}: {_STATUS_LABELS[item.status]}"
             for item in results.recipients
         ]
+    result_label = ""
+    if results is not None:
+        result_label = page_label(
+            results.skip // RESULT_PAGE_SIZE + 1,
+            page_count(results.total, RESULT_PAGE_SIZE),
+        )
+        if result_label:
+            result_label += "\n"
     publication = data.get("publication")
     status_text = (
         "Loading delivery results…"
@@ -515,12 +526,7 @@ async def broadcast_data(dialog_manager: DialogManager, **_: Any) -> dict[str, A
             if recipient_lines
             else "(No recipient results on this page.)"
         ),
-        "result_page": (
-            f"Page {results.skip // RESULT_PAGE_SIZE + 1} of "
-            f"{max(1, (results.total + RESULT_PAGE_SIZE - 1) // RESULT_PAGE_SIZE)}"
-            if results is not None
-            else ""
-        ),
+        "result_page": result_label,
         "has_previous_results": results is not None and results.skip > 0,
         "has_next_results": (
             results is not None
@@ -642,7 +648,7 @@ def build_broadcast_dialog() -> Dialog:
         Window(
             Format(
                 "{feedback}{status_text}\n{result_counts}\n"
-                "{result_page}\n{recipient_lines}"
+                "{result_page}{recipient_lines}"
             ),
             Row(
                 Button(
