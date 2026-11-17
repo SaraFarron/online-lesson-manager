@@ -10,8 +10,26 @@ from telegram.api import ScheduleDay, ScheduleItem, ScheduleResponse
 from telegram.dialogs.schedule.formatting import (
     MAX_LABEL_CODEPOINTS,
     MAX_MESSAGE_UTF16_UNITS,
-    format_schedule_pages,
 )
+from telegram.dialogs.schedule.formatting import (
+    format_schedule_pages as _format_schedule_pages,
+)
+
+
+def format_schedule_pages(
+    response: ScheduleResponse,
+    role: str,
+    *,
+    source: str = "live",
+    now: datetime | None = None,
+) -> tuple[str, ...]:
+    """Format as if the snapshot was just generated unless a clock is given."""
+    return _format_schedule_pages(
+        response,
+        role,  # type: ignore[arg-type]
+        source=source,  # type: ignore[arg-type]
+        now=response.generated_at if now is None else now,
+    )
 
 
 def _item(
@@ -96,8 +114,9 @@ def test_week_includes_all_empty_days_and_snapshot_context() -> None:
 
     assert len(pages) == 1
     plain = _visible_text(pages[0])
-    assert "This week's schedule" in plain
-    assert "Updated Mon, Oct 19 at 12:00" in plain
+    assert "This week's schedule" not in plain
+    assert plain.startswith("Mon, Oct 19")
+    assert "Updated" not in plain
     assert plain.count("No events") == 7
     assert all(
         f"{datetime(2026, 10, day):%a}" + f", Oct {day}" in plain
@@ -154,8 +173,10 @@ def test_cached_schedule_shows_local_snapshot_context_without_live_now() -> None
         ) in text
         assert "Today's schedule" not in text
         assert "NOW" not in text
-        assert "[PAST]" in text
-        assert "[ONGOING]" in text
+        assert "[PAST]" not in text
+        assert "[ONGOING]" not in text
+        assert "✅" in text
+        assert "▶️" in text
         assert "⏳" in text
     assert "Lesson — Student" in teacher_text
     assert "Lesson — Student" not in student_text
@@ -231,7 +252,7 @@ def test_automatic_and_manual_breaks_have_distinct_read_only_labels() -> None:
     teacher_text = _visible_text(format_schedule_pages(response, "TEACHER")[0])
     student_text = _visible_text(format_schedule_pages(response, "STUDENT")[0])
 
-    assert "9:00–10:00  Lesson — Student  [PAST]" in teacher_text
+    assert "9:00–10:00  Lesson — Student  ✅" in teacher_text
     assert "10:00–10:05  Automatic break  ⏳" in teacher_text
     assert "10:05–11:05  Break  ⏳" in teacher_text
     assert "10:00–10:05  Teacher's automatic break  ⏳" in (student_text)
@@ -371,9 +392,9 @@ def test_now_divider_is_only_on_current_date_and_between_status_groups() -> None
     plain = _visible_text(text)
 
     assert plain.count("NOW") == 1
-    assert plain.index("[PAST]") < plain.index("NOW")
-    assert plain.index("NOW") < plain.index("[ONGOING]")
-    assert plain.index("[ONGOING]") < plain.index("⏳")
+    assert plain.index("✅") < plain.index("NOW")
+    assert plain.index("NOW") < plain.index("▶️")
+    assert plain.index("▶️") < plain.index("⏳")
     assert plain.index("⏳") < plain.index("Teacher's automatic break")
 
 
@@ -386,7 +407,7 @@ def test_current_empty_day_omits_now_and_timezone_footer() -> None:
     text = _visible_text(format_schedule_pages(response, "STUDENT")[0])
 
     assert "No events" in text
-    assert "Today's schedule" in text
+    assert "Today's schedule" not in text
     assert "Mon, Oct 19" in text
     assert "NOW" not in text
     assert "Timezone:" not in text
@@ -549,3 +570,104 @@ def test_oversized_week_paginates_complete_rows_with_safe_labels_and_budget() ->
     )
     assert len(rendered_label) == MAX_LABEL_CODEPOINTS
     assert "\n".join(visible_pages).count("No events") == 6
+
+
+def _stale_response() -> ScheduleResponse:
+    return _response(
+        [
+            ScheduleDay(
+                date=date(2026, 10, 19),
+                items=[
+                    _item(1, "2026-10-19T13:00:00+00:00", "2026-10-19T14:00:00+00:00")
+                ],
+            )
+        ],
+        generated_at="2026-10-19T12:00:00+00:00",
+    )
+
+
+def test_footer_has_blank_line_and_updated_follows_timezone_only_when_stale() -> None:
+    response = _stale_response()
+    generated_at = response.generated_at
+
+    fresh = _visible_text(
+        _format_schedule_pages(
+            response, "STUDENT", now=generated_at + timedelta(hours=1)
+        )[0]
+    )
+    stale = _visible_text(
+        _format_schedule_pages(
+            response, "STUDENT", now=generated_at + timedelta(hours=1, seconds=1)
+        )[0]
+    )
+
+    assert fresh.endswith("\n\nTimezone: UTC")
+    assert "Updated" not in fresh
+    assert stale.endswith("\n\nTimezone: UTC\nUpdated Mon, Oct 19 at 12:00")
+    assert not stale.startswith("\n")
+    assert "schedule" not in stale.lower()
+
+
+def test_empty_day_shows_updated_last_without_timezone_when_stale() -> None:
+    response = _response(
+        [ScheduleDay(date=date(2026, 10, 19), items=[])],
+        generated_at="2026-10-19T12:00:00+00:00",
+    )
+
+    text = _visible_text(
+        _format_schedule_pages(
+            response, "STUDENT", now=response.generated_at + timedelta(hours=3)
+        )[0]
+    )
+
+    assert text.endswith("No events\n\nUpdated Mon, Oct 19 at 12:00")
+    assert "Timezone:" not in text
+
+
+def test_cached_pages_keep_their_header_and_never_show_updated() -> None:
+    response = _stale_response()
+
+    text = _visible_text(
+        _format_schedule_pages(
+            response,
+            "STUDENT",
+            source="cached",
+            now=response.generated_at + timedelta(days=2),
+        )[0]
+    )
+
+    assert text.startswith("OFFLINE — cached schedule\nSchedule for Mon, Oct 19")
+    assert "Updated" not in text
+    assert text.endswith("\nTimezone: UTC")
+
+
+@pytest.mark.parametrize("stale", [False, True])
+def test_pagination_budget_holds_with_two_line_footer_and_emoji_markers(
+    stale: bool,
+) -> None:
+    items = [
+        _item(
+            index + 1,
+            f"2026-10-19T{index // 60:02d}:{index % 60:02d}:00+00:00",
+            f"2026-10-19T{index // 60:02d}:{index % 60:02d}:30+00:00",
+            status=("past", "ongoing", "upcoming")[index % 3],
+            subject_label="😀" * 40,
+        )
+        for index in range(200)
+    ]
+    response = _response(
+        [ScheduleDay(date=date(2026, 10, 19), items=items)],
+        generated_at="2026-10-19T12:00:00+00:00",
+    )
+    now = response.generated_at + timedelta(hours=2 if stale else 0)
+
+    pages = _format_schedule_pages(response, "TEACHER", now=now)
+    visible = [_visible_text(page) for page in pages]
+
+    assert len(pages) > 1
+    assert all(_utf16_length(page) <= MAX_MESSAGE_UTF16_UNITS for page in visible)
+    assert all("Timezone: UTC" in page for page in visible)
+    assert all(
+        page.endswith("Updated Mon, Oct 19 at 12:00") == stale for page in visible
+    )
+    assert sum(page.count("Lesson —") for page in visible) == 200

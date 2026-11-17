@@ -55,7 +55,7 @@ async def test_registered_teacher_can_navigate_and_reopen_in_place(
 
         await driver.click("This week")
         _assert_no_refresh(driver)
-        assert "This week's schedule" in driver.session.last_message.text
+        assert "This week's schedule" not in driver.session.last_message.text
         assert driver.session.last_message.text.count("No events") == 7
         assert driver.callback_data("Today")
 
@@ -95,7 +95,7 @@ async def test_registered_teacher_can_navigate_and_reopen_in_place(
         assert "Work hours: 09:00–18:00" in driver.session.last_message.text
         assert driver.session.last_message.message_id == message_id
         await driver.click("Today")
-        assert "Today's schedule" in driver.session.last_message.text
+        assert "Today's schedule" not in driver.session.last_message.text
         assert "Personal lesson" in driver.session.last_message.text
         assert "Automatic break" in driver.session.last_message.text
         assert "(read-only)" not in driver.session.last_message.text
@@ -161,7 +161,7 @@ async def test_schedule_outage_offers_navigation_recovery_without_stale_rows(
             offline[0] = False
             await driver.click("Back to home")
             await driver.click("Today")
-            assert "Today's schedule" in driver.session.last_message.text
+            assert "Today's schedule" not in driver.session.last_message.text
             assert "No events" in driver.session.last_message.text
 
             await driver.click("This week")
@@ -182,7 +182,7 @@ async def test_schedule_outage_offers_navigation_recovery_without_stale_rows(
 
             offline[0] = False
             await driver.click("Next week ▶")
-            assert "This week's schedule" in driver.session.last_message.text
+            assert "This week's schedule" not in driver.session.last_message.text
             assert "OFFLINE — cached schedule" not in driver.session.last_message.text
             assert driver.session.last_message.text.count("No events") == 7
             await driver.click("Back to home")
@@ -201,7 +201,7 @@ async def test_expired_token_recovers_and_inactive_account_gets_schedule_error(
         await driver.click("Today")
         api.tokens[driver.user_id] = "expired-test-token"
         await driver.click("This week")
-        assert "This week's schedule" in driver.session.last_message.text
+        assert "This week's schedule" not in driver.session.last_message.text
 
         account = await db_session.scalar(
             select(User).where(User.telegram_user_id == driver.user_id)
@@ -251,7 +251,7 @@ async def test_registered_student_can_open_week_and_return_home(
         await student.click("Today")
         _assert_no_refresh(student)
         await student.click("This week")
-        assert "This week's schedule" in student.session.last_message.text
+        assert "This week's schedule" not in student.session.last_message.text
         assert student.session.last_message.text.count("No events") == 7
         await student.click("Back to home")
         assert "STUDENT:" in student.session.last_message.text
@@ -550,7 +550,7 @@ async def test_invalid_schedule_output_has_home_and_period_recovery(
         invalid[0] = False
         await driver.click("Back to home")
         await driver.click("Today")
-        assert "Today's schedule" in driver.session.last_message.text
+        assert "Today's schedule" not in driver.session.last_message.text
         assert "No events" in driver.session.last_message.text
     finally:
         await driver.close()

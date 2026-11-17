@@ -916,7 +916,7 @@ async def test_concurrent_schedule_change_shows_error_and_requires_reload(
             == 1
         )
         await driver.click("Reload schedule")
-        assert "This week's schedule" in driver.session.last_message.text
+        assert "This week's schedule" not in driver.session.last_message.text
         _assert_no_schedule_refresh(driver)
     finally:
         await _close_bot(driver, http)

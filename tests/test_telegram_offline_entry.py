@@ -55,9 +55,9 @@ async def test_offline_start_is_schedule_only_and_requires_fresh_in_memory_ident
                 driver.callback_data("Manage homework"),
             ]
             await driver.click("Today")
-            assert "Today's schedule" in driver.session.last_message.text
+            assert "No events" in driver.session.last_message.text
             await driver.click("This week")
-            assert "This week's schedule" in driver.session.last_message.text
+            assert "Timezone:" in driver.session.last_message.text
             await driver.click("Back to home")
             assert api.offline_schedule_identity(driver.user_id) is not None
 

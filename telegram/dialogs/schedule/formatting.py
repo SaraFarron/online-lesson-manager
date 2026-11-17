@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from html import escape
 from typing import Literal
 from unicodedata import category
@@ -12,12 +12,14 @@ from telegram.shared.inputs import format_compact_schedule_date, format_human_ti
 ViewerRole = Literal["TEACHER", "STUDENT"]
 MAX_MESSAGE_UTF16_UNITS = 3500
 MAX_LABEL_CODEPOINTS = 80
+STALE_SNAPSHOT_AFTER = timedelta(hours=1)
 
 _EVENT_LABELS = {
     "LESSON": "Lesson",
     "BREAK": "Break",
     "VACATION": "Vacation",
 }
+_STATUS_MARKERS = {"past": "✅", "ongoing": "▶️", "upcoming": "⏳"}
 _AUTOMATIC_BREAK_LABELS: dict[ViewerRole, str] = {
     "TEACHER": "Automatic break",
     "STUDENT": "Teacher's automatic break",
@@ -35,17 +37,17 @@ def format_schedule_pages(
     role: ViewerRole,
     *,
     source: Literal["live", "cached"] = "live",
+    now: datetime | None = None,
 ) -> tuple[str, ...]:
     """Format a typed backend snapshot into complete, Telegram-safe HTML pages."""
     zone = ZoneInfo(response.timezone)
     current_date = response.generated_at.astimezone(zone).date()
     updated_at = response.generated_at.astimezone(zone)
-    title = "Today's schedule" if response.period == "day" else "This week's schedule"
     updated_date = format_compact_schedule_date(
         current_date, reference_date=current_date
     )
     updated_time = format_human_time(updated_at)
-    header_lines: tuple[_TextLine, ...]
+    header_lines: tuple[_TextLine, ...] = ()
     if source == "cached":
         range_start = format_compact_schedule_date(
             response.days[0].date, reference_date=current_date
@@ -67,36 +69,34 @@ def format_schedule_pages(
             _TextLine(f"<b>{escape(range_title)}</b>", range_title),
             _TextLine(snapshot_status, snapshot_status),
         )
-    else:
-        header_lines = (
-            _TextLine(f"<b>{title}</b>", title),
-            _TextLine(
-                f"Updated {updated_date} at {escape(updated_time)}",
-                f"Updated {updated_date} at {updated_time}",
-            ),
-        )
     header_markup = "\n".join(line.markup for line in header_lines)
     header_plain = "\n".join(line.plain for line in header_lines)
     empty_today = response.period == "day" and not any(
         day.items for day in response.days
     )
-    timezone_footer = (
-        None
-        if empty_today
-        else _TextLine(
-            f"Timezone: {escape(response.timezone)}",
-            f"Timezone: {response.timezone}",
+    footer_lines: list[_TextLine] = []
+    if not empty_today:
+        footer_lines.append(
+            _TextLine(
+                f"Timezone: {escape(response.timezone)}",
+                f"Timezone: {response.timezone}",
+            )
         )
+    if source == "live" and _is_stale(response.generated_at, now):
+        footer_lines.append(
+            _TextLine(
+                f"Updated {updated_date} at {escape(updated_time)}",
+                f"Updated {updated_date} at {updated_time}",
+            )
+        )
+    footer = tuple(footer_lines)
+    # Live pages separate the footer with a blank line; cached pages keep one newline.
+    footer_gap = "\n\n" if source == "live" else "\n"
+    header_length = _utf16_length(header_plain) + 1 if header_lines else 0
+    footer_length = (
+        len(footer_gap) + _utf16_length(_lines_plain(footer)) if footer else 0
     )
-    footer_length = _utf16_length(timezone_footer.plain) if timezone_footer else 0
-    footer_separator = 1 if timezone_footer else 0
-    body_limit = (
-        MAX_MESSAGE_UTF16_UNITS
-        - _utf16_length(header_plain)
-        - 1
-        - footer_separator
-        - footer_length
-    )
+    body_limit = MAX_MESSAGE_UTF16_UNITS - header_length - footer_length
     if body_limit <= 0:
         raise ValueError("Schedule header exceeds the Telegram message budget")
 
@@ -118,7 +118,7 @@ def format_schedule_pages(
 
     pages = _pack_chunks(chunks, body_limit)
     return tuple(
-        _render_page(header_markup, header_plain, page, timezone_footer)
+        _render_page(header_markup, header_plain, page, footer, footer_gap)
         for page in pages
     )
 
@@ -210,10 +210,14 @@ def _render_item(
         subject = f" — {safe_label}"
         markup_subject = f" — {escape(safe_label, quote=False)}"
 
-    status = "⏳" if item.status == "upcoming" else f"[{item.status.upper()}]"
+    status = _STATUS_MARKERS[item.status]
     plain = f"{interval}  {event_label}{subject}  {status}"
     markup = f"{escape(interval, quote=False)}  {event_label}{markup_subject}  {status}"
     return _TextLine(markup, plain)
+
+
+def _is_stale(generated_at: datetime, now: datetime | None) -> bool:
+    return (now or datetime.now(UTC)) - generated_at > STALE_SNAPSHOT_AFTER
 
 
 def _now_divider() -> _TextLine:
@@ -253,15 +257,16 @@ def _render_page(
     header_markup: str,
     header_plain: str,
     chunks: tuple[tuple[_TextLine, ...], ...],
-    footer: _TextLine | None,
+    footer: tuple[_TextLine, ...],
+    footer_gap: str,
 ) -> str:
     body_markup = "\n\n".join(_lines_markup(chunk) for chunk in chunks)
     body_plain = "\n\n".join(_lines_plain(chunk) for chunk in chunks)
-    text = f"{header_markup}\n{body_markup}"
-    visible_text = f"{header_plain}\n{body_plain}"
-    if footer is not None:
-        text += f"\n{footer.markup}"
-        visible_text += f"\n{footer.plain}"
+    text = f"{header_markup}\n{body_markup}" if header_markup else body_markup
+    visible_text = f"{header_plain}\n{body_plain}" if header_plain else body_plain
+    if footer:
+        text += f"{footer_gap}{_lines_markup(footer)}"
+        visible_text += f"{footer_gap}{_lines_plain(footer)}"
     if _utf16_length(visible_text) > MAX_MESSAGE_UTF16_UNITS:
         raise ValueError("Formatted schedule exceeds the Telegram message budget")
     return text
@@ -275,7 +280,7 @@ def _lines_utf16_length(lines: Sequence[_TextLine]) -> int:
     return _utf16_length(_lines_plain(lines))
 
 
-def _lines_markup(lines: tuple[_TextLine, ...]) -> str:
+def _lines_markup(lines: Sequence[_TextLine]) -> str:
     return "\n".join(line.markup for line in lines)
 
 

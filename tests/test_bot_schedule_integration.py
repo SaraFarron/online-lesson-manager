@@ -335,7 +335,7 @@ async def test_authorized_backend_results_match_teacher_and_student_bot_views(
             ]
             assert 0 < day_select_count <= 12
             assert 0 < week_select_count <= 12
-            assert "This week's schedule" in teacher_week_text
+            assert "This week's schedule" not in teacher_week_text
             assert teacher_week_text.count("No events") == 4
             assert "Personal lesson" in teacher_week_text
             assert "Break" in teacher_week_text
@@ -674,8 +674,8 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
             assert len(initial_pages) > 1
             visible_pages = [_VisibleText().text(page) for page in initial_pages]
             assert sum(page.count("Long <&> 😀") for page in visible_pages) == 123
-            assert sum(page.count("[PAST]") for page in visible_pages) == 1
-            assert visible_pages[0].index("[PAST]") < visible_pages[0].index("NOW")
+            assert sum(page.count("✅") for page in visible_pages) == 1
+            assert visible_pages[0].index("✅") < visible_pages[0].index("NOW")
             assert visible_pages[0].index("NOW") < visible_pages[0].index("⏳")
             assert "1:30 (first occurrence)" in visible_pages[0]
             assert "1:30 (second occurrence)" in visible_pages[0]
@@ -684,7 +684,7 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
                 for page in visible_pages
             )
             assert all(
-                page.endswith("Timezone: America/New_York") for page in visible_pages
+                "\n\nTimezone: America/New_York" in page for page in visible_pages
             )
             assert all("Page " not in page for page in visible_pages)
 
@@ -726,15 +726,13 @@ async def test_dst_week_and_long_schedule_pages_stay_complete_and_bounded(
             assert len(week_pages) > 1
             week_text = [_VisibleText().text(page) for page in week_pages]
             assert sum(page.count("Long <&> 😀") for page in week_text) == 123
-            assert sum(page.count("[PAST]") for page in week_text) == 1
+            assert sum(page.count("✅") for page in week_text) == 1
             assert sum(page.count("No events") for page in week_text) == 6
             assert all(
                 len(page.encode("utf-16-le")) // 2 <= MAX_MESSAGE_UTF16_UNITS
                 for page in week_text
             )
-            assert all(
-                page.endswith("Timezone: America/New_York") for page in week_text
-            )
+            assert all("\n\nTimezone: America/New_York" in page for page in week_text)
             assert all("Page " not in page for page in week_text)
 
             sends = [
