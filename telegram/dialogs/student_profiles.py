@@ -28,6 +28,7 @@ from telegram.dialogs.homework.teacher_management import (
 )
 from telegram.shared.access import backend
 from telegram.shared.feedback import feedback_block
+from telegram.shared.pagination import page_count, page_label
 
 PROFILE_PAGE_SIZE = 20
 
@@ -684,7 +685,11 @@ async def student_profile_data(
         else None
     )
     page_number = skip // PROFILE_PAGE_SIZE + 1
-    page_count = max(1, (total + PROFILE_PAGE_SIZE - 1) // PROFILE_PAGE_SIZE)
+    label = page_label(
+        page_number,
+        page_count(total, PROFILE_PAGE_SIZE),
+        f"· {total} student(s)",
+    )
     return {
         "feedback": feedback_block(
             error=str(data.get("error", "")),
@@ -692,7 +697,7 @@ async def student_profile_data(
         ),
         "profiles": profiles,
         "profile_page": (
-            f"Page {page_number} of {page_count} · {total} student(s)\n"
+            (f"{label}\n" if label else "")
             + ("\n".join(profile_lines) or "No students on this list.")
         ),
         "list_title": "Former students (read-only)" if kind == "former" else "Students",
@@ -749,13 +754,9 @@ def build_student_profiles_dialog() -> Dialog:
                     when="has_next",
                 ),
             ),
+            # The former-student list is intentionally not exposed in the UI yet;
+            # its handlers and window stay reachable only through code.
             Row(
-                Button(
-                    Const("Former students"),
-                    id="former",
-                    on_click=show_former_students,
-                    when="can_return_to_active",
-                ),
                 Button(
                     Const("Active students"),
                     id="active",
@@ -853,11 +854,6 @@ def build_student_profiles_dialog() -> Dialog:
         ),
         Window(
             Format("{feedback}{result_text}"),
-            Button(
-                Const("Former students"),
-                id="former",
-                on_click=show_former_students_after_removal,
-            ),
             Button(Const("Close"), id="close", on_click=close_student_profiles),
             state=StudentProfileScreens.result,
         ),

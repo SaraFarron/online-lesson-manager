@@ -196,7 +196,8 @@ async def test_teacher_profile_removal_and_former_homework_flow(
 
         await teacher_driver.click("Students")
         assert teacher_driver.session.last_message.message_id == initial_message_id
-        assert "Page 1 of 1 · 1 student(s)" in teacher_driver.session.last_message.text
+        assert "Page " not in teacher_driver.session.last_message.text
+        assert "Former students" not in _button_labels(teacher_driver)
         await teacher_driver.click(_button_with_prefix(teacher_driver, "Alice Learner"))
         detail = teacher_driver.session.last_message.text
         assert "Username: No username" in detail
@@ -237,29 +238,12 @@ async def test_teacher_profile_removal_and_former_homework_flow(
         assert student.teacher_id is None
         assert relationship.removed_at is not None
 
-        await teacher_driver.click("Former students")
-        await teacher_driver.click(_button_with_prefix(teacher_driver, "Alice Learner"))
-        former_detail = teacher_driver.session.last_message.text
-        assert "Removed from this teacher:" in former_detail
-        assert "This former-student profile is read-only." in former_detail
-        await teacher_driver.click("View homework")
-        assert "Former-student homework is read-only." in (
-            teacher_driver.session.last_message.text
-        )
-        await teacher_driver.click(
-            _button_with_prefix(teacher_driver, "Read the retained")
-        )
-        labels = _button_labels(teacher_driver)
-        assert "Former-student homework is read-only." in (
-            teacher_driver.session.last_message.text
-        )
-        assert "Mark complete" not in labels
-        assert "Delete assignment" not in labels
-        await teacher_driver.click("Back to list")
-        await teacher_driver.click("Back to profile")
-        assert "This former-student profile is read-only." in (
-            teacher_driver.session.last_message.text
-        )
+        assert _button_labels(teacher_driver) == ["Close"]
+        assert "Former students" not in _button_labels(teacher_driver)
+        await teacher_driver.click("Close")
+        await teacher_driver.click("Students")
+        assert "No students on this list." in teacher_driver.session.last_message.text
+        assert "Former students" not in _button_labels(teacher_driver)
         assert (
             sum(
                 call.__api_method__ == "sendMessage"
@@ -535,15 +519,9 @@ async def test_profile_history_survives_restart_and_scopes_rejoin(
     try:
         await old_teacher_restart.text("/start")
         await old_teacher_restart.click("Students")
-        assert "Page 1 of 1 · 0 student(s)" in (
+        assert "Page " not in old_teacher_restart.session.last_message.text
+        assert "No students on this list." in (
             old_teacher_restart.session.last_message.text
-        )
-        await old_teacher_restart.click("Former students")
-        await old_teacher_restart.click(
-            _button_with_prefix(old_teacher_restart, "Updated Learner")
-        )
-        assert (
-            "Account profile updated" in old_teacher_restart.session.last_message.text
         )
 
         await new_teacher_restart.text("/start")
