@@ -9,6 +9,9 @@ default-user bot tests ("Stack is broken" resets) that also fail occasionally on
 the previous baseline. Source: `todo.txt` in the repository root; it
 is not a shipped contract and may be deleted once this plan is implemented.
 
+**Superseded in part (2026-11-18):** Decision 4's `Delete break` confirmation
+step is removed; see [telegram-polish-and-time-slots](./telegram-polish-and-time-slots.md).
+
 ## Goal
 Make the teacher student list, student profile, breaks screens and lesson list
 readable on a phone (one button per row, shorter text, no empty sections), unify

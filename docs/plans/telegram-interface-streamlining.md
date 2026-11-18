@@ -14,6 +14,10 @@ removes the schedule title line, puts a blank line before `Timezone:` with
 `Updated` after it (only for snapshots over one hour old), and replaces the
 `[PAST]`/`[ONGOING]` markers with `✅`/`▶️`. The rest of this contract stands.
 
+**Superseded in part (2026-11-18):** the typed start-time prompts for lessons and
+breaks are now preceded by a slot picker with a manual fallback, and vacations
+no longer take a time; see [telegram-polish-and-time-slots](./telegram-polish-and-time-slots.md).
+
 ## Scope (README.md sections covered)
 
 - [Bot interface](../../README.md#интерфейс-бота): edit-in-place navigation,

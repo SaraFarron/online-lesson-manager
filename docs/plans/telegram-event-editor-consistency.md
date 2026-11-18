@@ -13,6 +13,12 @@ verification remains unavailable; no live Telegram actions were performed.
 `Refresh` controls are replaced by the unified, one-per-row lists in
 [telegram-lists-and-breaks-cleanup](./telegram-lists-and-breaks-cleanup.md).
 
+**Superseded in part (2026-11-18):** the open-ended-series note text, the break
+delete confirmation screen, the vacation start-time step, and typed-only break
+start/end entry are replaced by [telegram-polish-and-time-slots](./telegram-polish-and-time-slots.md)
+(`No end date`, one-tap break delete, date-only vacations, and slot buttons with
+a manual fallback).
+
 ## Scope (README.md sections covered)
 
 - [Bot interface](../../README.md#интерфейс-бота): edit-in-place navigation,

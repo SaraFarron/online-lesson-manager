@@ -241,6 +241,13 @@ The role home no longer has Settings or Vacations buttons. The bot publishes
 `/start`, `/settings` and `/vacations` to Telegram's private-chat command menu
 at startup, so no manual BotFather command setup is needed; the commands work
 without prior dialog state and ask unregistered users to send `/start`.
+Private-chat command messages are deleted after the command is handled, and
+`/start` also clears any stale reply keyboard left by older bot versions.
+Lesson and break start times (and break end times) are chosen from buttons of
+available times for the entered date, with a 5-minute toggle and an `Enter time
+manually` fallback; the lists are advisory, and the backend still validates every
+write. Vacations cover whole local days and finished vacations are not listed;
+breaks are deleted without a confirmation screen.
 Single-page lists, broadcast results and homework lists omit the page label;
 accepted broadcast, assignment and solution text messages are removed from the
 chat after the screen shows the stored text. Teachers publish an assignment

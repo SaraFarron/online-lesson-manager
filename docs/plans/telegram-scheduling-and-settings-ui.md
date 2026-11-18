@@ -8,6 +8,10 @@ Teachers and students can manage their authorized lessons and vacations, teacher
 
 **Superseded in part (2026-11-18):** the two-list one-time/weekly lesson and break browsing and the `Refresh` controls described below are replaced by the unified lists in [telegram-lists-and-breaks-cleanup](./telegram-lists-and-breaks-cleanup.md).
 
+**Superseded in part (2026-11-18):** the vacation start-time prompt and review,
+the vacation list layout, and typed-only lesson/break start times are replaced by
+[telegram-polish-and-time-slots](./telegram-polish-and-time-slots.md).
+
 ## Scope (README.md sections covered)
 
 - [Bot interface](../../README.md#интерфейс-бота): flexible local date/time input and edit-in-place navigation.
