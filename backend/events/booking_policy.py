@@ -3,6 +3,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -124,16 +125,41 @@ def validate_lesson_work_window(
         raise ValidationError("Teacher working days are not configured")
 
     for occurrence in occurrences:
-        local_start = normalize_utc(occurrence.start).astimezone(zone)
-        local_end = normalize_utc(occurrence.end).astimezone(zone)
-        if local_start.date().isoweekday() not in working_days:
-            raise ValidationError("Lesson starts on a non-working day")
-        if local_start.time().replace(tzinfo=None) < profile.work_start:
-            raise ValidationError("Lesson starts before the teacher's work hours")
-        if local_end.date() != local_start.date():
-            raise ValidationError("Lesson cannot cross local midnight")
-        if local_end.time().replace(tzinfo=None) > profile.work_end:
-            raise ValidationError("Lesson ends after the teacher's work hours")
+        _validate_work_interval(occurrence.start, occurrence.end, profile, zone)
+
+
+def _validate_work_interval(
+    start: datetime,
+    end: datetime,
+    profile: TeacherBookingPreferences,
+    zone: ZoneInfo,
+) -> None:
+    local_start = normalize_utc(start).astimezone(zone)
+    local_end = normalize_utc(end).astimezone(zone)
+    if local_start.date().isoweekday() not in profile.working_days:
+        raise ValidationError("Lesson starts on a non-working day")
+    if local_start.time().replace(tzinfo=None) < profile.work_start:
+        raise ValidationError("Lesson starts before the teacher's work hours")
+    if local_end.date() != local_start.date():
+        raise ValidationError("Lesson cannot cross local midnight")
+    if local_end.time().replace(tzinfo=None) > profile.work_end:
+        raise ValidationError("Lesson ends after the teacher's work hours")
+
+
+def is_within_work_window(
+    start: datetime,
+    end: datetime,
+    profile: TeacherBookingPreferences,
+    timezone_name: str,
+) -> bool:
+    """Non-raising check of one interval against work days and hours."""
+    if profile.work_start is None or profile.work_end is None:
+        return False
+    try:
+        _validate_work_interval(start, end, profile, get_timezone(timezone_name))
+    except ValidationError:
+        return False
+    return True
 
 
 def validate_lesson_limits(

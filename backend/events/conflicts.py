@@ -137,30 +137,78 @@ async def validate_schedule_change(
         include_automatic_breaks=True,
     )
     if exclude_event_id is not None:
-        excluded_kind = (
+        existing = exclude_source_occurrences(
+            existing,
+            exclude_event_id,
             OccurrenceSourceKind.RECURRENT_EVENT
             if isinstance(data, RecurrentEventWrite)
-            else OccurrenceSourceKind.EVENT
+            else OccurrenceSourceKind.EVENT,
         )
-        existing = [
-            occurrence
-            for occurrence in existing
-            if not (
-                (
-                    occurrence.source.kind == excluded_kind
-                    and occurrence.source.id == exclude_event_id
-                )
-                or (
-                    occurrence.source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
-                    and occurrence.source.parent_kind == excluded_kind
-                    and occurrence.source.id == exclude_event_id
-                )
-            )
-        ]
 
+    return evaluate_schedule_candidates(
+        data,
+        teacher_id,
+        event_type,
+        candidate_lessons,
+        candidate_breaks,
+        existing,
+        lesson_preferences=lesson_preferences,
+        policy_timezone=policy_timezone,
+        exclude_event_id=exclude_event_id,
+        confirm_displacement=confirm_displacement,
+        displacement_token=displacement_token,
+    )
+
+
+def exclude_source_occurrences(
+    existing: Sequence[Occurrence],
+    event_id: UUID,
+    kind: OccurrenceSourceKind,
+    occurrence_start: datetime | None = None,
+) -> list[Occurrence]:
+    """Drop an event's occurrences and derived breaks, optionally only one start."""
+    excluded_start = (
+        normalize_utc(occurrence_start) if occurrence_start is not None else None
+    )
+    remaining: list[Occurrence] = []
+    for occurrence in existing:
+        source = occurrence.source
+        if source.id == event_id and (
+            (source.kind == kind and excluded_start in (None, occurrence.start))
+            or (
+                source.kind == OccurrenceSourceKind.AUTOMATIC_BREAK
+                and source.parent_kind == kind
+                and excluded_start in (None, source.parent_start)
+            )
+        ):
+            continue
+        remaining.append(occurrence)
+    return remaining
+
+
+def evaluate_schedule_candidates(
+    data: EventWrite | RecurrentEventWrite,
+    teacher_id: UUID,
+    event_type: EventType,
+    candidate_lessons: Sequence[Occurrence],
+    candidate_breaks: Sequence[Occurrence],
+    existing: Sequence[Occurrence],
+    *,
+    lesson_preferences: TeacherBookingPreferences | None,
+    policy_timezone: str | None,
+    exclude_event_id: UUID | None = None,
+    confirm_displacement: bool = False,
+    displacement_token: str | None = None,
+) -> list[Occurrence]:
+    """Apply the shared write rules to candidates against loaded occurrences.
+
+    Used by both schedule writes and the advisory availability reads so the two
+    cannot diverge. Raises on the first rule violation.
+    """
+    candidate_reservations = [*candidate_lessons, *candidate_breaks]
     if (
         event_type == EventType.LESSON
-        and candidate_occurrences
+        and candidate_lessons
         and lesson_preferences is not None
         and policy_timezone is not None
     ):
@@ -271,6 +319,75 @@ async def validate_schedule_change(
     return []
 
 
+def _candidate_source(
+    data: EventWrite | RecurrentEventWrite,
+    teacher_id: UUID,
+    event_type: EventType,
+    post_break_minutes: int | None,
+) -> OccurrenceSource:
+    if event_type == EventType.LESSON:
+        if post_break_minutes is None:
+            raise ValidationError("Lesson break duration is required for validation")
+        if type(post_break_minutes) is not int or post_break_minutes < 0:
+            raise ValidationError("Lesson break duration must be a nonnegative integer")
+    else:
+        post_break_minutes = 0
+
+    return OccurrenceSource(
+        kind=(
+            OccurrenceSourceKind.RECURRENT_EVENT
+            if isinstance(data, RecurrentEventWrite)
+            else OccurrenceSourceKind.EVENT
+        ),
+        id=UUID(int=0),
+        teacher_id=teacher_id,
+        user_id=data.user_id,
+        event_type=event_type,
+        post_break_minutes=post_break_minutes,
+    )
+
+
+def is_one_off_slot_acceptable(
+    data: EventWrite,
+    teacher_id: UUID,
+    event_type: EventType,
+    existing: Sequence[Occurrence],
+    *,
+    lesson_preferences: TeacherBookingPreferences | None,
+    policy_timezone: str | None,
+    post_break_minutes: int | None,
+) -> bool:
+    """Non-raising form of the write rules for one candidate one-off event.
+
+    A break that would displace lessons needs confirmation on write, so it is
+    reported as unacceptable here.
+    """
+    if data.end is None:
+        return False
+    try:
+        lesson = Occurrence(
+            source=_candidate_source(data, teacher_id, event_type, post_break_minutes),
+            start=normalize_utc(data.start),
+            end=normalize_utc(data.end),
+        )
+        automatic_break = (
+            derive_automatic_break(lesson) if event_type == EventType.LESSON else None
+        )
+        evaluate_schedule_candidates(
+            data,
+            teacher_id,
+            event_type,
+            [lesson],
+            [automatic_break] if automatic_break is not None else [],
+            existing,
+            lesson_preferences=lesson_preferences,
+            policy_timezone=policy_timezone,
+        )
+    except ValidationError, Conflict:
+        return False
+    return True
+
+
 async def _candidate_occurrences(
     session: AsyncSession,
     data: EventWrite | RecurrentEventWrite,
@@ -282,28 +399,7 @@ async def _candidate_occurrences(
     canceled_starts: Sequence[datetime],
     post_break_minutes: int | None,
 ) -> tuple[list[Occurrence], datetime, int]:
-    source_kind = (
-        OccurrenceSourceKind.RECURRENT_EVENT
-        if isinstance(data, RecurrentEventWrite)
-        else OccurrenceSourceKind.EVENT
-    )
-    source_id = UUID(int=0)
-    if event_type == EventType.LESSON:
-        if post_break_minutes is None:
-            raise ValidationError("Lesson break duration is required for validation")
-        if type(post_break_minutes) is not int or post_break_minutes < 0:
-            raise ValidationError("Lesson break duration must be a nonnegative integer")
-    else:
-        post_break_minutes = 0
-
-    source = OccurrenceSource(
-        kind=source_kind,
-        id=source_id,
-        teacher_id=teacher_id,
-        user_id=data.user_id,
-        event_type=event_type,
-        post_break_minutes=post_break_minutes,
-    )
+    source = _candidate_source(data, teacher_id, event_type, post_break_minutes)
     start = normalize_utc(data.start)
     if data.end is None:
         raise ValidationError("Event end time is required")
@@ -313,8 +409,7 @@ async def _candidate_occurrences(
         raise ValidationError("Event start time must be before end time")
 
     if not isinstance(data, RecurrentEventWrite):
-        occurrence = Occurrence(source=source, start=start, end=end)
-        return [occurrence], end, 1
+        return [Occurrence(source=source, start=start, end=end)], end, 1
 
     mode = recurrence_mode or RecurrenceMode.TEACHER_LOCAL
     if mode == RecurrenceMode.TEACHER_LOCAL and recurrence_timezone is None:

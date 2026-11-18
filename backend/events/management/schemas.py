@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated
 from uuid import UUID
@@ -139,6 +139,11 @@ class ResolvedLocalInstant(BaseModel):
     utc: UtcTimestamp
     utc_offset: str
 
+    @classmethod
+    def from_local(cls, local: datetime, utc: datetime) -> ResolvedLocalInstant:
+        offset = local.strftime("%z")
+        return cls(local=local, utc=utc, utc_offset=f"{offset[:3]}:{offset[3:]}")
+
     @field_serializer("local", when_used="json")
     def serialize_local_datetime(self, value: datetime) -> str:
         return value.isoformat()
@@ -154,3 +159,22 @@ class LocalIntervalResolution(BaseModel):
     timezone: str
     start: ResolvedLocalInstant
     end: ResolvedLocalInstant
+
+
+class AvailableStartTimes(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    timezone: str
+    day: date
+    step_minutes: int
+    duration_minutes: int
+    slots: list[ResolvedLocalInstant]
+
+
+class AvailableEndTimes(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    timezone: str
+    start: ResolvedLocalInstant
+    step_minutes: int
+    ends: list[ResolvedLocalInstant]
