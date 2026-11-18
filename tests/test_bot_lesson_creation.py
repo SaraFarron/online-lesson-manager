@@ -19,7 +19,7 @@ from backend.auth.models import (
 from backend.events.models import Event, RecurrentEvent
 from backend.main import app
 from backend.schedule.router import get_schedule_clock
-from telegram.api import BackendClient
+from telegram.api import BackendClient, BackendUnavailable
 from telegram.dialogs.lessons.creation import submit_lesson
 from telegram.runtime import build_dispatcher
 from tests.bot_support import BotDriver
@@ -210,6 +210,7 @@ async def test_teacher_books_student_and_omits_default_duration(
         assert driver.deleted_message_ids() == [date_message_id]
         assert driver.session.last_message.message_id == screen_message_id
         deleted_count = len(driver.deleted_message_ids())
+        await driver.click("Enter time manually")
         await driver.text("25:00")
         assert len(driver.deleted_message_ids()) == deleted_count
         assert "Hour must be 0–23" in driver.session.last_message.text
@@ -286,6 +287,7 @@ async def test_failed_optional_student_picker_does_not_block_personal_booking(
             driver.session.last_message.text
         )
         await driver.text("20/10/2026")
+        await driver.click("Enter time manually")
         await driver.text("10:00")
         await driver.click("Create lesson")
         created = (
@@ -331,6 +333,7 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
         start_message_id = driver.update_id + 1
         await driver.text("20/10/2026")
         assert driver.deleted_message_ids()[-1] == start_message_id
+        await driver.click("Enter time manually")
         await driver.text("10:00")
         assert "Weekly recurrence with No end" in driver.session.last_message.text
         await driver.click("Change series end")
@@ -374,6 +377,7 @@ async def test_teacher_creates_custom_weekly_personal_lesson(
 
         await driver.click("Change date")
         await driver.text("29/10/2026")
+        await driver.click("Enter time manually")
         await driver.text("10:00")
         assert "does not include the new first lesson" in (
             driver.session.last_message.text
@@ -424,6 +428,7 @@ async def test_teacher_books_student_weekly_with_no_end_by_default(
         await driver.click("Alice Learner")
         await driver.click("Weekly")
         await driver.text("20/10/2026")
+        await driver.click("Enter time manually")
         time_message_id = driver.update_id + 1
         screen_message_id = driver.session.last_message.message_id
         await driver.text("10:00")
@@ -462,6 +467,7 @@ async def test_lesson_time_cleanup_reports_expected_deletion_failure(
         await driver.click("Add lesson")
         await driver.click("One time")
         await driver.text("21/10/2026")
+        await driver.click("Enter time manually")
         accepted_message_id = driver.update_id + 1
         screen_message_id = driver.session.last_message.message_id
         driver.session.delete_failure = "Bad Request: message to delete not found"
@@ -505,6 +511,7 @@ async def test_invalid_or_backend_rejected_lesson_times_are_not_deleted(
         initial_deletions = driver.deleted_message_ids()
 
         invalid_message_id = driver.update_id + 1
+        await driver.click("Enter time manually")
         await driver.text("25:61")
         assert driver.deleted_message_ids() == initial_deletions
         assert "hour must be 0–23" in driver.session.last_message.text.lower()
@@ -541,6 +548,7 @@ async def test_dst_gap_lesson_time_is_deleted_after_backend_resolution(
         await driver.click("Add lesson")
         await driver.click("One time")
         await driver.text("14/03/2027")
+        await driver.click("Enter time manually")
         time_message_id = driver.update_id + 1
         await driver.text("02:30")
 
@@ -633,6 +641,7 @@ async def test_student_books_self_weekly_without_duration_or_subject_forgery(
             for button in row
         ]
         await driver.text("20/10/2026")
+        await driver.click("Enter time manually")
         await driver.text("10:00")
         assert "Weekly recurrence with No end" in driver.session.last_message.text
         await driver.click("Change series end")
@@ -708,6 +717,7 @@ async def test_policy_rejection_keeps_review_editable(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.text("25/10/2026")
+        await driver.click("Enter time manually")
         await driver.text("10:00")
         await driver.click("Create lesson")
 
@@ -736,6 +746,7 @@ async def test_weekly_work_hours_rejections_are_prominent_and_correctable(
         await driver.click("Add lesson")
         await driver.click("Weekly")
         await driver.text("20/10/2026")
+        await driver.click("Enter time manually")
         await driver.text("17:30")
         review_message_id = driver.session.last_message.message_id
         send_count = sum(
@@ -778,6 +789,7 @@ async def test_weekly_work_hours_rejections_are_prominent_and_correctable(
         )
 
         await driver.click("Change time")
+        await driver.click("Enter time manually")
         await driver.text("17:15")
         calls_before_repeated_rejection = len(driver.session.calls)
         await driver.click("Create lesson")
@@ -809,6 +821,7 @@ async def test_weekly_work_hours_rejections_are_prominent_and_correctable(
         assert not list((await db_session.scalars(select(RecurrentEvent))).all())
 
         await driver.click("Change time")
+        await driver.click("Enter time manually")
         await driver.text("16:00")
         await driver.click("Create lesson")
 
@@ -853,6 +866,7 @@ async def test_lost_create_response_requires_schedule_reload_without_retry(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.text("20/10/2026")
+        await driver.click("Enter time manually")
         await driver.text("12:00")
         await driver.click("Create lesson")
 
@@ -903,6 +917,7 @@ async def test_concurrent_schedule_change_shows_error_and_requires_reload(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.text("20/10/2026")
+        await driver.click("Enter time manually")
         await driver.text("12:00")
         await driver.click("Create lesson")
 
@@ -951,6 +966,7 @@ async def test_automatic_break_conflict_is_actionable_in_booking_review(
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.text("20/10/2026")
+        await driver.click("Enter time manually")
         await driver.text("11:02")
         await driver.click("Create lesson")
 
@@ -991,6 +1007,7 @@ async def test_new_automatic_break_conflict_is_not_misreported_as_existing_break
         await driver.click("Alice Learner")
         await driver.click("One time")
         await driver.text("20/10/2026")
+        await driver.click("Enter time manually")
         await driver.text("10:00")
         await driver.click("Create lesson")
 
@@ -1013,3 +1030,280 @@ async def test_duplicate_submit_callback_is_ignored(state: dict[str, bool]) -> N
     await submit_lesson(None, None, manager)
 
     assert manager.dialog_data == state
+
+
+_CLOCK = datetime(2026, 10, 20, 8, tzinfo=UTC)
+
+
+def _labels(driver: BotDriver) -> list[str]:
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    return [button.text for row in markup.inline_keyboard for button in row]
+
+
+def _clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(app.dependency_overrides, get_schedule_clock, lambda: _CLOCK)
+
+
+async def _to_time_picker(driver: BotDriver, date_text: str = "20/10/2026") -> None:
+    await driver.text("/start")
+    await driver.click("Add lesson")
+    await driver.click("One time")
+    await driver.text(date_text)
+
+
+async def test_time_picker_offers_only_free_times_and_reaches_review(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    db_session.add(
+        Event(
+            teacher_id=teacher.id,
+            user_id=student.id,
+            event_type="LESSON",
+            start=datetime(2026, 10, 20, 11),
+            end=datetime(2026, 10, 20, 12),
+            post_break_minutes=5,
+        )
+    )
+    await db_session.commit()
+    _clock(monkeypatch)
+    _, driver, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _to_time_picker(driver)
+        text = driver.session.last_message.text
+        assert "Choose the lesson start time." in text
+        labels = _labels(driver)
+        assert labels[:4] == ["09:00", "09:15", "09:30", "09:45"]
+        assert "10:00" not in labels and "11:00" not in labels
+        assert "12:00" not in labels and "12:15" in labels
+        assert {"Show 5-minute times", "Enter time manually", "Change date"} <= set(
+            labels
+        )
+        grid_rows = [
+            row
+            for row in driver.session.last_message.reply_markup.inline_keyboard
+            if row[0].text[:1].isdigit()
+        ]
+        assert all(len(row) <= 4 for row in grid_rows)
+        assert len(grid_rows[0]) == 4
+        query = next(
+            request.url.params
+            for request in requests
+            if request.url.path == "/api/v1/events/available-start-times"
+        )
+        assert query["date"] == "2026-10-20"
+        assert query["step_minutes"] == "15"
+        assert query["duration_minutes"] == "60"
+        assert query["subject_id"] == str(teacher.id)
+
+        await driver.click("09:45")
+        review = driver.session.last_message.text
+        assert "New lesson at October 20" in review
+        assert "9:45 - 10:45" in review
+        assert "Timezone: UTC" in review
+        await driver.click("Create lesson")
+        created = (
+            await db_session.scalars(select(Event).where(Event.user_id == teacher.id))
+        ).one()
+        assert created.start == datetime(2026, 10, 20, 9, 45)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_time_picker_paginates_and_toggles_five_minute_grid(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    _clock(monkeypatch)
+    _, driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await _to_time_picker(driver)
+        labels = _labels(driver)
+        assert "09:00" in labels and "14:45" in labels and "15:00" not in labels
+        assert "Next ▶" in labels and "◀ Previous" not in labels
+        await driver.click("Next ▶")
+        labels = _labels(driver)
+        assert "15:00" in labels and "17:00" in labels and "17:15" not in labels
+        assert "◀ Previous" in labels and "Next ▶" not in labels
+        await driver.click("◀ Previous")
+        assert "09:00" in _labels(driver)
+
+        await driver.click("Show 5-minute times")
+        labels = _labels(driver)
+        assert labels[:3] == ["09:00", "09:05", "09:10"]
+        assert "Show 15-minute times" in labels
+        await driver.click("Change date")
+        await driver.text("21/10/2026")
+        labels = _labels(driver)
+        assert "09:05" in labels and "Show 15-minute times" in labels
+        await driver.click("Show 15-minute times")
+        assert "09:05" not in _labels(driver)
+        assert "Show 5-minute times" in _labels(driver)
+
+        await driver.click("Show 5-minute times")
+        await driver.click("Cancel")
+        await driver.click("Add lesson")
+        await driver.click("One time")
+        await driver.text("21/10/2026")
+        assert "09:05" not in _labels(driver)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_time_picker_empty_day_and_manual_fallback(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    _clock(monkeypatch)
+    _, driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await _to_time_picker(driver, "25/10/2026")
+        assert "No free times on October 25. Choose another date." in (
+            driver.session.last_message.text
+        )
+        labels = _labels(driver)
+        assert not any(label[:1].isdigit() for label in labels)
+        assert {"Enter time manually", "Change date", "Cancel"} <= set(labels)
+
+        await driver.click("Change date")
+        await driver.text("20/10/2026")
+        assert "09:00" in _labels(driver)
+        await driver.click("Enter time manually")
+        assert "Enter the local lesson start time" in driver.session.last_message.text
+        assert "Back to times" in _labels(driver)
+        await driver.click("Back to times")
+        assert "09:00" in _labels(driver)
+        await driver.click("Enter time manually")
+        await driver.text("17:45")
+        assert "17:45 - 18:45" in driver.session.last_message.text
+        await driver.click("Change time")
+        assert "09:00" in _labels(driver)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_duration_change_reloads_time_picker(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    _clock(monkeypatch)
+    _, driver, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _to_time_picker(driver)
+        await driver.click("Next ▶")
+        assert "17:00" in _labels(driver)
+        await driver.click("◀ Previous")
+        await driver.click("09:00")
+        await driver.click("Change duration")
+        await driver.click("Custom duration")
+        await driver.text("90")
+        assert "Review lesson" in driver.session.last_message.text
+        await driver.click("Change time")
+        await driver.click("Next ▶")
+        labels = _labels(driver)
+        assert "16:30" in labels and "16:45" not in labels and "17:00" not in labels
+        durations = [
+            request.url.params["duration_minutes"]
+            for request in requests
+            if request.url.path == "/api/v1/events/available-start-times"
+        ]
+        assert durations == ["60", "90"]
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_time_picker_outage_offers_retry_and_manual_entry(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    _clock(monkeypatch)
+    api, driver, http, _ = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    original = api.read_available_start_times
+    failures = {"remaining": 1}
+
+    async def flaky(*args, **kwargs):
+        if failures["remaining"]:
+            failures["remaining"] -= 1
+            raise BackendUnavailable()
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(api, "read_available_start_times", flaky)
+    try:
+        await _to_time_picker(driver)
+        assert "Backend unavailable." in driver.session.last_message.text
+        labels = _labels(driver)
+        assert {"Retry", "Enter time manually", "Change date"} <= set(labels)
+        assert not any(label[:1].isdigit() for label in labels)
+        await driver.click("Retry")
+        assert "Backend unavailable." not in driver.session.last_message.text
+        assert "09:00" in _labels(driver)
+        assert "Retry" not in _labels(driver)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_time_picker_labels_dst_fold_once(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    teacher.timezone = "America/New_York"
+    profile = await db_session.scalar(
+        select(TeacherProfile).where(TeacherProfile.teacher_id == teacher.id)
+    )
+    assert profile is not None
+    profile.working_days = [1, 2, 3, 4, 5, 6, 7]
+    profile.work_start = time(0)
+    profile.work_end = time(23, 59)
+    await db_session.commit()
+    _clock(monkeypatch)
+    _, driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await _to_time_picker(driver, "01/11/2026")
+        labels = _labels(driver)
+        assert "01:00 (1st)" in labels
+        assert not any("(2nd)" in label for label in labels)
+        assert labels.count("01:45 (1st)") == 1
+        await driver.click("01:30 (1st)")
+        assert "first occurrence" in driver.session.last_message.text
+        await driver.click("Create lesson")
+        created = (await db_session.scalars(select(Event))).one()
+        assert created.start == datetime(2026, 11, 1, 5, 30)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_student_time_picker_uses_teacher_duration_and_own_context(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    _clock(monkeypatch)
+    _, driver, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(student)
+    )
+    try:
+        await driver.text("/start")
+        await driver.click("Add lesson")
+        await driver.click("One time")
+        await driver.text("20/10/2026")
+        query = next(
+            request.url.params
+            for request in requests
+            if request.url.path == "/api/v1/events/available-start-times"
+        )
+        assert "subject_id" not in query and "duration_minutes" not in query
+        labels = _labels(driver)
+        assert labels[0] == "02:00" and "01:45" not in labels
+        await driver.click("02:00")
+        await driver.click("Create lesson")
+        created = (await db_session.scalars(select(Event))).one()
+        assert created.user_id == student.id
+        assert created.start == datetime(2026, 10, 20, 9)
+    finally:
+        await _close_bot(driver, http)

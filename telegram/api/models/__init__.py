@@ -24,6 +24,8 @@ from .accounts import (
 from .common import NoContent, Token
 from .events import (
     AutomaticBreakPreview,
+    AvailableEndTimes,
+    AvailableStartTimes,
     BreakDisplacementPreview,
     DisplacedOccurrence,
     EventCreatePayload,
@@ -113,6 +115,8 @@ __all__ = [
     "LocalIntervalResolutionRequest",
     "ResolvedLocalInstant",
     "LocalIntervalResolution",
+    "AvailableStartTimes",
+    "AvailableEndTimes",
     "AutomaticBreakPreview",
     "DisplacedOccurrence",
     "BreakDisplacementPreview",

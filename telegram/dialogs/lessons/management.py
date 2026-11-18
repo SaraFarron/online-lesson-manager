@@ -43,6 +43,16 @@ from telegram.shared.inputs import (
     parse_schedule_date,
     parse_schedule_time,
 )
+from telegram.shared.time_slots import (
+    clear_slots,
+    find_slot,
+    reset_slot_step,
+    slot_local_start,
+    slot_picker_data,
+    slot_picker_widgets,
+    store_slots,
+    toggle_slot_step,
+)
 
 MANAGEMENT_PAGE_SIZE = 20
 EventKind = Literal["once", "weekly"]
@@ -55,6 +65,7 @@ class LessonManagementScreens(StatesGroup):
     date = State()
     confirm_date = State()
     time = State()
+    slots = State()
     review = State()
     confirm = State()
 
@@ -82,7 +93,11 @@ async def open_event_management(
         "needs_reload": False,
         "outcome_unknown": False,
         "operation": None,
+        "slot_options": [],
+        "slot_skip": 0,
+        "slots_failed": False,
     }
+    reset_slot_step(data)
     try:
         page = await backend(manager).read_unified_management_page(
             callback.from_user.id,
@@ -583,7 +598,10 @@ async def _continue_date(sender_id: int, chat_id: int, manager: DialogManager) -
         "edit": "Enter the new lesson start time in your timezone.",
         "move": "Enter the replacement start date's local time.",
     }[action]
-    await manager.switch_to(LessonManagementScreens.time, show_mode=ShowMode.EDIT)
+    if action == "inspect":
+        await manager.switch_to(LessonManagementScreens.time, show_mode=ShowMode.EDIT)
+        return True
+    await _open_time_picker(sender_id, chat_id, manager)
     return True
 
 
@@ -676,9 +694,26 @@ async def time_input(
         local_start = combine_schedule_date_time(
             date.fromisoformat(manager.dialog_data["date_value"]), clock
         )
+    except (OverflowError, ValueError) as exc:
+        manager.dialog_data["error"] = str(exc)
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    await _apply_time(
+        manager, message.from_user.id, message.chat.id, local_start, message
+    )
+
+
+async def _apply_time(
+    manager: DialogManager,
+    sender_id: int,
+    chat_id: int,
+    local_start: datetime,
+    message: Message | None,
+) -> None:
+    try:
         resolution = await backend(manager).resolve_local_interval(
-            message.from_user.id,
-            message.chat.id,
+            sender_id,
+            chat_id,
             local_start,
             local_start + timedelta(minutes=1),
         )
@@ -692,8 +727,8 @@ async def time_input(
     if action == "inspect":
         try:
             detail = await backend(manager).read_management_detail(
-                message.from_user.id,
-                message.chat.id,
+                sender_id,
+                chat_id,
                 _resource(manager),
                 _detail(manager).id,
                 occurrence_start=resolution.start.utc,
@@ -710,7 +745,7 @@ async def time_input(
             needs_reload=False,
             outcome_unknown=False,
         )
-        await delete_accepted_input_message(message, manager, "time")
+        await _delete_accepted_time(message, manager)
         await manager.switch_to(LessonManagementScreens.detail, show_mode=ShowMode.EDIT)
         return
     if action == "edit":
@@ -727,25 +762,135 @@ async def time_input(
             )
             if detail.interval_end is not None and detail.interval_end <= start:
                 await _open_cutoff_editor(manager, detail, detail.interval_end)
-                if not await delete_accepted_input_message(message, manager, "time"):
+                if not await _delete_accepted_time(message, manager):
                     await manager.show(show_mode=ShowMode.EDIT)
                 return
-            await delete_accepted_input_message(message, manager, "time")
+            await _delete_accepted_time(message, manager)
             await manager.switch_to(
                 LessonManagementScreens.review, show_mode=ShowMode.EDIT
             )
         else:
-            await delete_accepted_input_message(message, manager, "time")
+            await _delete_accepted_time(message, manager)
             await manager.switch_to(
                 LessonManagementScreens.review, show_mode=ShowMode.EDIT
             )
         return
     if action == "move":
         manager.dialog_data["move_resolution"] = resolution.model_dump(mode="json")
-        await delete_accepted_input_message(message, manager, "time")
+        await _delete_accepted_time(message, manager)
         await manager.switch_to(LessonManagementScreens.review, show_mode=ShowMode.EDIT)
         return
     raise ValueError("Unsupported event management action")
+
+
+async def _delete_accepted_time(
+    message: Message | None, manager: DialogManager
+) -> bool:
+    if message is None:
+        return True
+    return await delete_accepted_input_message(message, manager, "time")
+
+
+def _slot_query(manager: DialogManager) -> dict[str, Any] | None:
+    """Return slot-read arguments, or None when only manual entry applies."""
+    data = manager.dialog_data
+    if not data.get("date_value") or data.get("detail") is None:
+        return None
+    detail = _detail(manager)
+    duration_seconds = _duration_seconds(detail)
+    if duration_seconds % 60:
+        return None
+    query: dict[str, Any] = {
+        "day": date.fromisoformat(data["date_value"]),
+        "event_type": "LESSON",
+        "step_minutes": int(data["slot_step"]),
+        "duration_minutes": duration_seconds // 60,
+        "exclude_event_id": detail.id,
+    }
+    if SessionView.model_validate(data["view"]).account.role == "TEACHER":
+        query["subject_id"] = detail.user_id
+    if data["date_action"] == "move":
+        occurrence = detail.inspected_occurrence
+        if occurrence is None:
+            return None
+        query["exclude_occurrence_start"] = occurrence.start
+    return query
+
+
+async def _open_time_picker(
+    sender_id: int, chat_id: int, manager: DialogManager
+) -> None:
+    data = manager.dialog_data
+    query = _slot_query(manager)
+    if query is None:
+        clear_slots(data)
+        data["slots_failed"] = False
+        await manager.switch_to(LessonManagementScreens.time, show_mode=ShowMode.EDIT)
+        return
+    try:
+        result = await backend(manager).read_available_start_times(
+            sender_id, chat_id, **query
+        )
+    except (BackendError, BackendUnavailable) as exc:
+        clear_slots(data)
+        data.update(slots_failed=True, error=str(exc))
+    else:
+        store_slots(data, result.slots, result.timezone)
+        data.update(slots_failed=False, error="")
+    await manager.switch_to(LessonManagementScreens.slots, show_mode=ShowMode.EDIT)
+
+
+async def select_slot(
+    callback: CallbackQuery,
+    _widget: Select[str],
+    manager: DialogManager,
+    item: str,
+) -> None:
+    if callback.message is None:
+        raise ValueError("Event management requires a private chat")
+    slot = find_slot(manager.dialog_data, item)
+    if slot is None:
+        manager.dialog_data["error"] = "Choose a time from the current list."
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    await _apply_time(
+        manager,
+        callback.from_user.id,
+        callback.message.chat.id,
+        slot_local_start(slot),
+        None,
+    )
+
+
+async def toggle_slot_granularity(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Event management requires a private chat")
+    toggle_slot_step(manager.dialog_data)
+    await _open_time_picker(callback.from_user.id, callback.message.chat.id, manager)
+
+
+async def retry_slots(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Event management requires a private chat")
+    await _open_time_picker(callback.from_user.id, callback.message.chat.id, manager)
+
+
+async def open_manual_time(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await manager.switch_to(LessonManagementScreens.time, show_mode=ShowMode.EDIT)
+
+
+async def back_to_slots(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await manager.switch_to(LessonManagementScreens.slots, show_mode=ShowMode.EDIT)
 
 
 async def begin_move_occurrence(
@@ -1451,9 +1596,30 @@ def build_event_management_dialog() -> Dialog:
         Window(
             Format("{feedback}{time_prompt}\nTimezone: {viewer_timezone}"),
             TextInput("time_input", on_success=time_input),
+            Button(
+                Const("Back to times"),
+                id="slots",
+                on_click=back_to_slots,
+                when="has_slot_picker",
+            ),
             Button(Const("Change date"), id="date", on_click=change_date),
             Button(Const("Back to event"), id="detail", on_click=back_to_detail),
             state=LessonManagementScreens.time,
+        ),
+        Window(
+            Format("{feedback}{slot_prompt}\nTimezone: {viewer_timezone}"),
+            *slot_picker_widgets(
+                on_select=select_slot, on_toggle_step=toggle_slot_granularity
+            ),
+            Button(
+                Const("Retry"), id="retry", on_click=retry_slots, when="slots_failed"
+            ),
+            Button(
+                Const("Enter time manually"), id="manual", on_click=open_manual_time
+            ),
+            Button(Const("Change date"), id="date", on_click=change_date),
+            Button(Const("Back to event"), id="detail", on_click=back_to_detail),
+            state=LessonManagementScreens.slots,
         ),
         Window(
             Format("{feedback}{review}\n{notice}"),
@@ -1526,6 +1692,7 @@ async def management_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
         result.update(await detail_data(dialog_manager))
     result.update(await review_data(dialog_manager))
     blocked = bool(data.get("needs_reload") or data.get("outcome_unknown"))
+    result.update(_slot_view(dialog_manager))
     result.update(
         can_submit=not blocked and not data.get("submitting"),
         can_reload=blocked,
@@ -1545,3 +1712,35 @@ async def edit_again(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
     await _begin_date(manager, "edit", "the new lesson start date")
+
+
+def _slot_view(manager: DialogManager) -> dict[str, Any]:
+    data = manager.dialog_data
+    action = data.get("date_action")
+    has_picker = (
+        action in {"edit", "move"}
+        and data.get("detail") is not None
+        and _slot_query(manager) is not None
+    )
+    if data.get("slots_failed"):
+        prompt = "Choose retry or enter the time manually."
+    elif data.get("slot_options"):
+        prompt = (
+            "Choose the replacement lesson start time."
+            if action == "move"
+            else "Choose the new lesson start time."
+        )
+    elif data.get("date_value"):
+        day = date.fromisoformat(data["date_value"])
+        prompt = (
+            f"No free times on {_format_date(day, data['viewer_timezone'])}. "
+            "Choose another date."
+        )
+    else:
+        prompt = ""
+    return {
+        **slot_picker_data(data),
+        "slot_prompt": prompt,
+        "slots_failed": bool(data.get("slots_failed")),
+        "has_slot_picker": has_picker,
+    }

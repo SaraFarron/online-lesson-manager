@@ -211,6 +211,7 @@ async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
         await driver.text("03/11/2026")
         assert driver.deleted_message_ids()[-1] == date_message_id
         assert driver.session.last_message.message_id == screen_message_id
+        await driver.click("Enter time manually")
         time_message_id = driver.update_id + 1
         await driver.text("11:00")
         assert driver.deleted_message_ids()[-1] == time_message_id
@@ -260,6 +261,7 @@ async def test_teacher_manages_open_ended_series_cutoff_without_forcing_a_date(
 
         await driver.click("Edit lesson or series")
         await driver.text("03/11/2026")
+        await driver.click("Enter time manually")
         await driver.text("11:00")
         assert "Last weekly lesson (inclusive): No end" in (
             driver.session.last_message.text
@@ -290,6 +292,7 @@ async def test_teacher_manages_open_ended_series_cutoff_without_forcing_a_date(
         )
         await driver.click("Edit lesson or series")
         await driver.text("04/11/2026")
+        await driver.click("Enter time manually")
         await driver.text("12:00")
         assert "Last weekly lesson (inclusive): November 30" in (
             driver.session.last_message.text
@@ -303,6 +306,7 @@ async def test_teacher_manages_open_ended_series_cutoff_without_forcing_a_date(
         await driver.click(_event_button(driver))
         await driver.click("Edit lesson or series")
         await driver.text("05/11/2026")
+        await driver.click("Enter time manually")
         await driver.text("13:00")
         await driver.click("Back to event")
         await driver.click("Change series end")
@@ -408,6 +412,7 @@ async def test_student_can_move_and_cancel_own_occurrences_with_break_feedback(
 
         await driver.click("Move this occurrence")
         await driver.text("16/11/2026")
+        await driver.click("Enter time manually")
         move_time_message_id = driver.update_id + 1
         await driver.text("12:00")
         assert driver.deleted_message_ids()[-1] == move_time_message_id
@@ -729,6 +734,7 @@ async def test_recurring_occurrence_move_cancels_exact_source_and_creates_one_of
         await driver.text("10:00")
         await driver.click("Move this occurrence")
         await driver.text("17/11/2026")
+        await driver.click("Enter time manually")
         await driver.text("12:00")
         assert "The original weekly occurrence will be cancelled" in (
             driver.session.last_message.text
@@ -793,6 +799,7 @@ async def test_series_edit_clears_cancellations_when_recurrence_changes(
         await driver.click(_event_button(driver))
         await driver.click("Edit lesson or series")
         await driver.text("02/11/2026")
+        await driver.click("Enter time manually")
         await driver.text("11:30")
         await driver.text("30/11/2026")
         assert "Changing recurrence" not in driver.session.last_message.text
@@ -830,6 +837,7 @@ async def test_stale_revision_requires_reload_before_edit_can_submit(
         await driver.click(_event_button(driver))
         await driver.click("Edit lesson or series")
         await driver.text("03/11/2026")
+        await driver.click("Enter time manually")
         await driver.text("11:00")
 
         event.start = datetime(2026, 11, 2, 10, 30)
@@ -871,6 +879,7 @@ async def test_unknown_update_outcome_requires_reload_without_replay(
         await driver.click(_event_button(driver))
         await driver.click("Edit lesson or series")
         await driver.text("03/11/2026")
+        await driver.click("Enter time manually")
         await driver.text("11:00")
         await driver.click("Save change")
 
@@ -919,6 +928,7 @@ async def test_failed_occurrence_move_keeps_series_and_cancellation_unchanged(
         await driver.text("10:00")
         await driver.click("Move this occurrence")
         await driver.text("17/11/2026")
+        await driver.click("Enter time manually")
         await driver.text("12:00")
         await driver.click("Move occurrence")
 
@@ -964,6 +974,7 @@ async def test_automatic_break_conflict_is_actionable_when_moving_occurrence(
         await driver.text("10:00")
         await driver.click("Move this occurrence")
         await driver.text("16/11/2026")
+        await driver.click("Enter time manually")
         await driver.text("10:02")
         await driver.click("Move occurrence")
 
@@ -1035,5 +1046,140 @@ async def test_teacher_list_labels_own_lessons_as_lesson(
             ["One time · Lesson · Oct 21 at 10:00"],
             ["One time · Alice Learner · Oct 28 at 10:00"],
         ]
+    finally:
+        await _close_bot(driver, http)
+
+
+def _slot_labels(driver: BotDriver) -> list[str]:
+    return [label for label in _button_labels(driver) if label[:1].isdigit()]
+
+
+def _slot_queries(requests: list[httpx.Request]) -> list[httpx.QueryParams]:
+    return [
+        request.url.params
+        for request in requests
+        if request.url.path == "/api/v1/events/available-start-times"
+    ]
+
+
+async def test_edit_offers_free_times_including_the_lessons_own_time(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    event = _one_time(teacher, student)
+    neighbour = _one_time(teacher, student, datetime(2026, 11, 2, 12))
+    db_session.add_all([event, neighbour])
+    await db_session.commit()
+    _freeze_schedule_clock(monkeypatch)
+    driver, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_list(driver)
+        await driver.click(_event_button(driver))
+        await driver.click("Edit lesson or series")
+        await driver.text("02/11/2026")
+        assert "Choose the new lesson start time." in driver.session.last_message.text
+        labels = _slot_labels(driver)
+        assert "10:00" in labels and "09:00" in labels
+        assert "11:00" not in labels and "12:00" not in labels
+        assert "Show 5-minute times" in _button_labels(driver)
+        query = _slot_queries(requests)[-1]
+        assert query["exclude_event_id"] == str(event.id)
+        assert query["subject_id"] == str(student.id)
+        assert query["duration_minutes"] == "60"
+        assert "exclude_occurrence_start" not in query
+
+        await driver.click("Enter time manually")
+        assert "Back to times" in _button_labels(driver)
+        await driver.click("Back to times")
+        assert "13:00" not in _slot_labels(driver)
+        await driver.click("13:15")
+        assert "13:15 - 14:15" in driver.session.last_message.text
+        await driver.click("Save change")
+        await db_session.refresh(event)
+        assert event.start == datetime(2026, 11, 2, 13, 15)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_move_offers_free_times_excluding_only_the_moved_occurrence(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    series = _series(teacher, student)
+    db_session.add(series)
+    await db_session.commit()
+    _freeze_schedule_clock(monkeypatch)
+    driver, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_list(driver, weekly=True)
+        await driver.click(_event_button(driver))
+        await driver.click("Inspect occurrence")
+        await driver.text("16/11/2026")
+        await driver.text("10:00")
+        assert not _slot_queries(requests)
+        await driver.click("Move this occurrence")
+        await driver.text("16/11/2026")
+        assert "Choose the replacement lesson start time." in (
+            driver.session.last_message.text
+        )
+        assert "10:00" in _slot_labels(driver)
+        query = _slot_queries(requests)[-1]
+        assert query["exclude_event_id"] == str(series.id)
+        assert query["exclude_occurrence_start"] == "2026-11-16T10:00:00+00:00"
+        await driver.click("Next ▶")
+        await driver.click("15:00")
+        await driver.click("Move occurrence")
+
+        replacement = await db_session.scalar(
+            select(Event).where(Event.start == datetime(2026, 11, 16, 15))
+        )
+        assert replacement is not None
+        cancellation = await db_session.scalar(select(RecurrentCancels))
+        assert cancellation is not None and cancellation.start == datetime(
+            2026, 11, 16, 10
+        )
+
+        await driver.click("Back to list")
+        await driver.click(_event_button(driver))
+        await driver.click("Inspect occurrence")
+        await driver.text("23/11/2026")
+        await driver.text("10:00")
+        await driver.click("Move this occurrence")
+        await driver.text("16/11/2026")
+        # The 16th is already cancelled and now holds the replacement lesson.
+        assert "10:00" in _slot_labels(driver)
+        await driver.click("Change date")
+        await driver.text("30/11/2026")
+        query = _slot_queries(requests)[-1]
+        assert query["exclude_occurrence_start"] == "2026-11-23T10:00:00+00:00"
+        assert "10:00" not in _slot_labels(driver)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_student_edit_slots_omit_subject_and_outage_can_retry(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    event = _one_time(teacher, student)
+    db_session.add(event)
+    await db_session.commit()
+    _freeze_schedule_clock(monkeypatch)
+    driver, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(student)
+    )
+    try:
+        await _open_list(driver)
+        await driver.click(_event_button(driver))
+        await driver.click("Edit lesson or series")
+        await driver.text("03/11/2026")
+        query = _slot_queries(requests)[-1]
+        assert "subject_id" not in query
+        assert query["exclude_event_id"] == str(event.id)
+        assert query["duration_minutes"] == "60"
     finally:
         await _close_bot(driver, http)

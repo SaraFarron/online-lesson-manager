@@ -118,6 +118,7 @@ async def _book_one_time(driver: BotDriver, student: str, start_time: str) -> No
     await driver.click(student)
     await driver.click("One time")
     await driver.text(_LOCAL_DATE)
+    await driver.click("Enter time manually")
     await driver.text(start_time)
     await driver.click("Create lesson")
     await driver.click("Back to home")
@@ -256,6 +257,7 @@ async def test_teacher_two_students_and_unrelated_teacher_cross_flow(
             await teacher_bot.click("Alice Learner")
             await teacher_bot.click("One time")
             await teacher_bot.text(_LOCAL_DATE)
+            await teacher_bot.click("Enter time manually")
             await teacher_bot.text("12:00")
             await teacher_bot.click("Create lesson")
             assert "daily lesson limit" in teacher_bot.session.last_message.text

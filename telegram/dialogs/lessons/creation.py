@@ -44,6 +44,16 @@ from telegram.shared.inputs import (
     parse_schedule_time,
 )
 from telegram.shared.pagination import page_count, page_label
+from telegram.shared.time_slots import (
+    clear_slots,
+    find_slot,
+    reset_slot_step,
+    slot_local_start,
+    slot_picker_data,
+    slot_picker_widgets,
+    store_slots,
+    toggle_slot_step,
+)
 
 STUDENT_PAGE_SIZE = 20
 
@@ -56,6 +66,7 @@ class LessonScreens(StatesGroup):
     start_date = State()
     confirm_start_date = State()
     start_time = State()
+    manual_time = State()
     cutoff_date = State()
     confirm_cutoff_date = State()
     review = State()
@@ -91,7 +102,11 @@ async def open_lesson_creation(
         "submitting": False,
         "outcome_unknown": False,
         "needs_schedule_reload": False,
+        "slot_options": [],
+        "slot_skip": 0,
+        "slots_failed": False,
     }
+    reset_slot_step(data)
 
     try:
         client = backend(manager)
@@ -249,7 +264,22 @@ async def lesson_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         kind_assignee_text = "A personal lesson is assigned to you by default."
     else:
         kind_assignee_text = f"Assigned to {data.get('subject_label') or 'you'}."
+    if data.get("slots_failed"):
+        slot_prompt = "Choose retry or enter the time manually."
+    elif data.get("slot_options"):
+        slot_prompt = "Choose the lesson start time."
+    elif start_date:
+        slot_prompt = (
+            "No free times on "
+            f"{format_human_date(date.fromisoformat(start_date), reference_date=reference_date)}. "
+            "Choose another date."
+        )
+    else:
+        slot_prompt = ""
     return {
+        **slot_picker_data(data),
+        "slot_prompt": slot_prompt,
+        "slots_failed": bool(data.get("slots_failed")),
         "students": students,
         "picker_page": f"\n{picker_label}" if picker_label else "",
         "personal_label": "personal lesson",
@@ -495,17 +525,98 @@ async def start_date_input(
         error="",
     )
     await delete_accepted_date_message(message, manager)
-    state = (
-        LessonScreens.confirm_start_date
-        if parsed.requires_confirmation
-        else LessonScreens.start_time
-    )
-    await manager.switch_to(state, show_mode=ShowMode.EDIT)
+    if parsed.requires_confirmation:
+        await manager.switch_to(
+            LessonScreens.confirm_start_date, show_mode=ShowMode.EDIT
+        )
+        return
+    if message.from_user is None:
+        raise ValueError("Lesson creation requires a private chat")
+    await _open_time_picker(manager, message.from_user.id, message.chat.id)
 
 
 async def confirm_start_date(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Lesson creation requires a private chat")
+    await _open_time_picker(manager, callback.from_user.id, callback.message.chat.id)
+
+
+async def _open_time_picker(
+    manager: DialogManager, sender_id: int, chat_id: int
+) -> None:
+    data = manager.dialog_data
+    is_teacher = bool(data.get("is_teacher"))
+    try:
+        result = await backend(manager).read_available_start_times(
+            sender_id,
+            chat_id,
+            day=date.fromisoformat(data["start_date"]),
+            event_type="LESSON",
+            step_minutes=int(data["slot_step"]),
+            duration_minutes=int(data["duration_minutes"]) if is_teacher else None,
+            subject_id=UUID(data["subject_id"]) if is_teacher else None,
+        )
+    except (BackendError, BackendUnavailable) as exc:
+        clear_slots(data)
+        data.update(slots_failed=True, error=str(exc))
+    else:
+        store_slots(data, result.slots, result.timezone)
+        data.update(slots_failed=False, error="")
+    await manager.switch_to(LessonScreens.start_time, show_mode=ShowMode.EDIT)
+
+
+async def select_slot(
+    callback: CallbackQuery,
+    _widget: Select[str],
+    manager: DialogManager,
+    item: str,
+) -> None:
+    if callback.message is None:
+        raise ValueError("Lesson creation requires a private chat")
+    slot = find_slot(manager.dialog_data, item)
+    if slot is None:
+        manager.dialog_data["error"] = "Choose a time from the current list."
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    await _apply_start_time(
+        manager,
+        callback.from_user.id,
+        callback.message.chat.id,
+        slot_local_start(slot),
+        None,
+    )
+
+
+async def toggle_slot_granularity(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Lesson creation requires a private chat")
+    toggle_slot_step(manager.dialog_data)
+    await _open_time_picker(manager, callback.from_user.id, callback.message.chat.id)
+
+
+async def retry_slots(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Lesson creation requires a private chat")
+    await _open_time_picker(manager, callback.from_user.id, callback.message.chat.id)
+
+
+async def open_manual_time(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    manager.dialog_data["error"] = ""
+    await manager.switch_to(LessonScreens.manual_time, show_mode=ShowMode.EDIT)
+
+
+async def back_to_slots(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
     await manager.switch_to(LessonScreens.start_time, show_mode=ShowMode.EDIT)
 
 
@@ -522,10 +633,27 @@ async def start_time_input(
         local_start = combine_schedule_date_time(
             date.fromisoformat(manager.dialog_data["start_date"]), clock
         )
+    except (OverflowError, ValueError) as exc:
+        manager.dialog_data["error"] = str(exc)
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    await _apply_start_time(
+        manager, message.from_user.id, message.chat.id, local_start, message
+    )
+
+
+async def _apply_start_time(
+    manager: DialogManager,
+    sender_id: int,
+    chat_id: int,
+    local_start: datetime,
+    message: Message | None,
+) -> None:
+    try:
         probe_end = local_start + timedelta(minutes=1)
         resolution = await backend(manager).resolve_local_interval(
-            message.from_user.id,
-            message.chat.id,
+            sender_id,
+            chat_id,
             local_start,
             probe_end,
         )
@@ -561,11 +689,13 @@ async def start_time_input(
                     "Choose a later end date or change the start."
                 ),
             )
-            await delete_accepted_input_message(message, manager, "time")
+            if message is not None:
+                await delete_accepted_input_message(message, manager, "time")
             await manager.switch_to(LessonScreens.cutoff_date, show_mode=ShowMode.EDIT)
             return
     manager.dialog_data["cutoff_invalid"] = False
-    await delete_accepted_input_message(message, manager, "time")
+    if message is not None:
+        await delete_accepted_input_message(message, manager, "time")
     await manager.switch_to(LessonScreens.review, show_mode=ShowMode.EDIT)
 
 
@@ -693,12 +823,14 @@ async def _open_subject_picker(
 
 
 async def edit_start_time(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
+    callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    if callback.message is None:
+        raise ValueError("Lesson creation requires a private chat")
     if manager.dialog_data.get("cutoff_editor_open"):
         _restore_cutoff_edit(manager)
     manager.dialog_data.update(resolution=None, error="")
-    await manager.switch_to(LessonScreens.start_time, show_mode=ShowMode.EDIT)
+    await _open_time_picker(manager, callback.from_user.id, callback.message.chat.id)
 
 
 async def edit_duration(
@@ -1048,13 +1180,29 @@ def build_lesson_dialog() -> Dialog:
             state=LessonScreens.confirm_start_date,
         ),
         Window(
-            Format("{feedback}Enter the local lesson start time as HH:MM or HH MM."),
-            TextInput(
-                "start_time", on_success=start_time_input, on_error=_date_input_error
+            Format("{feedback}{slot_prompt}"),
+            *slot_picker_widgets(
+                on_select=select_slot, on_toggle_step=toggle_slot_granularity
+            ),
+            Button(
+                Const("Retry"), id="retry", on_click=retry_slots, when="slots_failed"
+            ),
+            Button(
+                Const("Enter time manually"), id="manual", on_click=open_manual_time
             ),
             Button(Const("Change date"), id="change_date", on_click=edit_start_date),
             Button(Const("Cancel"), id="cancel", on_click=return_home),
             state=LessonScreens.start_time,
+        ),
+        Window(
+            Format("{feedback}Enter the local lesson start time as HH:MM or HH MM."),
+            TextInput(
+                "start_time", on_success=start_time_input, on_error=_date_input_error
+            ),
+            Button(Const("Back to times"), id="slots", on_click=back_to_slots),
+            Button(Const("Change date"), id="change_date", on_click=edit_start_date),
+            Button(Const("Cancel"), id="cancel", on_click=return_home),
+            state=LessonScreens.manual_time,
         ),
         Window(
             Format(

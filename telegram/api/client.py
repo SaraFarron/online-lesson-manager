@@ -35,6 +35,8 @@ from .messages import (
 )
 from .models import (
     Account,
+    AvailableEndTimes,
+    AvailableStartTimes,
     BreakDisplacementPreview,
     EventManagementDetail,
     EventManagementPage,
@@ -1078,6 +1080,65 @@ class BackendClient:
         return await self.read(
             f"/api/v1/{resource}/upcoming",
             EventManagementPage,
+            sender_id,
+            chat_id,
+            params=params,
+            error_context="scheduling",
+        )
+
+    async def read_available_start_times(
+        self,
+        sender_id: int,
+        chat_id: int,
+        *,
+        day: date,
+        event_type: Literal["LESSON", "BREAK"],
+        step_minutes: int,
+        duration_minutes: int | None = None,
+        subject_id: uuid.UUID | None = None,
+        exclude_event_id: uuid.UUID | None = None,
+        exclude_occurrence_start: AwareDatetime | None = None,
+    ) -> AvailableStartTimes:
+        params = {
+            "date": day.isoformat(),
+            "event_type": event_type,
+            "step_minutes": str(step_minutes),
+        }
+        if duration_minutes is not None:
+            params["duration_minutes"] = str(duration_minutes)
+        if subject_id is not None:
+            params["subject_id"] = str(subject_id)
+        if exclude_event_id is not None:
+            params["exclude_event_id"] = str(exclude_event_id)
+        if exclude_occurrence_start is not None:
+            params["exclude_occurrence_start"] = exclude_occurrence_start.isoformat()
+        return await self.read(
+            "/api/v1/events/available-start-times",
+            AvailableStartTimes,
+            sender_id,
+            chat_id,
+            params=params,
+            error_context="scheduling",
+        )
+
+    async def read_available_break_end_times(
+        self,
+        sender_id: int,
+        chat_id: int,
+        *,
+        start: AwareDatetime,
+        step_minutes: int,
+        exclude_event_id: uuid.UUID | None = None,
+        exclude_occurrence_start: AwareDatetime | None = None,
+    ) -> AvailableEndTimes:
+        params = {"start": start.isoformat(), "step_minutes": str(step_minutes)}
+        if exclude_event_id is not None:
+            params["exclude_event_id"] = str(exclude_event_id)
+        if exclude_occurrence_start is not None:
+            params["exclude_occurrence_start"] = exclude_occurrence_start.isoformat()
+        return await self.read(
+            "/api/v1/events/available-break-end-times",
+            AvailableEndTimes,
             sender_id,
             chat_id,
             params=params,

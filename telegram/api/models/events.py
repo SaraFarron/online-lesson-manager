@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -320,3 +320,22 @@ class BreakDisplacementPreview(BaseModel):
     message: Literal["Confirm cancellation of overlapping lesson occurrences"]
     confirmation_token: str = Field(pattern=r"^[0-9a-f]{64}$")
     affected_occurrences: list[DisplacedOccurrence] = Field(min_length=1)
+
+
+class AvailableStartTimes(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timezone: str
+    day: date
+    step_minutes: int
+    duration_minutes: int
+    slots: list[ResolvedLocalInstant]
+
+
+class AvailableEndTimes(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timezone: str
+    start: ResolvedLocalInstant
+    step_minutes: int
+    ends: list[ResolvedLocalInstant]

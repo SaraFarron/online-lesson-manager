@@ -24,6 +24,8 @@ from .messages import (
 from .models import (
     Account,
     AutomaticBreakPreview,
+    AvailableEndTimes,
+    AvailableStartTimes,
     BreakDisplacementPreview,
     DisplacedOccurrence,
     EventCreatePayload,
@@ -187,6 +189,8 @@ __all__ = [
     "LocalIntervalResolutionRequest",
     "ResolvedLocalInstant",
     "LocalIntervalResolution",
+    "AvailableStartTimes",
+    "AvailableEndTimes",
     "AutomaticBreakPreview",
     "DisplacedOccurrence",
     "BreakDisplacementPreview",
