@@ -150,6 +150,13 @@ def _button_labels(driver: BotDriver) -> list[str]:
     return [button.text for row in markup.inline_keyboard for button in row]
 
 
+def _row_sizes(driver: BotDriver) -> list[int]:
+    assert driver.session.last_message is not None
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    return [len(row) for row in markup.inline_keyboard]
+
+
 async def _close(driver: BotDriver, http: httpx.AsyncClient) -> None:
     await driver.close()
     await http.aclose()
@@ -198,7 +205,10 @@ async def test_teacher_profile_removal_and_former_homework_flow(
         assert teacher_driver.session.last_message.message_id == initial_message_id
         assert "Page " not in teacher_driver.session.last_message.text
         assert "Former students" not in _button_labels(teacher_driver)
-        await teacher_driver.click(_button_with_prefix(teacher_driver, "Alice Learner"))
+        assert "Alice Learner" in _button_labels(teacher_driver)
+        assert "• Alice Learner" in teacher_driver.session.last_message.text
+        assert "incomplete" not in teacher_driver.session.last_message.text
+        await teacher_driver.click("Alice Learner")
         detail = teacher_driver.session.last_message.text
         assert "Username: No username" in detail
         assert "Added: 2026-01-02 03:04 UTC" in detail
@@ -304,6 +314,7 @@ async def test_teacher_student_profile_lists_paginate(
         await driver.text("/start")
         await driver.click("Students")
         assert "Page 1 of 2 · 21 student(s)" in driver.session.last_message.text
+        assert _row_sizes(driver)[:20] == [1] * 20
         await driver.click("Next")
         assert "Page 2 of 2 · 21 student(s)" in driver.session.last_message.text
         assert any("Learner 20" in label for label in _button_labels(driver))
@@ -536,3 +547,21 @@ async def test_profile_history_survives_restart_and_scopes_rejoin(
     finally:
         await _close(old_teacher_restart, old_http)
         await _close(new_teacher_restart, new_http)
+
+
+def test_student_list_label_prefers_name_then_username() -> None:
+    from backend.auth import constants as auth_constants
+    from telegram.shared import student_labels
+
+    assert (
+        student_labels.STUDENT_NAME_UNAVAILABLE_LABEL
+        == auth_constants.STUDENT_NAME_UNAVAILABLE_LABEL
+    )
+    assert (
+        student_labels.STUDENT_USERNAME_UNAVAILABLE_LABEL
+        == auth_constants.STUDENT_USERNAME_UNAVAILABLE_LABEL
+    )
+    label = student_labels.student_list_label
+    assert label("Alice", "alice_t") == "Alice"
+    assert label("Name unavailable", "alice_t") == "alice_t"
+    assert label("Name unavailable", "No username") == "Name unavailable"

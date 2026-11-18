@@ -8,7 +8,7 @@ from typing import Any
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
-from aiogram_dialog.widgets.kbd import Button, Row, Select
+from aiogram_dialog.widgets.kbd import Button, Column, Row, Select
 from aiogram_dialog.widgets.text import Const, Format
 
 from telegram.api import (
@@ -29,6 +29,7 @@ from telegram.dialogs.homework.teacher_management import (
 from telegram.shared.access import backend
 from telegram.shared.feedback import feedback_block
 from telegram.shared.pagination import page_count, page_label
+from telegram.shared.student_labels import student_list_label
 
 PROFILE_PAGE_SIZE = 20
 
@@ -655,13 +656,11 @@ async def student_profile_data(
     profiles = []
     for entry in data.get("profiles", []):
         item = TeacherStudentProfileSummary.model_validate(entry)
-        homework = item.homework
         profiles.append(
             {
                 "id": str(item.relationship_id),
-                "label": (
-                    f"{_safe(item.display_name)} · {_safe(item.username_display)} · "
-                    f"{homework.incomplete} incomplete"
+                "label": _safe(
+                    student_list_label(item.display_name, item.username_display)
                 )[:100],
             }
         )
@@ -733,12 +732,14 @@ def build_student_profiles_dialog() -> Dialog:
     return Dialog(
         Window(
             Format("{feedback}<b>{list_title}</b>\n{profile_page}"),
-            Select(
-                Format("{item[label]}"),
-                id="student_profile",
-                item_id_getter=lambda item: item["id"],
-                items="profiles",
-                on_click=select_profile,
+            Column(
+                Select(
+                    Format("{item[label]}"),
+                    id="student_profile",
+                    item_id_getter=lambda item: item["id"],
+                    items="profiles",
+                    on_click=select_profile,
+                )
             ),
             Row(
                 Button(
@@ -770,12 +771,14 @@ def build_student_profiles_dialog() -> Dialog:
         ),
         Window(
             Format("{feedback}<b>{list_title}</b>\n{profile_page}"),
-            Select(
-                Format("{item[label]}"),
-                id="former_student_profile",
-                item_id_getter=lambda item: item["id"],
-                items="profiles",
-                on_click=select_profile,
+            Column(
+                Select(
+                    Format("{item[label]}"),
+                    id="former_student_profile",
+                    item_id_getter=lambda item: item["id"],
+                    items="profiles",
+                    on_click=select_profile,
+                )
             ),
             Row(
                 Button(
