@@ -573,7 +573,7 @@ async def test_recurring_occurrence_cancel_preserves_series_and_other_occurrence
     driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
     try:
         await _open_list(driver, weekly=True)
-        assert "1 cancelled" in _event_button(driver)
+        assert "cancelled" not in _event_button(driver)
         await driver.click(_event_button(driver))
 
         cancelled_label = next(
@@ -771,7 +771,7 @@ async def test_recurring_occurrence_move_cancels_exact_source_and_creates_one_of
         await _close_bot(driver, http)
 
 
-async def test_series_edit_warns_and_clears_cancellations_when_recurrence_changes(
+async def test_series_edit_clears_cancellations_when_recurrence_changes(
     client, db_session, bot_service_key, monkeypatch
 ) -> None:
     teacher, student = await _seed_accounts(db_session)
@@ -795,9 +795,8 @@ async def test_series_edit_warns_and_clears_cancellations_when_recurrence_change
         await driver.text("02/11/2026")
         await driver.text("11:30")
         await driver.text("30/11/2026")
-        assert "clears saved individual cancellations" in (
-            driver.session.last_message.text
-        )
+        assert "Changing recurrence" not in driver.session.last_message.text
+        assert "cancellations" not in driver.session.last_message.text
         assert (
             len(list((await db_session.scalars(select(RecurrentCancels))).all())) == 1
         )
@@ -1014,5 +1013,27 @@ async def test_unified_lesson_list_is_one_column_sorted_by_next_occurrence(
         await driver.click("One time · Alice Learner · Oct 28 at 10:00")
         assert "First lesson:" in driver.session.last_message.text
         assert "Series end" not in driver.session.last_message.text
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_teacher_list_labels_own_lessons_as_lesson(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    personal = _one_time(teacher, teacher, datetime(2026, 10, 21, 10))
+    assigned = _one_time(teacher, student, datetime(2026, 10, 28, 10))
+    db_session.add_all([personal, assigned])
+    await db_session.commit()
+    driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await _open_list(driver)
+        markup = driver.session.last_message.reply_markup
+        assert markup is not None
+        rows = [[button.text for button in row] for row in markup.inline_keyboard]
+        assert rows[:2] == [
+            ["One time · Lesson · Oct 21 at 10:00"],
+            ["One time · Alice Learner · Oct 28 at 10:00"],
+        ]
     finally:
         await _close_bot(driver, http)

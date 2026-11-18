@@ -269,14 +269,15 @@ def _automatic_break_text(
     return f"Autobreak after {relation}: {format_duration(minutes)}."
 
 
-def _list_label(item: EventManagementItem, timezone: str) -> str:
+def _list_label(
+    item: EventManagementItem, timezone: str, *, teacher_id: UUID | None = None
+) -> str:
     recurrence = "Weekly" if item.is_recurrent else "One time"
+    subject = "Lesson" if teacher_id == item.user_id else item.subject_label
     label = (
-        f"{recurrence} · {item.subject_label} · "
+        f"{recurrence} · {subject} · "
         f"{_format_list_datetime(item.next_occurrence_start or item.start, timezone)}"
     )
-    if item.is_recurrent and item.cancelled_occurrences:
-        label += f" · {item.cancelled_occurrences} cancelled"
     if item.visibility_status == "hidden_by_vacation":
         label += " · hidden by vacation"
     return label
@@ -289,10 +290,16 @@ async def event_list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
     ]
     skip = int(data.get("skip", 0))
     total = int(data.get("total", 0))
+    account = SessionView.model_validate(data["view"]).account
+    teacher_id = account.id if account.role == "TEACHER" else None
     return {
         "title": "Lessons",
         "events": [
-            (_list_label(item, data["viewer_timezone"]), str(item.id)) for item in items
+            (
+                _list_label(item, data["viewer_timezone"], teacher_id=teacher_id),
+                str(item.id),
+            )
+            for item in items
         ],
         "empty_state": "No lessons." if total == 0 else "",
         "timezone": escape(data["viewer_timezone"]),
@@ -826,12 +833,6 @@ def _review_text(manager: DialogManager) -> str:
         recurrence_timezone = detail.recurrence_timezone or "UTC"
         if recurrence_timezone != data["viewer_timezone"]:
             text += f"\nWeekly starts use {recurrence_timezone}."
-        old_start, old_end = detail.start, detail.end
-        if start != old_start or end != old_end or cutoff != detail.interval_end:
-            text += (
-                "\nChanging recurrence dates or time clears saved individual "
-                "cancellations under the existing series-update contract."
-            )
     return text
 
 
