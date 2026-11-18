@@ -373,3 +373,26 @@ async def test_local_resolution_rejects_aware_or_invalid_input_without_writing(
             datetime(2035, 1, 1, 11),
             datetime(2035, 1, 1, 10),
         )
+
+
+def test_short_month_is_opt_in_for_dates_and_intervals() -> None:
+    from telegram.shared.inputs import format_human_date, format_local_interval
+
+    reference_date = date(2026, 10, 1)
+    start = datetime(2026, 10, 5, 9)
+    end = datetime(2026, 10, 6, 10)
+    assert format_human_date(start.date(), reference_date=reference_date) == "October 5"
+    assert (
+        format_human_date(start.date(), reference_date=reference_date, short_month=True)
+        == "Oct 5"
+    )
+    assert (
+        format_local_interval(start, end, reference_date=reference_date)
+        == "October 5 9:00 - October 6 10:00"
+    )
+    assert (
+        format_local_interval(
+            start, end, reference_date=reference_date, short_month=True
+        )
+        == "Oct 5 9:00 - Oct 6 10:00"
+    )

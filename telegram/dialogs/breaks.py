@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Row, Select
+from aiogram_dialog.widgets.kbd import Button, Group, Row, Select
 from aiogram_dialog.widgets.text import Const, Format
 from pydantic import BaseModel, ValidationError
 
@@ -164,6 +164,7 @@ def _format_interval(start: datetime, end: datetime, timezone: str) -> str:
         end,
         timezone,
         reference_date=datetime.now(ZoneInfo(timezone)).date(),
+        short_month=True,
     )
 
 
@@ -1143,7 +1144,7 @@ def _occurrence_label(occurrence: DisplacedOccurrence, timezone: str) -> str:
     label = f"{kind} · {_format_interval(occurrence.start, occurrence.end, timezone)}"
     if occurrence.automatic_break is not None:
         label += (
-            f"\n  Automatic break reservation (read-only): "
+            "\n  Auto break: "
             f"{format_duration(occurrence.automatic_break.duration_minutes)} · "
             f"{_format_interval(occurrence.automatic_break.start, occurrence.automatic_break.end, timezone)}"
         )
@@ -1167,12 +1168,11 @@ async def displacement_data(dialog_manager: DialogManager, **_: Any) -> dict[str
         and isinstance(pending_payload, dict)
         and pending_payload.get("interval_end") is None
     ):
-        warning = f"{warning}\n{OPEN_ENDED_BREAK_NOTE}"
+        warning = f"{warning}\n\n{OPEN_ENDED_BREAK_NOTE}"
     return {
         "affected": "\n".join(
             escape(_occurrence_label(item, data["viewer_timezone"])) for item in items
         ),
-        "affected_count": f"Affected lessons: {total}",
         "timezone": escape(data["viewer_timezone"]),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
@@ -1717,7 +1717,7 @@ def build_break_dialog() -> Dialog:
                 on_click=reload_state,
                 when="can_reload",
             ),
-            Row(
+            Group(
                 Button(
                     Const("Change date"),
                     id="change_date",
@@ -1742,6 +1742,7 @@ def build_break_dialog() -> Dialog:
                     on_click=edit_cutoff_date,
                     when="can_edit_cutoff",
                 ),
+                width=2,
             ),
             Button(
                 Const("Back to event"),
@@ -1755,7 +1756,7 @@ def build_break_dialog() -> Dialog:
         Window(
             Format(
                 "{feedback}This break overlaps the following lessons:\n"
-                "{affected}\n{affected_count}\n{warning}\nTimezone: {timezone}"
+                "{affected}\n\n{warning}\nTimezone: {timezone}"
             ),
             Row(
                 Button(

@@ -646,8 +646,12 @@ async def test_confirmed_weekly_break_deletes_exact_lessons_and_cancels_occurren
         await driver.click("Save break")
         preview_text = driver.session.last_message.text
         assert "One-time lesson" in preview_text
-        assert "Automatic break reservation (read-only): 5 minutes" in preview_text
-        assert "November 5" in preview_text
+        assert "Auto break: 5 minutes" in preview_text
+        assert "Automatic break reservation" not in preview_text
+        assert "Affected lessons" not in preview_text
+        assert "Nov 5" in preview_text
+        assert "November" not in preview_text
+        assert "\n\nConfirming permanently deletes" in preview_text
         assert "(UTC" not in preview_text
         assert "Weekly lesson" in preview_text
         assert await db_session.get(Event, one_time.id) is not None
@@ -730,11 +734,22 @@ async def test_displacement_preview_is_paged_and_revalidated_before_second_confi
             end_time="10:30",
             cutoff_date="14/01/2031",
         )
+        markup = driver.session.last_message.reply_markup
+        assert markup is not None
+        change_rows = [
+            [button.text for button in row]
+            for row in markup.inline_keyboard
+            if any(button.text.startswith("Change") for button in row)
+        ]
+        assert change_rows == [
+            ["Change date", "Change start"],
+            ["Change end", "Change series end"],
+        ]
         await driver.click("Save break")
-        assert "Affected lessons: 11" in driver.session.last_message.text
+        assert "Affected lessons" not in driver.session.last_message.text
         assert "Showing" not in driver.session.last_message.text
         await driver.click("Next ▶")
-        assert "Affected lessons: 11" in driver.session.last_message.text
+        assert "Affected lessons" not in driver.session.last_message.text
         assert driver.session.last_message.text.count("One-time lesson") == 1
         await driver.click("Confirm and displace lessons")
         assert "Break created." in driver.session.last_message.text

@@ -130,9 +130,12 @@ def format_schedule_date_confirmation(parsed: ParsedScheduleDate) -> str:
     return f"Date: {human_date}"
 
 
-def format_human_date(value: date, *, reference_date: date) -> str:
+def format_human_date(
+    value: date, *, reference_date: date, short_month: bool = False
+) -> str:
     year = f" ({value.year})" if value.year != reference_date.year else ""
-    return f"{_MONTH_NAMES[value.month - 1]} {value.day}{year}"
+    names = _SHORT_MONTH_NAMES if short_month else _MONTH_NAMES
+    return f"{names[value.month - 1]} {value.day}{year}"
 
 
 def format_human_datetime(value: datetime, *, reference_date: date) -> str:
@@ -156,14 +159,22 @@ def format_compact_schedule_date(value: date, *, reference_date: date) -> str:
 
 
 def format_local_interval(
-    start: datetime, end: datetime, *, reference_date: date
+    start: datetime,
+    end: datetime,
+    *,
+    reference_date: date,
+    short_month: bool = False,
 ) -> str:
-    start_date = format_human_date(start.date(), reference_date=reference_date)
+    start_date = format_human_date(
+        start.date(), reference_date=reference_date, short_month=short_month
+    )
     start_clock = f"{_format_clock(start)}{_format_fold(start)}"
     end_clock = f"{_format_clock(end)}{_format_fold(end)}"
     if start.date() == end.date():
         return f"{start_date} {start_clock} - {end_clock}"
-    end_date = format_human_date(end.date(), reference_date=reference_date)
+    end_date = format_human_date(
+        end.date(), reference_date=reference_date, short_month=short_month
+    )
     return f"{start_date} {start_clock} - {end_date} {end_clock}"
 
 
@@ -176,11 +187,19 @@ def format_human_datetime_in_timezone(
 
 
 def format_local_interval_in_timezone(
-    start: datetime, end: datetime, timezone: str, *, reference_date: date
+    start: datetime,
+    end: datetime,
+    timezone: str,
+    *,
+    reference_date: date,
+    short_month: bool = False,
 ) -> str:
     zone = ZoneInfo(timezone)
     return format_local_interval(
-        start.astimezone(zone), end.astimezone(zone), reference_date=reference_date
+        start.astimezone(zone),
+        end.astimezone(zone),
+        reference_date=reference_date,
+        short_month=short_month,
     )
 
 
