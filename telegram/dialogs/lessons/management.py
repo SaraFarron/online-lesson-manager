@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Row, Select
+from aiogram_dialog.widgets.kbd import Button, Column, Row, Select
 from aiogram_dialog.widgets.text import Const, Format
 from pydantic import ValidationError
 
@@ -50,7 +50,6 @@ ManagementAction = Literal["inspect", "edit", "cutoff", "move"]
 
 
 class LessonManagementScreens(StatesGroup):
-    menu = State()
     events = State()
     detail = State()
     date = State()
@@ -68,24 +67,39 @@ async def open_event_management(
     view = SessionView.model_validate(manager.dialog_data["view"])
     if view.account.role not in {"TEACHER", "STUDENT"}:
         raise ValueError("This account cannot manage lessons")
+    data: dict[str, Any] = {
+        "view": view.model_dump(mode="json"),
+        "viewer_timezone": view.account.timezone,
+        "kind": None,
+        "skip": 0,
+        "cancel_skip": 0,
+        "items": [],
+        "total": 0,
+        "detail": None,
+        "error": "",
+        "warning": "",
+        "notice": "",
+        "needs_reload": False,
+        "outcome_unknown": False,
+        "operation": None,
+    }
+    try:
+        page = await backend(manager).read_unified_management_page(
+            callback.from_user.id,
+            callback.message.chat.id,
+            "lessons",
+            limit=MANAGEMENT_PAGE_SIZE,
+        )
+    except (BackendError, BackendUnavailable) as exc:
+        data["error"] = str(exc)
+    else:
+        data.update(
+            items=[item.model_dump(mode="json") for item in page.items],
+            total=page.total,
+        )
     await manager.start(
-        LessonManagementScreens.menu,
-        data={
-            "view": view.model_dump(mode="json"),
-            "viewer_timezone": view.account.timezone,
-            "kind": None,
-            "skip": 0,
-            "cancel_skip": 0,
-            "items": [],
-            "total": 0,
-            "detail": None,
-            "error": "",
-            "warning": "",
-            "notice": "",
-            "needs_reload": False,
-            "outcome_unknown": False,
-            "operation": None,
-        },
+        LessonManagementScreens.events,
+        data=data,
         mode=StartMode.NORMAL,
         show_mode=ShowMode.EDIT,
     )
@@ -102,7 +116,7 @@ def _kind(manager: DialogManager) -> EventKind:
         return "once"
     if value == "weekly":
         return "weekly"
-    raise ValueError("Lesson list type is missing")
+    raise ValueError("Lesson type is missing")
 
 
 def _resource(manager: DialogManager) -> ManagementResource:
@@ -113,37 +127,33 @@ def _detail(manager: DialogManager) -> EventManagementDetail:
     return EventManagementDetail.model_validate(manager.dialog_data["detail"])
 
 
-async def choose_one_time(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    await _load_page(callback, manager, "once", 0)
-
-
-async def choose_weekly(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    await _load_page(callback, manager, "weekly", 0)
-
-
 async def _load_page(
-    callback: CallbackQuery, manager: DialogManager, kind: EventKind, skip: int
+    callback: CallbackQuery, manager: DialogManager, skip: int
 ) -> None:
     if callback.message is None:
         raise ValueError("Event management requires a private chat")
     data = manager.dialog_data
     try:
-        page = await backend(manager).read_management_page(
+        page = await backend(manager).read_unified_management_page(
             callback.from_user.id,
             callback.message.chat.id,
-            "lessons" if kind == "once" else "recurrent-lessons",
+            "lessons",
             skip=skip,
             limit=MANAGEMENT_PAGE_SIZE,
         )
+        if page.total > 0 and skip >= page.total:
+            skip = (page.total - 1) // MANAGEMENT_PAGE_SIZE * MANAGEMENT_PAGE_SIZE
+            page = await backend(manager).read_unified_management_page(
+                callback.from_user.id,
+                callback.message.chat.id,
+                "lessons",
+                skip=skip,
+                limit=MANAGEMENT_PAGE_SIZE,
+            )
     except (BackendError, BackendUnavailable) as exc:
-        data.update(kind=kind, skip=skip, items=[], total=0, error=str(exc))
+        data.update(skip=skip, items=[], total=0, error=str(exc))
     else:
         data.update(
-            kind=kind,
             skip=skip,
             items=[item.model_dump(mode="json") for item in page.items],
             total=page.total,
@@ -159,7 +169,6 @@ async def previous_events(
     await _load_page(
         callback,
         manager,
-        _kind(manager),
         max(0, int(manager.dialog_data["skip"]) - MANAGEMENT_PAGE_SIZE),
     )
 
@@ -170,7 +179,6 @@ async def next_events(
     await _load_page(
         callback,
         manager,
-        _kind(manager),
         int(manager.dialog_data["skip"]) + MANAGEMENT_PAGE_SIZE,
     )
 
@@ -195,6 +203,7 @@ async def select_managed_lesson(
         manager.dialog_data["error"] = "Reload the list and select a current lesson."
         await manager.show(show_mode=ShowMode.EDIT)
         return
+    manager.dialog_data["kind"] = "weekly" if selected["is_recurrent"] else "once"
     try:
         detail = await backend(manager).read_management_detail(
             callback.from_user.id,
@@ -223,6 +232,15 @@ def _format_datetime(value: datetime, timezone: str) -> str:
         value,
         timezone,
         reference_date=datetime.now(ZoneInfo(timezone)).date(),
+    )
+
+
+def _format_list_datetime(value: datetime, timezone: str) -> str:
+    return format_human_datetime_in_timezone(
+        value,
+        timezone,
+        reference_date=datetime.now(ZoneInfo(timezone)).date(),
+        short_month=True,
     )
 
 
@@ -255,7 +273,7 @@ def _list_label(item: EventManagementItem, timezone: str) -> str:
     recurrence = "Weekly" if item.is_recurrent else "One time"
     label = (
         f"{recurrence} · {item.subject_label} · "
-        f"{_format_datetime(item.start, timezone)}"
+        f"{_format_list_datetime(item.next_occurrence_start or item.start, timezone)}"
     )
     if item.is_recurrent and item.cancelled_occurrences:
         label += f" · {item.cancelled_occurrences} cancelled"
@@ -272,7 +290,7 @@ async def event_list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
     skip = int(data.get("skip", 0))
     total = int(data.get("total", 0))
     return {
-        "title": "One-time lessons" if data.get("kind") == "once" else "Weekly lessons",
+        "title": "Lessons",
         "events": [
             (_list_label(item, data["viewer_timezone"]), str(item.id)) for item in items
         ],
@@ -285,15 +303,7 @@ async def event_list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
         "notice": escape(str(data.get("notice", ""))),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
-        "is_once": data.get("kind") == "once",
-        "is_weekly": data.get("kind") == "weekly",
     }
-
-
-async def back_to_management_menu(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    await manager.switch_to(LessonManagementScreens.menu, show_mode=ShowMode.EDIT)
 
 
 def _format_detail(detail: EventManagementDetail, timezone: str) -> str:
@@ -938,7 +948,7 @@ async def confirm_action(
             if detail.post_break_minutes > 0:
                 notice += " Its automatic break reservations were also removed."
             data.update(submitting=False, operation="delete", notice=notice)
-            await _load_page(callback, manager, _kind(manager), int(data["skip"]))
+            await _load_page(callback, manager, int(data["skip"]))
             manager.dialog_data["notice"] = notice
             return
         if action == "cancel_occurrence":
@@ -1204,7 +1214,7 @@ async def reload_management_state(
             )
         except BackendError as exc:
             if exc.status == 404:
-                await _load_page(callback, manager, _kind(manager), int(data["skip"]))
+                await _load_page(callback, manager, int(data["skip"]))
                 manager.dialog_data.update(
                     outcome_unknown=False,
                     needs_reload=False,
@@ -1302,9 +1312,7 @@ async def _load_detail(
 async def back_to_list(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    await _load_page(
-        callback, manager, _kind(manager), int(manager.dialog_data["skip"])
-    )
+    await _load_page(callback, manager, int(manager.dialog_data["skip"]))
 
 
 async def return_to_home(
@@ -1316,24 +1324,15 @@ async def return_to_home(
 def build_event_management_dialog() -> Dialog:
     return Dialog(
         Window(
-            Const("Manage lessons"),
-            Button(
-                Const("One-time lessons"),
-                id="once",
-                on_click=choose_one_time,
-            ),
-            Button(Const("Weekly lessons"), id="weekly", on_click=choose_weekly),
-            Button(Const("Back to home"), id="home", on_click=return_to_home),
-            state=LessonManagementScreens.menu,
-        ),
-        Window(
             Format("{feedback}{title}\n{empty_state}\n{notice}\nTimezone: {timezone}"),
-            Select(
-                Format("{item[0]}"),
-                id="managed_lesson",
-                item_id_getter=lambda item: item[1],
-                items="events",
-                on_click=select_managed_lesson,
+            Column(
+                Select(
+                    Format("{item[0]}"),
+                    id="managed_lesson",
+                    item_id_getter=lambda item: item[1],
+                    items="events",
+                    on_click=select_managed_lesson,
+                )
             ),
             Row(
                 Button(
@@ -1349,21 +1348,7 @@ def build_event_management_dialog() -> Dialog:
                     when="has_next",
                 ),
             ),
-            Row(
-                Button(
-                    Const("Weekly lessons"),
-                    id="weekly",
-                    on_click=choose_weekly,
-                    when="is_once",
-                ),
-                Button(
-                    Const("One-time lessons"),
-                    id="once",
-                    on_click=choose_one_time,
-                    when="is_weekly",
-                ),
-            ),
-            Button(Const("Back"), id="back", on_click=back_to_management_menu),
+            Button(Const("Back"), id="back", on_click=return_to_home),
             state=LessonManagementScreens.events,
         ),
         Window(

@@ -138,12 +138,12 @@ def format_human_date(
     return f"{names[value.month - 1]} {value.day}{year}"
 
 
-def format_human_datetime(value: datetime, *, reference_date: date) -> str:
+def format_human_datetime(
+    value: datetime, *, reference_date: date, short_month: bool = False
+) -> str:
     year = f" ({value.year})" if value.year != reference_date.year else ""
-    return (
-        f"{_MONTH_NAMES[value.month - 1]} {value.day} "
-        f"at {format_human_time(value)}{year}"
-    )
+    names = _SHORT_MONTH_NAMES if short_month else _MONTH_NAMES
+    return f"{names[value.month - 1]} {value.day} at {format_human_time(value)}{year}"
 
 
 def format_human_time(value: datetime) -> str:
@@ -179,10 +179,16 @@ def format_local_interval(
 
 
 def format_human_datetime_in_timezone(
-    value: datetime, timezone: str, *, reference_date: date
+    value: datetime,
+    timezone: str,
+    *,
+    reference_date: date,
+    short_month: bool = False,
 ) -> str:
     return format_human_datetime(
-        value.astimezone(ZoneInfo(timezone)), reference_date=reference_date
+        value.astimezone(ZoneInfo(timezone)),
+        reference_date=reference_date,
+        short_month=short_month,
     )
 
 

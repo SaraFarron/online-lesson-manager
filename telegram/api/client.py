@@ -1062,6 +1062,28 @@ class BackendClient:
             error_context="scheduling",
         )
 
+    async def read_unified_management_page(
+        self,
+        sender_id: int,
+        chat_id: int,
+        resource: Literal["lessons", "breaks"],
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        subject_id: uuid.UUID | None = None,
+    ) -> EventManagementPage:
+        params = {"skip": str(skip), "limit": str(limit)}
+        if subject_id is not None:
+            params["subject_id"] = str(subject_id)
+        return await self.read(
+            f"/api/v1/{resource}/upcoming",
+            EventManagementPage,
+            sender_id,
+            chat_id,
+            params=params,
+            error_context="scheduling",
+        )
+
     async def read_management_detail(
         self,
         sender_id: int,

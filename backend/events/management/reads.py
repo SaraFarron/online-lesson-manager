@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,10 +28,11 @@ from backend.events.occurrences import (
 )
 from backend.events.revisions import build_event_revision
 from backend.events.schemas import RecurrentCancel
-from backend.events.time_utils import from_storage_utc, normalize_utc
+from backend.events.time_utils import from_storage_utc, normalize_utc, to_storage_utc
 from backend.events.utils import assert_owns_event
 from backend.exceptions import BadRequest, Conflict, Forbidden, ValidationError
 
+_EXTRA_SEARCH_WINDOWS = 3
 _UNNAMED_STUDENT = "Unnamed student"
 _PERSONAL_SUBJECT_LABELS = {
     EventType.LESSON: "Personal lesson",
@@ -111,6 +112,72 @@ async def list_managed_events(
         for row in rows
     ]
     return EventManagementPage(items=items, total=total or 0)
+
+
+async def list_upcoming_managed_events(
+    session: AsyncSession,
+    actor: User,
+    event_type: EventType,
+    *,
+    skip: int,
+    limit: int,
+    subject_id: uuid.UUID | None,
+    now: datetime | None = None,
+) -> EventManagementPage:
+    """List one-off events and series that still have a future occurrence.
+
+    Items are ordered by their next non-cancelled occurrence (an occurrence in
+    progress still counts); past one-offs and ended series are omitted.
+    """
+    teacher_id, scoped_subject_id = await _resolve_scope(
+        session, actor, subject_id, teacher_only=event_type == EventType.BREAK
+    )
+    reference = normalize_utc(now or datetime.now(UTC))
+    one_off_filters = [
+        Event.teacher_id == teacher_id,
+        Event.event_type == event_type.value,
+        Event.end > to_storage_utc(reference),
+    ]
+    series_filters = [
+        RecurrentEvent.teacher_id == teacher_id,
+        RecurrentEvent.event_type == event_type.value,
+    ]
+    if scoped_subject_id is not None:
+        one_off_filters.append(Event.user_id == scoped_subject_id)
+        series_filters.append(RecurrentEvent.user_id == scoped_subject_id)
+    one_offs = (await session.scalars(select(Event).where(*one_off_filters))).all()
+    series_rows = (
+        await session.scalars(select(RecurrentEvent).where(*series_filters))
+    ).all()
+    cancelled_starts = await _cancelled_starts(session, [row.id for row in series_rows])
+
+    candidates: list[tuple[datetime, uuid.UUID, Event | RecurrentEvent, bool, int]] = [
+        (from_storage_utc(row.start), row.id, row, False, 0) for row in one_offs
+    ]
+    for series_row in series_rows:
+        cancelled = cancelled_starts.get(series_row.id, set())
+        next_start = _next_series_occurrence_start(series_row, cancelled, reference)
+        if next_start is not None:
+            candidates.append(
+                (next_start, series_row.id, series_row, True, len(cancelled))
+            )
+    candidates.sort(key=lambda candidate: (candidate[0], candidate[1]))
+
+    items = [
+        await _management_item(
+            session,
+            actor,
+            teacher_id,
+            row,
+            is_recurrent=is_recurrent,
+            cancelled_occurrences=cancelled_count,
+            next_occurrence_start=next_start,
+        )
+        for next_start, _id, row, is_recurrent, cancelled_count in candidates[
+            skip : skip + limit
+        ]
+    ]
+    return EventManagementPage(items=items, total=len(candidates))
 
 
 async def get_managed_event(
@@ -249,6 +316,7 @@ async def _management_item(
     *,
     is_recurrent: bool,
     cancelled_occurrences: int,
+    next_occurrence_start: datetime | None = None,
 ) -> EventManagementItem:
     visibility = None if is_recurrent else await _one_off_visibility(session, event)
     return EventManagementItem(
@@ -267,6 +335,7 @@ async def _management_item(
         is_recurrent=is_recurrent,
         cancelled_occurrences=cancelled_occurrences,
         visibility_status=visibility,
+        next_occurrence_start=next_occurrence_start,
     )
 
 
@@ -392,6 +461,61 @@ async def _inspect_occurrence(
         end=occurrence.end,
         status=status,
     )
+
+
+async def _cancelled_starts(
+    session: AsyncSession, event_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, set[datetime]]:
+    if not event_ids:
+        return {}
+    results = await session.execute(
+        select(RecurrentCancels.recurrent_event_id, RecurrentCancels.start).where(
+            RecurrentCancels.recurrent_event_id.in_(event_ids)
+        )
+    )
+    starts: dict[uuid.UUID, set[datetime]] = {}
+    for event_id, start in results:
+        starts.setdefault(event_id, set()).add(from_storage_utc(start))
+    return starts
+
+
+def _next_series_occurrence_start(
+    event: RecurrentEvent, cancelled: set[datetime], reference: datetime
+) -> datetime | None:
+    series = RecurrenceSeries(
+        source=OccurrenceSource(
+            kind=OccurrenceSourceKind.RECURRENT_EVENT,
+            id=event.id,
+            teacher_id=event.teacher_id,
+            user_id=event.user_id,
+            event_type=EventType(event.event_type),
+        ),
+        start=event.start,
+        end=event.end,
+        interval=event.interval,
+        interval_end=event.interval_end,
+        recurrence_mode=event.recurrence_mode,
+        recurrence_timezone=event.recurrence_timezone,
+    )
+    cutoff = (
+        from_storage_utc(event.interval_end) if event.interval_end is not None else None
+    )
+    step = timedelta(days=event.interval)
+    window_start = reference
+    # Windows are contiguous and one step long, so each holds an occurrence and
+    # every cancellation can consume at most one of them.
+    try:
+        for _ in range(len(cancelled) + _EXTRA_SEARCH_WINDOWS):
+            window_end = window_start + step
+            for occurrence in expand_recurrence(series, window_start, window_end):
+                if occurrence.start not in cancelled:
+                    return occurrence.start
+            if cutoff is not None and window_end >= cutoff:
+                return None
+            window_start = window_end
+    except OverflowError:
+        return None
+    return None
 
 
 async def _cancellation_counts(

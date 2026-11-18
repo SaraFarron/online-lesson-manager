@@ -167,12 +167,25 @@ def _event_button(driver: BotDriver, subject: str = "Alice Learner") -> str:
 async def _open_list(driver: BotDriver, *, weekly: bool = False) -> None:
     await driver.text("/start")
     await driver.click("Manage events")
-    await driver.click("Weekly lessons" if weekly else "One-time lessons")
+    prefix = "Weekly · " if weekly else "One time · "
+    assert any(prefix in label for label in _button_labels(driver))
     assert "Showing " not in driver.session.last_message.text
+
+
+def _button_labels(driver: BotDriver) -> list[str]:
+    assert driver.session.last_message is not None
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    return [button.text for row in markup.inline_keyboard for button in row]
 
 
 def _freeze_schedule_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(app.dependency_overrides, get_schedule_clock, lambda: _NOW)
+
+
+@pytest.fixture(autouse=True)
+def _frozen_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    _freeze_schedule_clock(monkeypatch)
 
 
 async def test_teacher_edits_one_time_lesson_after_fresh_detail_read(
@@ -962,5 +975,44 @@ async def test_automatic_break_conflict_is_actionable_when_moving_occurrence(
         assert "Choose another time." in driver.session.last_message.text
         assert not list((await db_session.scalars(select(RecurrentCancels))).all())
         assert await db_session.get(Event, earlier_lesson.id) is not None
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_unified_lesson_list_is_one_column_sorted_by_next_occurrence(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    weekly = _series(teacher, student)
+    weekly.start = datetime(2026, 10, 19, 10)
+    weekly.end = datetime(2026, 10, 19, 11)
+    weekly.interval_end = None
+    sooner = _one_time(teacher, student, datetime(2026, 10, 21, 10))
+    later = _one_time(teacher, student, datetime(2026, 10, 28, 10))
+    past = _one_time(teacher, student, datetime(2026, 10, 1, 10))
+    db_session.add_all([weekly, sooner, later, past])
+    await db_session.commit()
+    driver, http, _ = await _make_bot(client, bot_service_key, _telegram_id(teacher))
+    try:
+        await _open_list(driver)
+        text = driver.session.last_message.text
+        assert "Oct 1 " not in text
+        markup = driver.session.last_message.reply_markup
+        assert markup is not None
+        rows = [[button.text for button in row] for row in markup.inline_keyboard]
+        assert rows == [
+            ["One time · Alice Learner · Oct 21 at 10:00"],
+            ["Weekly · Alice Learner · Oct 26 at 10:00"],
+            ["One time · Alice Learner · Oct 28 at 10:00"],
+            ["Back"],
+        ]
+
+        await driver.click("Weekly · Alice Learner · Oct 26 at 10:00")
+        assert "Series end (inclusive): No end" in driver.session.last_message.text
+        assert "Edit lesson or series" in _button_labels(driver)
+        await driver.click("Back to list")
+        await driver.click("One time · Alice Learner · Oct 28 at 10:00")
+        assert "First lesson:" in driver.session.last_message.text
+        assert "Series end" not in driver.session.last_message.text
     finally:
         await _close_bot(driver, http)

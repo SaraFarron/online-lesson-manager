@@ -31,6 +31,7 @@ from backend.lessons.schemas import (
     RecurrentOccurrenceCancelRequest,
     RecurrentOccurrenceMoveRequest,
 )
+from backend.schedule.router import ScheduleClockDep
 
 router = APIRouter(prefix="/lessons", tags=["lessons"])
 
@@ -51,6 +52,30 @@ async def list_lessons(
         skip=skip,
         limit=limit,
         subject_id=subject_id,
+    )
+
+
+@router.get(
+    "/upcoming",
+    response_model=EventManagementPage,
+    summary="List manageable lessons and series by next occurrence",
+)
+async def list_upcoming_lessons(
+    session: SessionDep,
+    user: CurrentUser,
+    now: ScheduleClockDep,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    subject_id: uuid.UUID | None = None,
+) -> EventManagementPage:
+    return await management_service.list_upcoming_managed_events(
+        session,
+        user,
+        EventType.LESSON,
+        skip=skip,
+        limit=limit,
+        subject_id=subject_id,
+        now=now,
     )
 
 

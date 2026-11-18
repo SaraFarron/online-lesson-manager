@@ -27,6 +27,7 @@ from backend.events.utils import (
     assert_teacher_actor,
     resolve_teacher_id,
 )
+from backend.schedule.router import ScheduleClockDep
 
 router = APIRouter(prefix="/breaks", tags=["breaks"])
 
@@ -47,6 +48,30 @@ async def list_breaks(
         skip=skip,
         limit=limit,
         subject_id=subject_id,
+    )
+
+
+@router.get(
+    "/upcoming",
+    response_model=EventManagementPage,
+    summary="List manageable breaks and series by next occurrence",
+)
+async def list_upcoming_breaks(
+    session: SessionDep,
+    user: CurrentUser,
+    now: ScheduleClockDep,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    subject_id: uuid.UUID | None = None,
+) -> EventManagementPage:
+    return await management_service.list_upcoming_managed_events(
+        session,
+        user,
+        EventType.BREAK,
+        skip=skip,
+        limit=limit,
+        subject_id=subject_id,
+        now=now,
     )
 
 

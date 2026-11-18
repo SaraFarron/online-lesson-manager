@@ -58,10 +58,15 @@ class EventManagementItem(BaseModel):
     is_recurrent: bool
     cancelled_occurrences: int = Field(ge=0)
     visibility_status: VisibilityStatus | None = None
+    next_occurrence_start: UtcTimestamp | None = None
 
     @field_serializer("start", "end", when_used="json")
     def serialize_utc_timestamps(self, value: datetime) -> str:
         return normalize_utc(value).isoformat()
+
+    @field_serializer("next_occurrence_start", when_used="json")
+    def serialize_next_occurrence_start(self, value: datetime | None) -> str | None:
+        return None if value is None else normalize_utc(value).isoformat()
 
 
 class EventManagementPage(BaseModel):

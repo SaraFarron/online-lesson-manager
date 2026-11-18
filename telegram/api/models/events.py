@@ -33,6 +33,7 @@ class EventManagementItem(BaseModel):
     visibility_status: (
         Literal["visible", "hidden_by_vacation", "not_applicable"] | None
     ) = None
+    next_occurrence_start: AwareDatetime | None = None
 
     @model_validator(mode="after")
     def validate_interval(self) -> Self:
