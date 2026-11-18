@@ -45,6 +45,11 @@ from telegram.dialogs.settings import build_settings_dialog, start_settings
 from telegram.dialogs.student_profiles import build_student_profiles_dialog
 from telegram.dialogs.vacations import build_vacation_dialog, start_vacation_management
 from telegram.invitations import create_teacher_invitation, parse_teacher_start_payload
+from telegram.shared.command_cleanup import (
+    delete_command_message,
+    is_private_command,
+    remove_stale_reply_keyboard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +74,19 @@ class EditInputMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+class CommandCleanupMiddleware(BaseMiddleware):
+    async def __call__(
+        self, handler: Any, event: TelegramObject, data: dict[str, Any]
+    ) -> Any:
+        if isinstance(event, Message) and is_private_command(event):
+            await delete_command_message(event)
+        return await handler(event, data)
+
+
 async def start(
     message: Message, dialog_manager: DialogManager, command: CommandObject
 ) -> None:
+    await remove_stale_reply_keyboard(message)
     await dialog_manager.start(
         Screens.welcome, mode=StartMode.RESET_STACK, show_mode=ShowMode.EDIT
     )
@@ -218,4 +233,5 @@ def build_dispatcher(client: BackendClient | None = None) -> Dispatcher:
     )
     setup_dialogs(dispatcher)
     dispatcher.message.middleware(EditInputMiddleware())
+    dispatcher.message.outer_middleware(CommandCleanupMiddleware())
     return dispatcher

@@ -8,7 +8,15 @@ from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import TelegramMethod
 from aiogram.methods.base import TelegramType
-from aiogram.types import Chat, File, InputFile, Message, Update, User
+from aiogram.types import (
+    Chat,
+    File,
+    InputFile,
+    Message,
+    ReplyKeyboardRemove,
+    Update,
+    User,
+)
 
 
 class _VisibleTextParser(HTMLParser):
@@ -37,6 +45,8 @@ class RecordingSession(BaseSession):
         self.delete_failure: str | None = None
         self.files: dict[str, tuple[str, bytes, int]] = {}
         self.sent_documents: list[tuple[int, str, bytes]] = []
+        self.keyboard_removal_ids: list[int] = []
+        self.keyboard_removal_calls: list[TelegramMethod[Any]] = []
 
     def register_file(
         self,
@@ -57,8 +67,16 @@ class RecordingSession(BaseSession):
     async def make_request(
         self, bot: Bot, method: TelegramMethod[TelegramType], timeout: int | None = None
     ) -> TelegramType:
-        self.calls.append(method)
         name = method.__api_method__
+        # The transient /start keyboard-removal message is recorded separately so
+        # visible-message assertions are unaffected by it.
+        if isinstance(getattr(method, "reply_markup", None), ReplyKeyboardRemove) or (
+            name == "deleteMessage"
+            and getattr(method, "message_id", None) in self.keyboard_removal_ids
+        ):
+            self.keyboard_removal_calls.append(method)
+        else:
+            self.calls.append(method)
         if name == "getMe":
             result: Any = User(
                 id=bot.id, is_bot=True, first_name="Test", username="lesson_test_bot"
@@ -79,6 +97,15 @@ class RecordingSession(BaseSession):
             data = method.model_dump()
             if name == "sendMessage":
                 self.next_id += 1
+            if isinstance(getattr(method, "reply_markup", None), ReplyKeyboardRemove):
+                self.keyboard_removal_ids.append(self.next_id)
+                return Message(  # type: ignore[return-value]
+                    message_id=self.next_id,
+                    date=datetime.now(UTC),
+                    chat=Chat(id=data["chat_id"], type="private"),
+                    from_user=User(id=bot.id, is_bot=True, first_name="Test"),
+                    text=data["text"],
+                ).as_(bot)
             result = Message(
                 message_id=data.get("message_id") or self.next_id,
                 date=datetime.now(UTC),
@@ -146,16 +173,28 @@ class BotDriver:
         self.dispatcher = dispatcher
         self.user_id = user_id
         self.update_id = 0
+        self.command_message_ids: list[int] = []
 
-    def deleted_message_ids(self) -> list[int]:
+    def all_deleted_message_ids(self) -> list[int]:
         return [
             int(call.model_dump()["message_id"])
             for call in self.session.calls
             if call.__api_method__ == "deleteMessage"
         ]
 
+    def deleted_message_ids(self) -> list[int]:
+        """Deleted input messages, excluding command-message cleanup."""
+        cleanup = set(self.command_message_ids)
+        return [
+            message_id
+            for message_id in self.all_deleted_message_ids()
+            if message_id not in cleanup
+        ]
+
     async def text(self, value: str, chat_type: str = "private") -> None:
         self.update_id += 1
+        if value.startswith("/"):
+            self.command_message_ids.append(self.update_id)
         update = Update.model_validate(
             {
                 "update_id": self.update_id,
