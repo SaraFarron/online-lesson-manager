@@ -71,17 +71,16 @@ def _profile_detail_text(profile: TeacherStudentProfileDetail) -> str:
         f"<b>{_safe(profile.display_name)}</b>",
         f"Username: {_safe(profile.username_display)}",
         f"Added: {_format_utc(profile.linked_at)}",
-        (
+    ]
+    if homework.assigned:
+        lines.append(
             f"Homework: {homework.completed}/{homework.assigned} complete, "
             f"{homework.incomplete} incomplete "
             f"({homework.completed_by_student} by student, "
             f"{homework.completed_by_teacher} by teacher)"
-        ),
-        "",
-        "<b>Last 10 actions</b>",
-    ]
-    if not profile.actions:
-        lines.append("No recorded actions.")
+        )
+    if profile.actions:
+        lines.extend(["", "<b>Last 10 actions</b>"])
     for action in profile.actions:
         description = _action_label(action.action_type)
         if action.resource_available is False:
@@ -707,7 +706,7 @@ async def student_profile_data(
         if profile
         else "Select a student.",
         "can_remove": profile is not None and kind == "active",
-        "can_view_homework": profile is not None,
+        "can_view_homework": profile is not None and profile.homework.assigned > 0,
         "removal_impact": _impact_text(preview) if preview else "No active preview.",
         "can_confirm": preview is not None
         and not data.get("submitting")

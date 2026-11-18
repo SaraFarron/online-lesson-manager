@@ -17,7 +17,12 @@ from backend.auth.models import (
     User,
 )
 from backend.auth.utils import create_access_token
-from telegram.api import BackendClient
+from telegram.api import (
+    BackendClient,
+    StudentActionHistoryItem,
+    StudentHomeworkSummary,
+    TeacherStudentProfileDetail,
+)
 from telegram.runtime import build_dispatcher
 from tests.bot_support import BotDriver
 
@@ -321,6 +326,9 @@ async def test_teacher_student_profile_lists_paginate(
         await driver.click("Previous")
         assert "Page 1 of 2 · 21 student(s)" in driver.session.last_message.text
         assert first_student.full_name in driver.session.last_message.text
+        await driver.click(first_student.full_name)
+        assert "Homework:" not in driver.session.last_message.text
+        assert "View homework" not in _button_labels(driver)
     finally:
         await _close(driver, driver_http)
 
@@ -565,3 +573,56 @@ def test_student_list_label_prefers_name_then_username() -> None:
     assert label("Alice", "alice_t") == "Alice"
     assert label("Name unavailable", "alice_t") == "alice_t"
     assert label("Name unavailable", "No username") == "Name unavailable"
+
+
+@pytest.mark.parametrize("assigned", [0, 2])
+@pytest.mark.parametrize("with_actions", [False, True])
+@pytest.mark.parametrize("removed", [False, True])
+def test_profile_detail_hides_empty_sections(
+    assigned: int, with_actions: bool, removed: bool
+) -> None:
+    from telegram.dialogs.student_profiles import _profile_detail_text
+
+    moment = datetime(2026, 1, 2, 3, 4, tzinfo=UTC)
+    profile = TeacherStudentProfileDetail(
+        relationship_id=uuid4(),
+        student_id=uuid4(),
+        display_name="Alice",
+        username_display="No username",
+        linked_at=moment,
+        removed_at=moment if removed else None,
+        homework=StudentHomeworkSummary(
+            assigned=assigned,
+            completed=0,
+            incomplete=assigned,
+            completed_by_student=0,
+            completed_by_teacher=0,
+        ),
+        actions=[
+            StudentActionHistoryItem(
+                id=uuid4(),
+                action_type="PROFILE_UPDATED",
+                occurred_at=moment,
+                resource_type=None,
+                resource_id=None,
+                resource_occurrence_at=None,
+                resource_available=None,
+            )
+        ]
+        if with_actions
+        else [],
+    )
+    text = _profile_detail_text(profile)
+
+    assert ("Homework:" in text) is bool(assigned)
+    assert ("Last 10 actions" in text) is with_actions
+    assert "No recorded actions" not in text
+    assert ("read-only" in text) is removed
+    assert "\n\n\n" not in text
+    assert not text.endswith("\n")
+    if not (assigned or with_actions or removed):
+        assert text.splitlines() == [
+            "<b>Alice</b>",
+            "Username: No username",
+            "Added: 2026-01-02 03:04 UTC",
+        ]
