@@ -834,3 +834,47 @@ def _labels(driver: BotDriver) -> list[str]:
     markup = driver.session.last_message.reply_markup
     assert markup is not None
     return [button.text for row in markup.inline_keyboard for button in row]
+
+
+async def test_vacation_list_and_assignee_picker_use_one_button_per_row(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, student, other_student = await _seed_accounts(db_session)
+    now = datetime.now(UTC).replace(tzinfo=None, minute=0, second=0, microsecond=0)
+    db_session.add_all(
+        [
+            Event(
+                teacher_id=teacher.id,
+                user_id=owner.id,
+                event_type=EventType.VACATION.value,
+                start=now + timedelta(days=offset),
+                end=now + timedelta(days=offset + 1),
+            )
+            for offset, owner in ((10, student), (20, other_student))
+        ]
+    )
+    await db_session.commit()
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_vacations(driver)
+        await driver.click("Vacation list")
+        markup = driver.session.last_message.reply_markup
+        assert markup is not None
+        rows = [[button.text for button in row] for row in markup.inline_keyboard]
+        assert [len(row) for row in rows] == [1, 1, 1, 1]
+        assert rows[0][0].startswith("Alice Learner · ")
+        assert rows[1][0].startswith("Bob Learner · ")
+        assert rows[2:] == [["Add vacation"], ["Back"]]
+
+        await driver.click("Add vacation")
+        await driver.click("Change assignee")
+        markup = driver.session.last_message.reply_markup
+        assert markup is not None
+        picker_rows = [
+            [button.text for button in row] for row in markup.inline_keyboard
+        ]
+        assert [["Alice Learner"], ["Bob Learner"]] == picker_rows[:2]
+    finally:
+        await _close_bot(driver, http)

@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Row, Select
+from aiogram_dialog.widgets.kbd import Button, Column, Row, Select
 from aiogram_dialog.widgets.text import Const, Format
 from pydantic import ValidationError
 
@@ -1028,12 +1028,14 @@ def build_vacation_dialog() -> Dialog:
         ),
         Window(
             Format("{feedback}Current vacation: {subject_label}\n{page}"),
-            Select(
-                Format("{item[0]}"),
-                id="student",
-                item_id_getter=lambda item: item[1],
-                items="students",
-                on_click=select_vacation_subject,
+            Column(
+                Select(
+                    Format("{item[0]}"),
+                    id="student",
+                    item_id_getter=lambda item: item[1],
+                    items="students",
+                    on_click=select_vacation_subject,
+                )
             ),
             Button(
                 Const("Personal vacation"),
@@ -1060,12 +1062,14 @@ def build_vacation_dialog() -> Dialog:
         ),
         Window(
             Format("{feedback}{empty_state}\n{notice}\nTimezone: {timezone}"),
-            Select(
-                Format("{item[0]}"),
-                id="vacation",
-                item_id_getter=lambda item: item[1],
-                items="events",
-                on_click=select_vacation,
+            Column(
+                Select(
+                    Format("{item[0]}"),
+                    id="vacation",
+                    item_id_getter=lambda item: item[1],
+                    items="events",
+                    on_click=select_vacation,
+                )
             ),
             Row(
                 Button(
