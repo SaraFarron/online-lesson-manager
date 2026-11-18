@@ -123,13 +123,22 @@ async def _load_page(
     data = manager.dialog_data
     skip = max(skip, 0)
     try:
-        page = await backend(manager).read_management_page(
+        page = await backend(manager).read_unified_management_page(
             callback.from_user.id,
             callback.message.chat.id,
             "vacations",
             skip=skip,
             limit=VACATION_PAGE_SIZE,
         )
+        if page.total > 0 and skip >= page.total:
+            skip = (page.total - 1) // VACATION_PAGE_SIZE * VACATION_PAGE_SIZE
+            page = await backend(manager).read_unified_management_page(
+                callback.from_user.id,
+                callback.message.chat.id,
+                "vacations",
+                skip=skip,
+                limit=VACATION_PAGE_SIZE,
+            )
     except (BackendError, BackendUnavailable) as exc:
         data.update(skip=skip, items=[], total=0, error=str(exc))
     else:

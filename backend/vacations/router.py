@@ -16,6 +16,7 @@ from backend.events.utils import (
     assert_owns_event,
     resolve_teacher_id,
 )
+from backend.schedule.router import ScheduleClockDep
 from backend.vacations.dependencies import ValidatedVacation, ValidatedVacationExists
 from backend.vacations.schemas import VacationCreate, VacationPublic, VacationUpdate
 
@@ -40,6 +41,30 @@ async def list_vacations(
         skip=skip,
         limit=limit,
         subject_id=subject_id,
+    )
+
+
+@router.get(
+    "/upcoming",
+    response_model=EventManagementPage,
+    summary="List ongoing and future vacations",
+)
+async def list_upcoming_vacations(
+    session: SessionDep,
+    user: CurrentUser,
+    now: ScheduleClockDep,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    subject_id: uuid.UUID | None = None,
+) -> EventManagementPage:
+    return await management_service.list_upcoming_managed_events(
+        session,
+        user,
+        EventType.VACATION,
+        skip=skip,
+        limit=limit,
+        subject_id=subject_id,
+        now=now,
     )
 
 

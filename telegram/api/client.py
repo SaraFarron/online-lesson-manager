@@ -1066,7 +1066,7 @@ class BackendClient:
         self,
         sender_id: int,
         chat_id: int,
-        resource: Literal["lessons", "breaks"],
+        resource: Literal["lessons", "breaks", "vacations"],
         *,
         skip: int = 0,
         limit: int = 100,

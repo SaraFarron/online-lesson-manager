@@ -257,3 +257,101 @@ async def test_upcoming_routes_scope_by_role_and_vacation_visibility(
 
     unauthenticated = await client.get("/api/v1/lessons/upcoming")
     assert unauthenticated.status_code == 401
+
+
+async def test_upcoming_vacations_hide_finished_and_keep_role_scope(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    teacher_id, teacher_token, student_a, student_b = await _teacher_with_students(
+        client
+    )
+    teacher_uuid = UUID(teacher_id)
+    student_a_id = UUID(student_a[0])
+    student_b_id = UUID(student_b[0])
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+    finished = _one_off(
+        teacher_uuid,
+        student_a_id,
+        now - timedelta(days=3),
+        event_type=EventType.VACATION,
+        hours=24,
+    )
+    just_ended = _one_off(
+        teacher_uuid,
+        student_a_id,
+        now - timedelta(hours=2),
+        event_type=EventType.VACATION,
+    )
+    ongoing = _one_off(
+        teacher_uuid,
+        student_a_id,
+        now - timedelta(hours=1),
+        event_type=EventType.VACATION,
+        hours=48,
+    )
+    future = _one_off(
+        teacher_uuid,
+        student_b_id,
+        now + timedelta(days=10),
+        event_type=EventType.VACATION,
+        hours=24,
+    )
+    personal = _one_off(
+        teacher_uuid,
+        teacher_uuid,
+        now + timedelta(days=5),
+        event_type=EventType.VACATION,
+        hours=24,
+    )
+    db_session.add_all([finished, just_ended, ongoing, future, personal])
+    await db_session.commit()
+
+    teacher_page = await client.get(
+        "/api/v1/vacations/upcoming", headers=_headers(teacher_token)
+    )
+    assert teacher_page.status_code == 200, teacher_page.text
+    assert [item["id"] for item in teacher_page.json()["items"]] == [
+        str(ongoing.id),
+        str(personal.id),
+        str(future.id),
+    ]
+    assert teacher_page.json()["total"] == 3
+
+    paged = await client.get(
+        "/api/v1/vacations/upcoming",
+        params={"skip": 1, "limit": 1},
+        headers=_headers(teacher_token),
+    )
+    assert [item["id"] for item in paged.json()["items"]] == [str(personal.id)]
+    assert paged.json()["total"] == 3
+
+    filtered = await client.get(
+        "/api/v1/vacations/upcoming",
+        params={"subject_id": str(student_b_id)},
+        headers=_headers(teacher_token),
+    )
+    assert [item["id"] for item in filtered.json()["items"]] == [str(future.id)]
+
+    student_page = await client.get(
+        "/api/v1/vacations/upcoming", headers=_headers(student_a[1])
+    )
+    assert student_page.status_code == 200, student_page.text
+    assert [item["id"] for item in student_page.json()["items"]] == [str(ongoing.id)]
+
+    forbidden = await client.get(
+        "/api/v1/vacations/upcoming",
+        params={"subject_id": str(student_b_id)},
+        headers=_headers(student_a[1]),
+    )
+    assert forbidden.status_code == 403
+
+    full_list = await client.get("/api/v1/vacations/", headers=_headers(teacher_token))
+    assert full_list.json()["total"] == 5
+
+    detail = await client.get(
+        f"/api/v1/vacations/{finished.id}", headers=_headers(teacher_token)
+    )
+    assert detail.status_code == 200
+
+    unauthenticated = await client.get("/api/v1/vacations/upcoming")
+    assert unauthenticated.status_code == 401

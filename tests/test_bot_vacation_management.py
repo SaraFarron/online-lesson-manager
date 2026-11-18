@@ -878,3 +878,43 @@ async def test_vacation_list_and_assignee_picker_use_one_button_per_row(
         assert [["Alice Learner"], ["Bob Learner"]] == picker_rows[:2]
     finally:
         await _close_bot(driver, http)
+
+
+async def test_vacation_list_hides_finished_vacations(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, student, other_student = await _seed_accounts(db_session)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+    db_session.add_all(
+        [
+            Event(
+                teacher_id=teacher.id,
+                user_id=student.id,
+                event_type=EventType.VACATION.value,
+                start=now - timedelta(days=5),
+                end=now - timedelta(days=4),
+            ),
+            Event(
+                teacher_id=teacher.id,
+                user_id=other_student.id,
+                event_type=EventType.VACATION.value,
+                start=now - timedelta(days=1),
+                end=now + timedelta(days=1),
+            ),
+        ]
+    )
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_vacations(driver)
+        await driver.click("Vacation list")
+        labels = _labels(driver)
+        assert not any(label.startswith("Alice Learner") for label in labels)
+        assert any(label.startswith("Bob Learner") for label in labels)
+        assert any(
+            request.url.path == "/api/v1/vacations/upcoming" for request in requests
+        )
+    finally:
+        await _close_bot(driver, http)
