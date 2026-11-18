@@ -344,12 +344,13 @@ async def test_weekly_break_defaults_open_ended_and_discloses_validation_bound(
             start_time="10:00",
             end_time="10:30",
         )
-        assert "Last break date (inclusive): No end" in driver.session.last_message.text
-        assert "one calendar year" in driver.session.last_message.text
+        assert "No end date" in driver.session.last_message.text
+        assert "Last break date" not in driver.session.last_message.text
+        assert "one calendar year" not in driver.session.last_message.text
 
         await driver.click("Save break")
         assert "One-time lesson" in driver.session.last_message.text
-        assert "one calendar year" in driver.session.last_message.text
+        assert "one calendar year" not in driver.session.last_message.text
         await driver.click("Confirm and displace lessons")
 
         created = (
@@ -378,11 +379,12 @@ async def test_weekly_break_defaults_open_ended_and_discloses_validation_bound(
         assert payload["interval_end"] is None
 
         await driver.click(_event_button(driver))
-        assert "Last break date (inclusive): No end" in driver.session.last_message.text
-        assert "one calendar year" in driver.session.last_message.text
+        assert "No end date" in driver.session.last_message.text
+        assert "Last break date" not in driver.session.last_message.text
+        assert "one calendar year" not in driver.session.last_message.text
         await driver.click("Edit break")
         assert "Update weekly break" in driver.session.last_message.text
-        assert "Last break date (inclusive): No end" in driver.session.last_message.text
+        assert "No end date" in driver.session.last_message.text
         await driver.click("Save change")
         unchanged = await db_session.get(RecurrentEvent, created.id)
         assert unchanged is not None
@@ -997,8 +999,9 @@ async def test_weekly_break_can_clear_a_finite_cutoff(
         await driver.click("Edit break")
         await driver.click("Change series end")
         await driver.click("No end")
-        assert "Last break date (inclusive): No end" in driver.session.last_message.text
-        assert "one calendar year" in driver.session.last_message.text
+        assert "No end date" in driver.session.last_message.text
+        assert "Last break date" not in driver.session.last_message.text
+        assert "one calendar year" not in driver.session.last_message.text
         await driver.click("Save change")
 
         updated = await db_session.execute(

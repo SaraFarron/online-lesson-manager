@@ -53,11 +53,6 @@ from telegram.shared.inputs import (
 BREAK_PAGE_SIZE = 20
 DISPLACEMENT_PAGE_SIZE = 10
 BreakKind = Literal["once", "weekly"]
-OPEN_ENDED_BREAK_NOTE = (
-    "No end. Each write checks existing lessons for at most one calendar year "
-    "from the submitted start; later lessons may overlap, and no later "
-    "cancellations are scheduled."
-)
 _EDIT_FIELDS = (
     "start_date",
     "start_time",
@@ -903,7 +898,7 @@ def _review_text(manager: DialogManager) -> str:
     if _kind(manager) == "weekly":
         interval_end = data.get("interval_end")
         if interval_end is None:
-            text += f"\nLast break date (inclusive): No end\n{OPEN_ENDED_BREAK_NOTE}"
+            text += "\nNo end date"
         else:
             inclusive_end = _inclusive_cutoff_date(
                 interval_end, data["viewer_timezone"]
@@ -1188,18 +1183,11 @@ async def displacement_data(dialog_manager: DialogManager, **_: Any) -> dict[str
     skip = int(data.get("preview_skip", 0))
     items = preview.affected_occurrences[skip : skip + DISPLACEMENT_PAGE_SIZE]
     total = len(preview.affected_occurrences)
-    pending_payload = data.get("pending_payload", {})
     warning = (
         "Confirming permanently deletes overlapping one-time lessons and "
         "cancels exact weekly occurrences. Deleting this break later will not "
         "restore them."
     )
-    if (
-        data.get("kind") == "weekly"
-        and isinstance(pending_payload, dict)
-        and pending_payload.get("interval_end") is None
-    ):
-        warning = f"{warning}\n\n{OPEN_ENDED_BREAK_NOTE}"
     return {
         "affected": "\n".join(
             escape(_occurrence_label(item, data["viewer_timezone"])) for item in items
@@ -1459,7 +1447,7 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
         assert detail.interval is not None
         text += f"\nRepeats every {detail.interval} days"
         if detail.interval_end is None:
-            text += f"\nLast break date (inclusive): No end\n{OPEN_ENDED_BREAK_NOTE}"
+            text += "\nNo end date"
         else:
             last_day = detail.interval_end.astimezone(
                 ZoneInfo(timezone)
