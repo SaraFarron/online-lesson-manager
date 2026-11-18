@@ -137,6 +137,7 @@ async def _make_bot(
     lose_create_response: bool = False,
     resolution_failure_status: int | None = None,
     stale_update_once: bool = False,
+    delete_failure: str | None = None,
 ) -> tuple[BotDriver, BackendClient, httpx.AsyncClient, list[httpx.Request]]:
     requests: list[httpx.Request] = []
     lost_response = False
@@ -174,7 +175,32 @@ async def _make_bot(
                 },
                 request=request,
             )
+        if (
+            delete_failure == "stale"
+            and request.method == "DELETE"
+            and request.url.path.startswith(
+                ("/api/v1/breaks/", "/api/v1/recurrent-breaks/")
+            )
+        ):
+            return httpx.Response(
+                409,
+                json={
+                    "detail": {
+                        "code": "stale_event_revision",
+                        "message": "stale test revision",
+                    }
+                },
+                request=request,
+            )
         response = await client.send(request)
+        if (
+            delete_failure == "lost"
+            and request.method == "DELETE"
+            and request.url.path.startswith(
+                ("/api/v1/breaks/", "/api/v1/recurrent-breaks/")
+            )
+        ):
+            raise httpx.ReadTimeout("The break delete response was lost")
         if (
             lose_create_response
             and not lost_response
@@ -902,7 +928,7 @@ async def test_editing_break_confirms_displacement_and_sends_revision(
         await _close_bot(driver, http)
 
 
-async def test_weekly_break_edit_preserves_interval_and_delete_requires_confirmation(
+async def test_weekly_break_edit_preserves_interval_and_deletes_in_one_tap(
     client, db_session, bot_service_key
 ) -> None:
     teacher, _ = await _seed_accounts(db_session)
@@ -964,9 +990,6 @@ async def test_weekly_break_edit_preserves_interval_and_delete_requires_confirma
         assert "Break updated." in driver.session.last_message.text
 
         await driver.click("Delete break")
-        assert "Delete the entire recurring break?" in driver.session.last_message.text
-        assert await db_session.get(RecurrentEvent, existing.id) is not None
-        await driver.click("Confirm delete")
         exists = await db_session.execute(
             select(RecurrentEvent.id).where(RecurrentEvent.id == existing.id)
         )
@@ -1376,7 +1399,7 @@ async def test_generic_schedule_conflict_does_not_show_displacement_confirmation
         await _close_bot(driver, http)
 
 
-async def test_deleting_break_requires_confirmation_and_does_not_restore_lessons(
+async def test_deleting_break_is_immediate_and_does_not_restore_lessons(
     client, db_session, bot_service_key
 ) -> None:
     teacher, student = await _seed_accounts(db_session)
@@ -1414,17 +1437,6 @@ async def test_deleting_break_requires_confirmation_and_does_not_restore_lessons
         await _open_break_list(driver)
         await driver.click(_event_button(driver))
         await driver.click("Delete break")
-        assert "will remain deleted or cancelled" in driver.session.last_message.text
-        assert await db_session.get(Event, break_event.id) is not None
-        assert (
-            await db_session.execute(
-                select(RecurrentCancels).where(
-                    RecurrentCancels.recurrent_event_id == series.id,
-                    RecurrentCancels.start == datetime(2030, 11, 4, 10),
-                )
-            )
-        ).scalar_one_or_none() is not None
-        await driver.click("Confirm delete")
         assert not await _event_exists(db_session, break_event.id)
         assert (
             await db_session.execute(
@@ -1562,3 +1574,90 @@ def _button_labels(driver: BotDriver) -> list[str]:
     markup = driver.session.last_message.reply_markup
     assert markup is not None
     return [button.text for row in markup.inline_keyboard for button in row]
+
+
+async def test_break_delete_unknown_outcome_stays_on_detail_without_replay(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    break_event = _break(
+        teacher, datetime(2030, 11, 4, 10), datetime(2030, 11, 4, 10, 30)
+    )
+    db_session.add(break_event)
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher), delete_failure="lost"
+    )
+    try:
+        await _open_break_list(driver)
+        await driver.click(_event_button(driver))
+        await driver.click("Delete break")
+        text = driver.session.last_message.text
+        assert "Attention" in text
+        assert "outcome is unknown" in text
+        labels = _button_labels(driver)
+        assert "Reload break" in labels
+        assert "Delete break" not in labels
+        assert "Edit break" not in labels
+        assert sum(request.method == "DELETE" for request in requests) == 1
+
+        await driver.click("Reload break")
+        assert "no longer available" in driver.session.last_message.text
+        assert sum(request.method == "DELETE" for request in requests) == 1
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_break_delete_stale_revision_requires_reload(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    break_event = _break(
+        teacher, datetime(2030, 11, 4, 10), datetime(2030, 11, 4, 10, 30)
+    )
+    db_session.add(break_event)
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher), delete_failure="stale"
+    )
+    try:
+        await _open_break_list(driver)
+        await driver.click(_event_button(driver))
+        await driver.click("Delete break")
+        assert "This event changed. Reload it" in driver.session.last_message.text
+        labels = _button_labels(driver)
+        assert "Reload break" in labels
+        assert "Delete break" not in labels
+        assert await db_session.get(Event, break_event.id) is not None
+        await driver.click("Reload break")
+        assert "Current break details were reloaded" in (
+            driver.session.last_message.text
+        )
+        assert "Delete break" in _button_labels(driver)
+        assert sum(request.method == "DELETE" for request in requests) == 1
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_break_delete_double_tap_sends_one_delete(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    break_event = _break(
+        teacher, datetime(2030, 11, 4, 10), datetime(2030, 11, 4, 10, 30)
+    )
+    db_session.add(break_event)
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver)
+        await driver.click(_event_button(driver))
+        callback = driver.callback_data("Delete break")
+        await driver.click("Delete break")
+        await driver.click(data=callback)
+        assert sum(request.method == "DELETE" for request in requests) == 1
+        assert not await _event_exists(db_session, break_event.id)
+    finally:
+        await _close_bot(driver, http)

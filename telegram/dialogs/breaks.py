@@ -79,7 +79,6 @@ class BreakScreens(StatesGroup):
     confirm_cutoff_date = State()
     review = State()
     displacement = State()
-    confirm_delete = State()
 
 
 async def open_break_management(
@@ -1255,28 +1254,7 @@ async def cancel_displacement(
     await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
 
 
-async def begin_delete(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    detail = _detail(manager)
-    manager.dialog_data.update(
-        error="",
-        notice="",
-        confirm_text=(
-            "Delete this break? Any lessons previously displaced by it will remain "
-            "deleted or cancelled."
-            if not detail.is_recurrent
-            else "Delete the entire recurring break? Any lessons previously "
-            "displaced by it will remain deleted or cancelled."
-        ),
-        operation=None,
-        needs_reload=False,
-        outcome_unknown=False,
-    )
-    await manager.switch_to(BreakScreens.confirm_delete, show_mode=ShowMode.EDIT)
-
-
-async def confirm_delete(
+async def delete_break(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
     if callback.message is None:
@@ -1289,7 +1267,7 @@ async def confirm_delete(
     ):
         return
     detail = _detail(manager)
-    data.update(submitting=True, error="")
+    data.update(submitting=True, error="", notice="")
     try:
         await backend(manager).delete_management_event(
             _resource(manager),
@@ -1497,7 +1475,6 @@ async def management_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
         start_date_confirmation=escape(str(data.get("start_date_confirmation", ""))),
         cutoff_date_confirmation=escape(str(data.get("cutoff_date_confirmation", ""))),
         viewer_timezone=data["viewer_timezone"],
-        confirm_text=escape(str(data.get("confirm_text", ""))),
         has_field_snapshot=isinstance(data.get("field_snapshot"), dict),
         can_change_date=bool(data.get("start_date")),
         can_clear_cutoff=(
@@ -1570,7 +1547,7 @@ def build_break_dialog() -> Dialog:
             Button(
                 Const("Delete break"),
                 id="delete",
-                on_click=begin_delete,
+                on_click=delete_break,
                 when="can_manage",
             ),
             Button(
@@ -1778,23 +1755,6 @@ def build_break_dialog() -> Dialog:
             ),
             state=BreakScreens.displacement,
             getter=displacement_data,
-        ),
-        Window(
-            Format("{feedback}{confirm_text}\n{notice}"),
-            Button(
-                Const("Confirm delete"),
-                id="confirm",
-                on_click=confirm_delete,
-                when="can_manage",
-            ),
-            Button(
-                Const("Reload break"),
-                id="reload",
-                on_click=reload_state,
-                when="can_reload",
-            ),
-            Button(Const("Cancel"), id="cancel", on_click=back_to_detail),
-            state=BreakScreens.confirm_delete,
         ),
         getter=management_data,
         on_start=break_started,
