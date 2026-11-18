@@ -128,7 +128,6 @@ async def _create_student_vacation(driver: BotDriver) -> None:
     await driver.click("Change assignee")
     await driver.click("Alice Learner")
     await driver.text(_LOCAL_DATE)
-    await driver.text("09:00")
     await driver.text(_LOCAL_DATE)
     await driver.click("Save vacation")
 
@@ -304,7 +303,7 @@ async def test_teacher_two_students_and_unrelated_teacher_cross_flow(
                 )
             ).one()
             assert vacation.user_id == alice.id
-            assert vacation.start == datetime(2030, 11, 4, 2)
+            assert vacation.start == datetime(2030, 11, 3, 17)
             assert vacation.end == datetime(2030, 11, 4, 17)
             alice_events = _items(
                 await api.read_schedule_day(

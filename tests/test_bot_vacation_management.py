@@ -160,7 +160,6 @@ async def _create_vacation(
     *,
     subject: str | None,
     start_date: str,
-    start_time: str,
     end_date: str,
 ) -> None:
     await driver.click("Add vacation")
@@ -174,9 +173,11 @@ async def _create_vacation(
     await driver.text(start_date)
     assert driver.deleted_message_ids()[-1] == start_message_id
     assert driver.session.last_message.message_id == screen_message_id
-    time_message_id = driver.update_id + 1
-    await driver.text(start_time)
-    assert driver.deleted_message_ids()[-1] == time_message_id
+    assert "Enter the last vacation date (inclusive)" in (
+        driver.session.last_message.text
+    )
+    assert "start date" not in driver.session.last_message.text
+    assert "midnight" not in driver.session.last_message.text
     assert "Timezone:" not in driver.session.last_message.text
     assert "Asia/Bangkok" not in driver.session.last_message.text
     end_message_id = driver.update_id + 1
@@ -219,14 +220,10 @@ async def test_vacation_rejects_end_date_before_start_without_deleting_it(
         await driver.text("05/11/2030")
         assert driver.deleted_message_ids() == [start_message_id]
         assert driver.session.last_message.message_id == screen_message_id
-        time_message_id = driver.update_id + 1
-        await driver.text("10:00")
-        assert driver.deleted_message_ids()[-1] == time_message_id
-
         rejected_message_id = driver.update_id + 1
         await driver.text("04/11/2030")
         assert "cannot be before its start date" in driver.session.last_message.text
-        assert driver.deleted_message_ids() == [start_message_id, time_message_id]
+        assert driver.deleted_message_ids() == [start_message_id]
         assert rejected_message_id not in driver.deleted_message_ids()
     finally:
         await _close_bot(driver, http)
@@ -260,7 +257,6 @@ async def test_personal_vacation_picker_is_optional_and_failure_keeps_draft(
         assert "Enter the start date" in driver.session.last_message.text
 
         await driver.text("04/11/2030")
-        await driver.text("10:00")
         await driver.text("04/11/2030")
         await driver.click("Save vacation")
         vacation = (
@@ -269,7 +265,7 @@ async def test_personal_vacation_picker_is_optional_and_failure_keeps_draft(
             )
         ).scalar_one()
         assert vacation.user_id == teacher.id
-        assert vacation.start == datetime(2030, 11, 4, 3)
+        assert vacation.start == datetime(2030, 11, 3, 17)
         assert vacation.end == datetime(2030, 11, 4, 17)
     finally:
         await _close_bot(driver, http)
@@ -286,48 +282,44 @@ async def test_vacation_focused_edits_return_to_review_and_preserve_draft(
         await _open_vacations(driver)
         await driver.click("Add vacation")
         await driver.text("04/11/2030")
-        await driver.text("10:00")
-        await driver.text("06/11/2030")
-        assert "November 4 at 10:00" in driver.session.last_message.text
-        assert "Last vacation date (inclusive): November 6" in (
+        assert "Enter the last vacation date (inclusive)" in (
             driver.session.last_message.text
         )
+        await driver.text("06/11/2030")
+        review = driver.session.last_message.text
+        assert "First vacation date: Nov 4" in review
+        assert "Last vacation date: Nov 6" in review
+        assert "Timezone: Asia/Bangkok" in review
+        for removed in (
+            "Starts:",
+            "November",
+            "backend end",
+            "midnight",
+            "hidden, not erased",
+        ):
+            assert removed not in review
+        assert "Change start time" not in _labels(driver)
 
         await driver.click("Change assignee")
         await driver.click("Alice Learner")
         assert "Review vacation for Alice Learner" in driver.session.last_message.text
-        assert "November 4 at 10:00" in driver.session.last_message.text
-        assert "Last vacation date (inclusive): November 6" in (
-            driver.session.last_message.text
-        )
+        assert "First vacation date: Nov 4" in driver.session.last_message.text
+        assert "Last vacation date: Nov 6" in driver.session.last_message.text
         await driver.click("Change assignee")
         await driver.click("Back")
         assert "Review vacation for Alice Learner" in driver.session.last_message.text
 
         await driver.click("Change last vacation date")
         await driver.text("07/11/2030")
-        assert "Last vacation date (inclusive): November 7" in (
-            driver.session.last_message.text
-        )
+        assert "Last vacation date: Nov 7" in driver.session.last_message.text
         await driver.click("Change start date")
         await driver.text("05/11/2030")
-        assert "November 5 at 10:00" in driver.session.last_message.text
-        await driver.click("Change start time")
-        time_message_id = driver.update_id + 1
-        await driver.text("11:15")
-        assert driver.deleted_message_ids()[-1] == time_message_id
-        assert "November 5 at 11:15" in driver.session.last_message.text
-
-        await driver.click("Change start time")
-        await driver.click("Back")
-        assert "November 5 at 11:15" in driver.session.last_message.text
+        assert "First vacation date: Nov 5" in driver.session.last_message.text
 
         await driver.click("Change last vacation date")
         await driver.click("Back")
-        assert "November 5 at 11:15" in driver.session.last_message.text
-        assert "Last vacation date (inclusive): November 7" in (
-            driver.session.last_message.text
-        )
+        assert "First vacation date: Nov 5" in driver.session.last_message.text
+        assert "Last vacation date: Nov 7" in driver.session.last_message.text
 
         await driver.click("Change start date")
         rejected_message_id = driver.update_id + 1
@@ -335,10 +327,8 @@ async def test_vacation_focused_edits_return_to_review_and_preserve_draft(
         assert "cannot be after its end date" in driver.session.last_message.text
         assert rejected_message_id not in driver.deleted_message_ids()
         await driver.click("Back")
-        assert "November 5 at 11:15" in driver.session.last_message.text
-        assert "Last vacation date (inclusive): November 7" in (
-            driver.session.last_message.text
-        )
+        assert "First vacation date: Nov 5" in driver.session.last_message.text
+        assert "Last vacation date: Nov 7" in driver.session.last_message.text
         assert not any(
             request.url.path.startswith("/api/v1/vacations")
             and request.method in {"POST", "PUT"}
@@ -352,7 +342,7 @@ async def test_vacation_focused_edits_return_to_review_and_preserve_draft(
             )
         ).scalar_one()
         assert vacation.user_id == student.id
-        assert vacation.start == datetime(2030, 11, 5, 4, 15)
+        assert vacation.start == datetime(2030, 11, 4, 17)
         assert vacation.end == datetime(2030, 11, 7, 17)
 
         await driver.click("Add vacation")
@@ -365,6 +355,29 @@ async def test_vacation_focused_edits_return_to_review_and_preserve_draft(
             ).scalars()
         )
         assert len(vacations) == 1
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_vacation_back_from_end_date_returns_to_start_date_prompt(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _student, _other_student = await _seed_accounts(db_session)
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_vacations(driver)
+        await driver.click("Add vacation")
+        await driver.text("04/11/2030")
+        await driver.click("Back")
+        assert "Enter the start date" in driver.session.last_message.text
+        await driver.text("05/11/2030")
+        assert "Enter the last vacation date (inclusive)" in (
+            driver.session.last_message.text
+        )
+        await driver.text("05/11/2030")
+        assert "First vacation date: Nov 5" in driver.session.last_message.text
     finally:
         await _close_bot(driver, http)
 
@@ -383,7 +396,6 @@ async def test_inferred_year_back_restores_existing_vacation_draft(
         await _open_vacations(driver)
         await driver.click("Add vacation")
         await driver.text(start.strftime("%d/%m/%Y"))
-        await driver.text("10:00")
         await driver.text(end.strftime("%d/%m/%Y"))
         original_review = driver.session.last_message.text
 
@@ -414,14 +426,12 @@ async def test_second_vacation_creation_does_not_reuse_previous_end_date(
             driver,
             subject=None,
             start_date="04/11/2030",
-            start_time="10:00",
             end_date="04/11/2030",
         )
         await _create_vacation(
             driver,
             subject=None,
             start_date="06/11/2030",
-            start_time="11:00",
             end_date="06/11/2030",
         )
         vacations = list(
@@ -435,8 +445,8 @@ async def test_second_vacation_creation_does_not_reuse_previous_end_date(
         )
         assert len(vacations) == 2
         assert [vacation.start for vacation in vacations] == [
-            datetime(2030, 11, 4, 3),
-            datetime(2030, 11, 6, 4),
+            datetime(2030, 11, 3, 17),
+            datetime(2030, 11, 5, 17),
         ]
         assert [vacation.end for vacation in vacations] == [
             datetime(2030, 11, 4, 17),
@@ -459,7 +469,6 @@ async def test_vacation_keeps_inclusive_end_across_calendar_year(
             driver,
             subject=None,
             start_date="31/12/2030",
-            start_time="10:00",
             end_date="01/01/2031",
         )
         vacation = (
@@ -467,13 +476,13 @@ async def test_vacation_keeps_inclusive_end_across_calendar_year(
                 select(Event).where(Event.event_type == EventType.VACATION.value)
             )
         ).scalar_one()
-        assert vacation.start == datetime(2030, 12, 31, 3)
+        assert vacation.start == datetime(2030, 12, 30, 17)
         assert vacation.end == datetime(2031, 1, 1, 17)
     finally:
         await _close_bot(driver, http)
 
 
-async def test_vacation_keeps_backend_dst_gap_resolution(
+async def test_vacation_uses_whole_local_days_across_a_dst_change(
     client, db_session, bot_service_key
 ) -> None:
     teacher, _student, _other_student = await _seed_accounts(
@@ -488,7 +497,6 @@ async def test_vacation_keeps_backend_dst_gap_resolution(
             driver,
             subject=None,
             start_date="10/03/2024",
-            start_time="02:30",
             end_date="10/03/2024",
         )
         vacation = (
@@ -496,7 +504,7 @@ async def test_vacation_keeps_backend_dst_gap_resolution(
                 select(Event).where(Event.event_type == EventType.VACATION.value)
             )
         ).scalar_one()
-        assert vacation.start == datetime(2024, 3, 10, 7, 30)
+        assert vacation.start == datetime(2024, 3, 10, 5)
         assert vacation.end == datetime(2024, 3, 11, 4)
     finally:
         await _close_bot(driver, http)
@@ -552,19 +560,20 @@ async def test_teacher_creates_edits_and_deletes_student_vacation(
             driver,
             subject="Alice Learner",
             start_date="04/11/2030",
-            start_time="10:00",
             end_date="04/11/2030",
         )
         assert "Vacation created." in driver.session.last_message.text
         assert "Vacations " not in driver.session.last_message.text
-        assert "Alice Learner" in _vacation_button(driver, "Alice Learner")
+        assert _vacation_button(driver, "Alice Learner") == (
+            "Alice Learner · Nov 4 (2030) – Nov 4 (2030)"
+        )
         vacation = (
             await db_session.execute(
                 select(Event).where(Event.event_type == EventType.VACATION.value)
             )
         ).scalar_one()
         assert vacation.user_id == student.id
-        assert vacation.start == datetime(2030, 11, 4, 3)
+        assert vacation.start == datetime(2030, 11, 3, 17)
         assert vacation.end == datetime(2030, 11, 4, 17)
 
         await student_bot.text("/start")
@@ -590,23 +599,23 @@ async def test_teacher_creates_edits_and_deletes_student_vacation(
         )
         assert [item.id for item in listed.items] == [vacation.id]
         await driver.click(_vacation_button(driver, "Alice Learner"))
-        assert "Last vacation date (inclusive): November 4" in (
-            driver.session.last_message.text
-        )
+        assert "First vacation date: Nov 4" in driver.session.last_message.text
+        assert "Last vacation date: Nov 4" in driver.session.last_message.text
+        assert "Starts:" not in driver.session.last_message.text
         assert "2030-11-04" not in driver.session.last_message.text
         assert "(UTC" not in driver.session.last_message.text
 
         await driver.click("Edit vacation")
         await driver.click("Change last vacation date")
         await driver.text("06/11/2030")
-        assert "November 6" in driver.session.last_message.text
+        assert "Last vacation date: Nov 6" in driver.session.last_message.text
         await driver.click("Save vacation")
         assert "Vacation updated." in driver.session.last_message.text
         updated = await db_session.get(Event, vacation.id)
         assert updated is not None
         await db_session.refresh(updated)
         assert updated.user_id == student.id
-        assert updated.start == datetime(2030, 11, 4, 3)
+        assert updated.start == datetime(2030, 11, 3, 17)
         assert updated.end == datetime(2030, 11, 6, 17)
         assert "Vacation updated." in driver.session.last_message.text
         update_request = next(
@@ -677,7 +686,6 @@ async def test_teacher_personal_vacation_hides_the_roster_and_students_cannot_ma
             driver,
             subject=None,
             start_date="04/11/2030",
-            start_time="10:00",
             end_date="04/11/2030",
         )
         assert not any(
@@ -753,7 +761,6 @@ async def test_student_creates_own_vacation_and_unknown_create_is_not_replayed(
             driver,
             subject=None,
             start_date="04/11/2030",
-            start_time="09:30",
             end_date="05/11/2030",
         )
         unknown = (
@@ -770,7 +777,7 @@ async def test_student_creates_own_vacation_and_unknown_create_is_not_replayed(
             )
         ).scalar_one()
         assert vacation.user_id == student.id
-        assert vacation.start == datetime(2030, 11, 4, 9, 30)
+        assert vacation.start == datetime(2030, 11, 4)
         assert vacation.end == datetime(2030, 11, 6)
         assert (
             sum(
@@ -821,3 +828,9 @@ def _assert_same_message(driver: BotDriver) -> None:
     assert {call.model_dump().get("message_id") for call in edited} == {
         driver.session.last_message.message_id
     }
+
+
+def _labels(driver: BotDriver) -> list[str]:
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    return [button.text for row in markup.inline_keyboard for button in row]

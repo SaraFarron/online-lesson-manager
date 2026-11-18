@@ -25,20 +25,13 @@ from telegram.api import (
 )
 from telegram.dialogs.home import open_home
 from telegram.shared.access import backend
-from telegram.shared.date_cleanup import (
-    delete_accepted_date_message,
-    delete_accepted_input_message,
-)
+from telegram.shared.date_cleanup import delete_accepted_date_message
 from telegram.shared.feedback import feedback_block
 from telegram.shared.inputs import (
     ParsedScheduleDate,
-    combine_schedule_date_time,
     format_human_date,
-    format_human_datetime,
-    format_human_datetime_in_timezone,
     format_schedule_date_confirmation,
     parse_schedule_date,
-    parse_schedule_time,
 )
 
 VACATION_PAGE_SIZE = 20
@@ -52,7 +45,6 @@ class VacationScreens(StatesGroup):
     detail = State()
     start_date = State()
     confirm_date = State()
-    start_time = State()
     end_date = State()
     review = State()
     confirm_delete = State()
@@ -77,7 +69,6 @@ async def start_vacation_management(view: SessionView, manager: DialogManager) -
             "notice": "",
             "form_action": None,
             "start_date": None,
-            "start_time": None,
             "end_date": None,
             "resolution": None,
             "needs_reload": False,
@@ -100,25 +91,23 @@ def _detail(manager: DialogManager) -> EventManagementDetail:
     return EventManagementDetail.model_validate(manager.dialog_data["detail"])
 
 
-def _format_datetime(value: datetime, timezone: str) -> str:
-    return format_human_datetime_in_timezone(
-        value,
-        timezone,
-        reference_date=datetime.now(ZoneInfo(timezone)).date(),
-    )
-
-
 def _inclusive_end_date(value: datetime, timezone: str) -> date:
     last_included_instant = value.astimezone(UTC) - timedelta(microseconds=1)
     return last_included_instant.astimezone(ZoneInfo(timezone)).date()
 
 
-def _vacation_label(item: EventManagementItem, timezone: str) -> str:
-    inclusive_end = _inclusive_end_date(item.end, timezone)
-    return (
-        f"{item.subject_label} · {_format_datetime(item.start, timezone)} "
-        f"through {format_human_date(inclusive_end, reference_date=datetime.now(ZoneInfo(timezone)).date())}"
+def _format_date(value: date, timezone: str) -> str:
+    return format_human_date(
+        value,
+        reference_date=datetime.now(ZoneInfo(timezone)).date(),
+        short_month=True,
     )
+
+
+def _vacation_label(item: EventManagementItem, timezone: str) -> str:
+    first = item.start.astimezone(ZoneInfo(timezone)).date()
+    last = _inclusive_end_date(item.end, timezone)
+    return f"{item.subject_label} · {_format_date(first, timezone)} – {_format_date(last, timezone)}"
 
 
 def _parse_local_date(manager: DialogManager, value: str) -> ParsedScheduleDate:
@@ -169,7 +158,6 @@ async def begin_create(
         form_action="create",
         edit_flow="create",
         start_date=None,
-        start_time=None,
         end_date=None,
         resolution=None,
         error="",
@@ -252,7 +240,6 @@ async def _return_from_subject_picker(manager: DialogManager) -> None:
     return_to = manager.dialog_data.pop("subject_return_state", "start_date")
     states = {
         "start_date": VacationScreens.start_date,
-        "start_time": VacationScreens.start_time,
         "end_date": VacationScreens.end_date,
         "review": VacationScreens.review,
     }
@@ -265,12 +252,6 @@ async def edit_subject_from_start_date(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
     await _open_subject_picker(callback, manager, "start_date")
-
-
-async def edit_subject_from_start_time(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    await _open_subject_picker(callback, manager, "start_time")
 
 
 async def edit_subject_from_end_date(
@@ -425,7 +406,6 @@ async def begin_edit(
         subject_id=str(detail.user_id),
         subject_label=detail.subject_label,
         start_date=start.date().isoformat(),
-        start_time=start.strftime("%H:%M"),
         end_date=_inclusive_end_date(
             detail.end, manager.dialog_data["viewer_timezone"]
         ).isoformat(),
@@ -464,12 +444,7 @@ async def start_date_input(
     manager: DialogManager,
     value: str,
 ) -> None:
-    await _date_input(
-        message,
-        manager,
-        value,
-        str(manager.dialog_data.get("date_field", "start_date")),
-    )
+    await _date_input(message, manager, value, "start_date")
 
 
 async def end_date_input(
@@ -547,10 +522,11 @@ async def back_from_field_editor(
     states = {
         "review": VacationScreens.review,
         "start_date": VacationScreens.start_date,
-        "start_time": VacationScreens.start_time,
         "end_date": VacationScreens.end_date,
     }
     state = states.get(str(return_to), VacationScreens.menu)
+    if state == VacationScreens.start_date:
+        data["field_return_state"] = "menu"
     data.update(error="", pending_date=None, date_confirmation=None)
     await manager.switch_to(state, show_mode=ShowMode.EDIT)
 
@@ -572,57 +548,15 @@ async def _accept_date(manager: DialogManager, message: Message | None = None) -
         await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
     elif field == "start_date" and manager.dialog_data.get("edit_flow") == "create":
         manager.dialog_data["field_return_state"] = "start_date"
-        await manager.switch_to(VacationScreens.start_time, show_mode=ShowMode.EDIT)
-    elif field == "end_date" and manager.dialog_data.get("edit_flow") == "create":
-        await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
-    else:
-        await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
-
-
-async def start_time_input(
-    message: Message,
-    _widget: ManagedTextInput[str],
-    manager: DialogManager,
-    value: str,
-) -> None:
-    try:
-        parsed = parse_schedule_time(value)
-    except ValueError as exc:
-        manager.dialog_data["error"] = str(exc)
-        manager.show_mode = ShowMode.EDIT
-        return
-    manager.dialog_data.update(start_time=parsed, error="", resolution=None)
-    await delete_accepted_input_message(message, manager, "time")
-    if manager.dialog_data.get("field_return_state") == "review":
-        await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
-    elif manager.dialog_data.get("edit_flow") == "create":
-        manager.dialog_data["field_return_state"] = "start_time"
         await manager.switch_to(VacationScreens.end_date, show_mode=ShowMode.EDIT)
     else:
         await manager.switch_to(VacationScreens.review, show_mode=ShowMode.EDIT)
-
-
-async def start_time_error(
-    _message: Message,
-    _widget: ManagedTextInput[str],
-    manager: DialogManager,
-    error: ValueError,
-) -> None:
-    manager.dialog_data["error"] = str(error)
-    manager.show_mode = ShowMode.EDIT
 
 
 async def edit_start_date(
     _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
     await _begin_date_input(manager, "start_date", return_to="review")
-
-
-async def edit_start_time(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    manager.dialog_data.update(error="", resolution=None, field_return_state="review")
-    await manager.switch_to(VacationScreens.start_time, show_mode=ShowMode.EDIT)
 
 
 async def edit_end_date(
@@ -642,23 +576,20 @@ def _local_interval(data: dict[str, Any]) -> tuple[datetime, datetime]:
         raise ValueError(
             "The last vacation date is outside the supported range."
         ) from exc
-    start = combine_schedule_date_time(start_date, data["start_time"])
-    end = datetime.combine(exclusive_end, time.min)
-    if start >= end:
-        raise ValueError("The vacation start must be before its exclusive end.")
-    return start, end
+    return datetime.combine(start_date, time.min), datetime.combine(
+        exclusive_end, time.min
+    )
 
 
 async def review_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     data = dialog_manager.dialog_data
     try:
-        start, end = _local_interval(data)
+        _local_interval(data)
+        timezone = data["viewer_timezone"]
         interval = (
-            f"Timezone: {data['viewer_timezone']}\n"
-            f"Starts: {format_human_datetime(start, reference_date=datetime.now(ZoneInfo(data['viewer_timezone'])).date())}\n"
-            f"Last vacation date (inclusive): "
-            f"{format_human_date(date.fromisoformat(data['end_date']), reference_date=datetime.now(ZoneInfo(data['viewer_timezone'])).date())}\n"
-            "The backend end is midnight after the last vacation date."
+            f"First vacation date: {_format_date(date.fromisoformat(data['start_date']), timezone)}\n"
+            f"Last vacation date: {_format_date(date.fromisoformat(data['end_date']), timezone)}\n"
+            f"Timezone: {timezone}"
         )
         valid = True
     except (KeyError, TypeError, ValueError) as exc:
@@ -1012,13 +943,13 @@ async def detail_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     data = dialog_manager.dialog_data
     detail = EventManagementDetail.model_validate(data["detail"])
     timezone = data["viewer_timezone"]
+    first = detail.start.astimezone(ZoneInfo(timezone)).date()
     inclusive_end = _inclusive_end_date(detail.end, timezone)
     return {
         "detail_text": escape(
             f"{detail.subject_label}\n"
-            f"Starts: {_format_datetime(detail.start, timezone)}\n"
-            f"Last vacation date (inclusive): "
-            f"{format_human_date(inclusive_end, reference_date=datetime.now(ZoneInfo(timezone)).date())}\n"
+            f"First vacation date: {_format_date(first, timezone)}\n"
+            f"Last vacation date: {_format_date(inclusive_end, timezone)}\n"
             f"Timezone: {timezone}\n"
             "This vacation hides overlapping schedule events without deleting them."
         ),
@@ -1049,14 +980,7 @@ async def delete_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]
     }
 
 
-async def date_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
-    data = dialog_manager.dialog_data
-    field = dialog_manager.dialog_data.get("date_field", "start_date")
-    prompt = (
-        "Enter the start date"
-        if field == "start_date"
-        else "Enter the last vacation date (inclusive)"
-    )
+def _date_prompt_data(data: dict[str, Any], prompt: str) -> dict[str, Any]:
     return {
         "prompt": f"{prompt} as DD MM, DD:MM or DD/MM, optionally with a year.",
         "feedback": feedback_block(
@@ -1068,18 +992,14 @@ async def date_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     }
 
 
-async def timezone_error_data(
-    dialog_manager: DialogManager, **_: Any
-) -> dict[str, Any]:
-    return {
-        "timezone": escape(dialog_manager.dialog_data["viewer_timezone"]),
-        "can_change_subject": bool(dialog_manager.dialog_data.get("is_teacher"))
-        and dialog_manager.dialog_data.get("form_action") == "create",
-        "feedback": feedback_block(
-            error=str(dialog_manager.dialog_data.get("error", "")),
-            warning=str(dialog_manager.dialog_data.get("warning", "")),
-        ),
-    }
+async def start_date_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
+    return _date_prompt_data(dialog_manager.dialog_data, "Enter the start date")
+
+
+async def end_date_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
+    return _date_prompt_data(
+        dialog_manager.dialog_data, "Enter the last vacation date (inclusive)"
+    )
 
 
 async def confirmation_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
@@ -1212,7 +1132,7 @@ def build_vacation_dialog() -> Dialog:
             Button(Const("Back"), id="back", on_click=back_from_field_editor),
             Button(Const("Cancel"), id="cancel", on_click=back_to_menu),
             state=VacationScreens.start_date,
-            getter=date_data,
+            getter=start_date_data,
         ),
         Window(
             Format("{feedback}{confirmation}\nConfirm this inferred next-year date."),
@@ -1223,31 +1143,7 @@ def build_vacation_dialog() -> Dialog:
             getter=confirmation_data,
         ),
         Window(
-            Format(
-                "{feedback}Enter the local start time as HH:MM or HH MM.\n"
-                "Timezone: {timezone}"
-            ),
-            TextInput(
-                "start_time",
-                on_success=start_time_input,
-                on_error=start_time_error,
-            ),
-            Button(
-                Const("Change assignee"),
-                id="change_assignee",
-                on_click=edit_subject_from_start_time,
-                when="can_change_subject",
-            ),
-            Button(Const("Back"), id="back", on_click=back_from_field_editor),
-            Button(Const("Cancel"), id="cancel", on_click=back_to_menu),
-            state=VacationScreens.start_time,
-            getter=timezone_error_data,
-        ),
-        Window(
-            Format(
-                "{feedback}{prompt}\n"
-                "The vacation ends at local midnight after this date.\n"
-            ),
+            Format("{feedback}{prompt}"),
             TextInput("end_date", on_success=end_date_input, on_error=date_input_error),
             Button(
                 Const("Change assignee"),
@@ -1258,13 +1154,10 @@ def build_vacation_dialog() -> Dialog:
             Button(Const("Back"), id="back", on_click=back_from_field_editor),
             Button(Const("Cancel"), id="cancel", on_click=back_to_menu),
             state=VacationScreens.end_date,
-            getter=date_data,
+            getter=end_date_data,
         ),
         Window(
-            Format(
-                "{feedback}Review vacation for {subject_label}\n{review}\n"
-                "Overlapping events are hidden, not erased.\n{notice}"
-            ),
+            Format("{feedback}Review vacation for {subject_label}\n{review}\n{notice}"),
             Button(
                 Const("Save vacation"),
                 id="submit",
@@ -1275,12 +1168,6 @@ def build_vacation_dialog() -> Dialog:
                 Const("Change start date"),
                 id="edit_date",
                 on_click=edit_start_date,
-                when="can_edit",
-            ),
-            Button(
-                Const("Change start time"),
-                id="edit_time",
-                on_click=edit_start_time,
                 when="can_edit",
             ),
             Button(
