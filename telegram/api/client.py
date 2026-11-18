@@ -243,15 +243,15 @@ class BackendClient:
         elif code == "occurrence_already_cancelled":
             message = "This lesson occurrence is already cancelled. Reload the series."
         elif response.status_code == 422 and detail == "Break not found":
-            message = "This break is no longer available. Refresh the list."
+            message = "This break is no longer available. Go back to the list."
         elif response.status_code == 422 and detail == "Vacation not found":
-            message = "This vacation is no longer available. Refresh the list."
+            message = "This vacation is no longer available. Go back to the list."
         elif response.status_code == 422 and detail in {
             "Lesson not found",
             "Recurring event not found",
             "One-off event not found",
         }:
-            message = "This lesson is no longer available. Refresh the list."
+            message = "This lesson is no longer available. Go back to the list."
         elif (
             response.status_code == 409
             and detail == "Schedule is being changed; retry this request."

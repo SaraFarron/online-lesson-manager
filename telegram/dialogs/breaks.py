@@ -241,14 +241,6 @@ async def next_events(
     )
 
 
-async def refresh_events(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    await _load_page(
-        callback, manager, _kind(manager), int(manager.dialog_data["skip"])
-    )
-
-
 async def select_break(
     callback: CallbackQuery,
     _widget: Select[str],
@@ -1559,10 +1551,7 @@ def build_break_dialog() -> Dialog:
                     when="has_next",
                 ),
             ),
-            Row(
-                Button(Const("Add break"), id="add", on_click=begin_create),
-                Button(Const("Refresh"), id="refresh", on_click=refresh_events),
-            ),
+            Button(Const("Add break"), id="add", on_click=begin_create),
             Row(
                 Button(
                     Const("Recurring breaks"),

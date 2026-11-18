@@ -384,19 +384,6 @@ async def _show_publication_results(
     await _load_results(sender_id, chat_id, manager, 0)
 
 
-async def refresh_broadcast_results(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if callback.message is None:
-        raise ValueError("Broadcast results require a private chat")
-    await _load_results(
-        callback.from_user.id,
-        callback.message.chat.id,
-        manager,
-        int(manager.dialog_data.get("results_skip", 0)),
-    )
-
-
 async def previous_result_page(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
@@ -663,12 +650,6 @@ def build_broadcast_dialog() -> Dialog:
                     on_click=next_result_page,
                     when="has_next_results",
                 ),
-            ),
-            Button(
-                Const("Refresh results"),
-                id="refresh_results",
-                on_click=refresh_broadcast_results,
-                when="publication",
             ),
             Button(Const("Back to home"), id="home", on_click=back_to_home),
             state=BroadcastScreens.results,

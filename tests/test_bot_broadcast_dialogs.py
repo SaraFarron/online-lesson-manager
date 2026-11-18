@@ -275,7 +275,7 @@ async def test_confirmation_reconciles_lost_response_and_results_reload_and_page
             ),
             now=datetime.now(UTC) + timedelta(seconds=2),
         )
-        await driver.click("Refresh results")
+        await driver.click("Previous results")
         assert "sent: 1" in driver.session.last_message.text
         assert "Pending: 11" in driver.session.last_message.text
         assert (

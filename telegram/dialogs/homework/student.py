@@ -436,22 +436,6 @@ async def _load_assignment_detail(
     await manager.switch_to(StudentHomeworkScreens.detail, show_mode=ShowMode.EDIT)
 
 
-async def refresh_assignment(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if callback.message is None:
-        raise ValueError("Refreshing homework requires a private chat")
-    assignment = manager.dialog_data.get("assignment")
-    if not isinstance(assignment, dict):
-        return
-    await _load_assignment_detail(
-        callback.from_user.id,
-        callback.message.chat.id,
-        manager,
-        UUID(assignment["id"]),
-    )
-
-
 async def back_to_assignments(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
@@ -1027,14 +1011,11 @@ def build_homework_student_dialog() -> Dialog:
                     when="has_next_assignment_text_page",
                 ),
             ),
-            Row(
-                Button(
-                    Format("{retry_label}"),
-                    id="submit",
-                    on_click=begin_submission,
-                    when="can_submit",
-                ),
-                Button(Const("Refresh"), id="refresh", on_click=refresh_assignment),
+            Button(
+                Format("{retry_label}"),
+                id="submit",
+                on_click=begin_submission,
+                when="can_submit",
             ),
             Button(
                 Const("Back to homework"),

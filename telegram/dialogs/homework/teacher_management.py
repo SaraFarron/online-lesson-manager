@@ -578,20 +578,6 @@ async def filter_complete(
     await _filter_status(callback, manager, "COMPLETE")
 
 
-async def refresh_assignment_list(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if callback.message is None:
-        raise ValueError("Homework list requires a private chat")
-    await _load_assignment_page(
-        callback.from_user.id,
-        callback.message.chat.id,
-        manager,
-        int(manager.dialog_data.get("assignment_skip", 0)),
-    )
-    await manager.show(show_mode=ShowMode.EDIT)
-
-
 async def select_assignment(
     callback: CallbackQuery,
     _widget: Select[str],
@@ -686,38 +672,6 @@ async def _load_detail(
         error="",
     )
     return True
-
-
-async def refresh_detail(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if callback.message is None:
-        raise ValueError("Refreshing homework requires a private chat")
-    assignment = manager.dialog_data.get("assignment")
-    if not isinstance(assignment, dict):
-        return
-    loaded = await _load_detail(
-        callback.from_user.id,
-        callback.message.chat.id,
-        manager,
-        UUID(assignment["id"]),
-    )
-    if loaded:
-        manager.dialog_data.update(outcome_unknown=False, notice="")
-        await manager.show(show_mode=ShowMode.EDIT)
-    elif manager.dialog_data.get("detail_missing"):
-        await _load_assignment_page(
-            callback.from_user.id,
-            callback.message.chat.id,
-            manager,
-            int(manager.dialog_data.get("assignment_skip", 0)),
-        )
-        manager.dialog_data["notice"] = "This assignment is no longer available."
-        await manager.switch_to(
-            TeacherHomeworkScreens.assignments, show_mode=ShowMode.EDIT
-        )
-    else:
-        await manager.show(show_mode=ShowMode.EDIT)
 
 
 async def select_submission_version(
@@ -1231,9 +1185,6 @@ def build_homework_teacher_management_dialog() -> Dialog:
                     on_click=close_management,
                     when="is_profile_view",
                 ),
-                Button(
-                    Const("Refresh"), id="refresh", on_click=refresh_assignment_list
-                ),
             ),
             Button(Const("Close"), id="close", on_click=close_management),
             state=TeacherHomeworkScreens.assignments,
@@ -1318,16 +1269,7 @@ def build_homework_teacher_management_dialog() -> Dialog:
                     when="can_delete",
                 ),
             ),
-            Row(
-                Button(
-                    Const("Refresh"),
-                    id="refresh",
-                    on_click=refresh_detail,
-                ),
-                Button(
-                    Const("Back to list"), id="back", on_click=back_to_assignment_list
-                ),
-            ),
+            Button(Const("Back to list"), id="back", on_click=back_to_assignment_list),
             state=TeacherHomeworkScreens.detail,
         ),
         Window(

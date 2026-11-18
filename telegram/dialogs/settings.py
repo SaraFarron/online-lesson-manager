@@ -869,12 +869,6 @@ def build_settings_dialog() -> Dialog:
                 when="can_reload",
             ),
             Button(
-                Const("Refresh settings"),
-                id="refresh",
-                on_click=reload_settings,
-                when="can_open",
-            ),
-            Button(
                 Const("Back to home"),
                 id="home",
                 on_click=return_home,

@@ -307,7 +307,6 @@ async def test_teacher_reviews_versions_downloads_completes_and_deletes(
 
         await driver.click("Back to list")
         await driver.click("Complete")
-        await driver.click("Refresh")
         assert "COMPLETE" in driver.session.last_message.text
         await driver.click(_button_with_prefix(driver, "Mark this complete"))
         await driver.click("Delete assignment")

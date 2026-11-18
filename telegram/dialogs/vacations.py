@@ -371,12 +371,6 @@ async def next_vacations(
     )
 
 
-async def refresh_vacations(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    await _load_page(callback, manager, int(manager.dialog_data["skip"]))
-
-
 async def select_vacation(
     callback: CallbackQuery,
     _widget: Select[str],
@@ -1167,10 +1161,7 @@ def build_vacation_dialog() -> Dialog:
                     when="has_next",
                 ),
             ),
-            Row(
-                Button(Const("Refresh"), id="refresh", on_click=refresh_vacations),
-                Button(Const("Add vacation"), id="add", on_click=begin_create),
-            ),
+            Button(Const("Add vacation"), id="add", on_click=begin_create),
             Button(
                 Const("Reload vacations"),
                 id="reload",

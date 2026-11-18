@@ -289,22 +289,6 @@ async def _switch_profile_list(
         )
 
 
-async def refresh_profiles(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if callback.message is None:
-        raise ValueError("Student profiles require a private chat")
-    data = manager.dialog_data
-    await _load_profile_page(
-        callback.from_user.id,
-        callback.message.chat.id,
-        manager,
-        str(data.get("list_kind", "active")),
-        int(data.get("profile_skip", 0)),
-    )
-    await manager.show(show_mode=ShowMode.EDIT)
-
-
 async def select_profile(
     callback: CallbackQuery,
     _widget: Select[str],
@@ -365,46 +349,6 @@ async def select_profile(
         outcome_unknown=False,
     )
     await manager.switch_to(StudentProfileScreens.detail, show_mode=ShowMode.EDIT)
-
-
-async def refresh_profile(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    if callback.message is None:
-        raise ValueError("Student profile requires a private chat")
-    data = manager.dialog_data
-    raw_profile = data.get("profile")
-    if not isinstance(raw_profile, dict):
-        manager.dialog_data["error"] = "Select a student from the current page."
-        await manager.show(show_mode=ShowMode.EDIT)
-        return
-    try:
-        profile = TeacherStudentProfileDetail.model_validate(raw_profile)
-        if data.get("list_kind") == "former":
-            refreshed = await backend(manager).read_former_student_profile(
-                callback.from_user.id,
-                callback.message.chat.id,
-                profile.relationship_id,
-            )
-        else:
-            refreshed = await backend(manager).read_teacher_student_profile(
-                callback.from_user.id,
-                callback.message.chat.id,
-                profile.student_id,
-            )
-    except BackendError as exc:
-        if exc.status == 404:
-            await _refresh_after_removal(callback, manager)
-            return
-        data["error"] = str(exc)
-        await manager.show(show_mode=ShowMode.EDIT)
-        return
-    except BackendUnavailable as exc:
-        data["error"] = str(exc)
-        await manager.show(show_mode=ShowMode.EDIT)
-        return
-    data.update(profile=refreshed.model_dump(mode="json"), error="", warning="")
-    await manager.show(show_mode=ShowMode.EDIT)
 
 
 async def _refresh_after_removal(
@@ -756,14 +700,11 @@ def build_student_profiles_dialog() -> Dialog:
             ),
             # The former-student list is intentionally not exposed in the UI yet;
             # its handlers and window stay reachable only through code.
-            Row(
-                Button(
-                    Const("Active students"),
-                    id="active",
-                    on_click=show_active_students,
-                    when="can_return_to_former",
-                ),
-                Button(Const("Refresh"), id="refresh", on_click=refresh_profiles),
+            Button(
+                Const("Active students"),
+                id="active",
+                on_click=show_active_students,
+                when="can_return_to_former",
             ),
             Button(Const("Close"), id="close", on_click=close_student_profiles),
             state=StudentProfileScreens.active,
@@ -793,13 +734,10 @@ def build_student_profiles_dialog() -> Dialog:
                     when="has_next",
                 ),
             ),
-            Row(
-                Button(
-                    Const("Active students"),
-                    id="active",
-                    on_click=show_active_students,
-                ),
-                Button(Const("Refresh"), id="refresh", on_click=refresh_profiles),
+            Button(
+                Const("Active students"),
+                id="active",
+                on_click=show_active_students,
             ),
             Button(Const("Close"), id="close", on_click=close_student_profiles),
             state=StudentProfileScreens.former,
@@ -818,13 +756,10 @@ def build_student_profiles_dialog() -> Dialog:
                 on_click=begin_student_removal,
                 when="can_remove",
             ),
-            Row(
-                Button(Const("Refresh"), id="refresh", on_click=refresh_profile),
-                Button(
-                    Const("Back to list"),
-                    id="back",
-                    on_click=back_to_profile_list,
-                ),
+            Button(
+                Const("Back to list"),
+                id="back",
+                on_click=back_to_profile_list,
             ),
             Button(Const("Close"), id="close", on_click=close_student_profiles),
             state=StudentProfileScreens.detail,

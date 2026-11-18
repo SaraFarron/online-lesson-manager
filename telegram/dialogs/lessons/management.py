@@ -153,14 +153,6 @@ async def _load_page(
     await manager.switch_to(LessonManagementScreens.events, show_mode=ShowMode.EDIT)
 
 
-async def refresh_events(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    await _load_page(
-        callback, manager, _kind(manager), int(manager.dialog_data["skip"])
-    )
-
-
 async def previous_events(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
@@ -1358,7 +1350,6 @@ def build_event_management_dialog() -> Dialog:
                 ),
             ),
             Row(
-                Button(Const("Refresh"), id="refresh", on_click=refresh_events),
                 Button(
                     Const("Weekly lessons"),
                     id="weekly",
