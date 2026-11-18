@@ -3,6 +3,10 @@
 **Status:** Implemented and verified by automated tests (2026-11-17); no live
 Telegram or PostgreSQL checks were performed.
 
+**Superseded in part (2026-11-18):** its student-list label, `Refresh` and
+per-kind list behavior are replaced by
+[telegram-lists-and-breaks-cleanup](./telegram-lists-and-breaks-cleanup.md).
+
 ## Goal
 Declutter the Telegram bot: move Settings/Vacations into the Telegram command
 menu, tighten the week schedule, settings, student list, broadcast and homework

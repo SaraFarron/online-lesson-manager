@@ -9,6 +9,10 @@ steps, and focused edits preserve unrelated draft values.
 **Status:** Automated closeout for original Tasks 01–09 is complete. PostgreSQL
 verification remains unavailable; no live Telegram actions were performed.
 
+**Superseded in part (2026-11-18):** the per-kind break list and the
+`Refresh` controls are replaced by the unified, one-per-row lists in
+[telegram-lists-and-breaks-cleanup](./telegram-lists-and-breaks-cleanup.md).
+
 ## Scope (README.md sections covered)
 
 - [Bot interface](../../README.md#интерфейс-бота): edit-in-place navigation,
