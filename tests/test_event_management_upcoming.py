@@ -90,13 +90,22 @@ async def test_upcoming_orders_one_offs_and_series_by_next_occurrence(
         interval_end=None,
         timezone="Europe/Berlin",
     )
+    future_cancelled = _series(
+        teacher_uuid, student, datetime(2030, 2, 1, 9), interval_end=None
+    )
+    future = _series(teacher_uuid, student, datetime(2031, 3, 1, 9), interval_end=None)
     db_session.add_all(
         [past, ongoing, later, open_ended, cancelled_next, ended]
-        + [fully_cancelled, old_local]
+        + [fully_cancelled, old_local, future_cancelled, future]
     )
     await db_session.flush()
     db_session.add_all(
         [
+            RecurrentCancels(
+                recurrent_event_id=future_cancelled.id,
+                start=datetime(2030, 2, 1, 9),
+                end=datetime(2030, 2, 1, 10),
+            ),
             RecurrentCancels(
                 recurrent_event_id=cancelled_next.id,
                 start=datetime(2030, 1, 16, 9),
@@ -132,8 +141,10 @@ async def test_upcoming_orders_one_offs_and_series_by_next_occurrence(
         (open_ended.id, datetime(2030, 1, 15, 9, tzinfo=UTC)),
         (later.id, datetime(2030, 1, 20, 9, tzinfo=UTC)),
         (cancelled_next.id, datetime(2030, 1, 23, 9, tzinfo=UTC)),
+        (future_cancelled.id, datetime(2030, 2, 8, 9, tzinfo=UTC)),
+        (future.id, datetime(2031, 3, 1, 9, tzinfo=UTC)),
     ]
-    assert page.total == 5
+    assert page.total == 7
     assert {item.id: item.cancelled_occurrences for item in page.items}[
         cancelled_next.id
     ] == 1
@@ -143,13 +154,15 @@ async def test_upcoming_orders_one_offs_and_series_by_next_occurrence(
         True,
         False,
         True,
+        True,
+        True,
     ]
 
     second = await management_service.list_upcoming_managed_events(
         db_session, teacher, EventType.LESSON, skip=1, limit=2, subject_id=None, now=NOW
     )
     assert [item.id for item in second.items] == [old_local.id, open_ended.id]
-    assert second.total == 5
+    assert second.total == 7
 
     breaks = await management_service.list_upcoming_managed_events(
         db_session,

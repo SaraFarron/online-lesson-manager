@@ -207,7 +207,10 @@ def _telegram_id(user: User) -> int:
 async def _open_break_list(driver: BotDriver, *, weekly: bool = False) -> None:
     await driver.text("/start")
     await driver.click("Breaks")
-    await driver.click("Recurring breaks" if weekly else "One-time breaks")
+    driver.add_break_label = "Recurring break" if weekly else "One-time break"
+    assert (
+        "Manage breaks. Tap a break to remove it." in driver.session.last_message.text
+    )
     assert "Showing " not in driver.session.last_message.text
 
 
@@ -220,6 +223,7 @@ async def _enter_break(
     cutoff_date: str | None = None,
 ) -> None:
     await driver.click("Add break")
+    await driver.click(driver.add_break_label)
     screen_message_id = driver.session.last_message.message_id
     assert "Timezone:" not in driver.session.last_message.text
     assert "Asia/Bangkok" not in driver.session.last_message.text
@@ -252,9 +256,14 @@ def _event_button(driver: BotDriver) -> str:
     assert markup is not None
     for row in markup.inline_keyboard:
         for button in row:
-            if "break ·" in button.text.lower() and button.callback_data is not None:
+            if (
+                button.text.startswith(("Weekly · ", "One-time · "))
+                and button.callback_data is not None
+            ):
                 return button.text
-    raise AssertionError("No break on the current page")
+    raise AssertionError(
+        f"No break on the current page: {driver.session.last_message.text}"
+    )
 
 
 def _assert_same_message(driver: BotDriver) -> None:
@@ -392,6 +401,7 @@ async def test_break_time_input_cleanup_and_validation_failures(
     try:
         await _open_break_list(driver)
         await driver.click("Add break")
+        await driver.click(driver.add_break_label)
         await driver.text("10/03/2030")
         initial_deletions = driver.deleted_message_ids()
 
@@ -450,6 +460,7 @@ async def test_backend_rejected_break_times_are_not_deleted_on_create_or_edit(
     try:
         await _open_break_list(driver)
         await driver.click("Add break")
+        await driver.click(driver.add_break_label)
         await driver.text("04/11/2030")
         initial_deletions = driver.deleted_message_ids()
         create_message_id = driver.update_id + 1
@@ -1494,3 +1505,57 @@ async def test_lost_break_create_response_is_not_replayed(
         )
     finally:
         await _close_bot(driver, http)
+
+
+async def test_break_list_is_one_column_sorted_with_short_labels_and_add_choice(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _student = await _seed_accounts(db_session)
+    db_session.add_all(
+        [
+            _break(teacher, datetime(2030, 10, 20, 9), datetime(2030, 10, 20, 9, 30)),
+            _break(
+                teacher,
+                datetime(2030, 10, 14, 9),
+                datetime(2030, 10, 14, 9, 15),
+                interval=7,
+                interval_end=datetime(2030, 11, 30, 9),
+            ),
+            _break(teacher, datetime(2030, 10, 26, 9), datetime(2030, 10, 26, 9, 30)),
+        ]
+    )
+    await db_session.commit()
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver)
+        text = driver.session.last_message.text
+        assert "Manage breaks. Tap a break to remove it." in text
+        assert "October" not in text
+        markup = driver.session.last_message.reply_markup
+        assert markup is not None
+        rows = [[button.text for button in row] for row in markup.inline_keyboard]
+        assert rows == [
+            ["Add break"],
+            ["Weekly · Oct 14 (2030) 9:00 - 9:15"],
+            ["One-time · Oct 20 (2030) 9:00 - 9:30"],
+            ["One-time · Oct 26 (2030) 9:00 - 9:30"],
+            ["Back to home"],
+        ]
+
+        await driver.click("Add break")
+        assert _button_labels(driver) == ["One-time break", "Recurring break", "Back"]
+        await driver.click("Back")
+        await driver.click("Weekly · Oct 14 (2030) 9:00 - 9:15")
+        assert "Edit break" in _button_labels(driver)
+        assert "Delete break" in _button_labels(driver)
+    finally:
+        await _close_bot(driver, http)
+
+
+def _button_labels(driver: BotDriver) -> list[str]:
+    assert driver.session.last_message is not None
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    return [button.text for row in markup.inline_keyboard for button in row]

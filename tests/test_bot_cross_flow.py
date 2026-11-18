@@ -135,6 +135,7 @@ async def _create_student_vacation(driver: BotDriver) -> None:
 
 async def _add_break(driver: BotDriver) -> None:
     await driver.click("Add break")
+    await driver.click("One-time break")
     await driver.text(_LOCAL_DATE)
     await driver.text("09:30")
     await driver.text("12:30")
@@ -346,7 +347,6 @@ async def test_teacher_two_students_and_unrelated_teacher_cross_flow(
             await teacher_bot.click("Back to home")
 
             await teacher_bot.click("Breaks")
-            await teacher_bot.click("One-time breaks")
             await _add_break(teacher_bot)
             assert teacher_bot.session.last_message.text.count("One-time lesson") == 2
             lesson_ids = {lesson.id for lesson in lessons}

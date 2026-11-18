@@ -501,7 +501,8 @@ def _next_series_occurrence_start(
         from_storage_utc(event.interval_end) if event.interval_end is not None else None
     )
     step = timedelta(days=event.interval)
-    window_start = reference
+    # A series that has not started yet can only begin at its first occurrence.
+    window_start = max(reference, from_storage_utc(event.start))
     # Windows are contiguous and one step long, so each holds an occurrence and
     # every cancellation can consume at most one of them.
     try:

@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, ShowMode, StartMode, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Group, Row, Select
+from aiogram_dialog.widgets.kbd import Button, Column, Group, Row, Select
 from aiogram_dialog.widgets.text import Const, Format
 from pydantic import BaseModel, ValidationError
 
@@ -73,8 +73,8 @@ _EDIT_FIELDS = (
 
 
 class BreakScreens(StatesGroup):
-    menu = State()
     events = State()
+    add_kind = State()
     detail = State()
     start_date = State()
     confirm_start_date = State()
@@ -95,30 +95,45 @@ async def open_break_management(
     view = SessionView.model_validate(manager.dialog_data["view"])
     if view.account.role != "TEACHER":
         raise ValueError("Only teachers can manage breaks")
+    data: dict[str, Any] = {
+        "view": view.model_dump(mode="json"),
+        "viewer_timezone": view.account.timezone,
+        "kind": None,
+        "skip": 0,
+        "items": [],
+        "total": 0,
+        "detail": None,
+        "error": "",
+        "warning": "",
+        "notice": "",
+        "form_action": None,
+        "resolution": None,
+        "interval_end": None,
+        "preview": None,
+        "preview_skip": 0,
+        "submitting": False,
+        "needs_reload": False,
+        "outcome_unknown": False,
+        "operation": None,
+        "field_snapshot": None,
+    }
+    try:
+        page = await backend(manager).read_unified_management_page(
+            callback.from_user.id,
+            callback.message.chat.id,
+            "breaks",
+            limit=BREAK_PAGE_SIZE,
+        )
+    except (BackendError, BackendUnavailable) as exc:
+        data["error"] = str(exc)
+    else:
+        data.update(
+            items=[item.model_dump(mode="json") for item in page.items],
+            total=page.total,
+        )
     await manager.start(
-        BreakScreens.menu,
-        data={
-            "view": view.model_dump(mode="json"),
-            "viewer_timezone": view.account.timezone,
-            "kind": None,
-            "skip": 0,
-            "items": [],
-            "total": 0,
-            "detail": None,
-            "error": "",
-            "warning": "",
-            "notice": "",
-            "form_action": None,
-            "resolution": None,
-            "interval_end": None,
-            "preview": None,
-            "preview_skip": 0,
-            "submitting": False,
-            "needs_reload": False,
-            "outcome_unknown": False,
-            "operation": None,
-            "field_snapshot": None,
-        },
+        BreakScreens.events,
+        data=data,
         mode=StartMode.NORMAL,
         show_mode=ShowMode.EDIT,
     )
@@ -175,30 +190,38 @@ def _format_date(value: date, timezone: str) -> str:
 
 
 def _break_label(item: EventManagementItem, timezone: str) -> str:
-    label = "Weekly break" if item.is_recurrent else "One-time break"
-    return f"{label} · {_format_interval(item.start, item.end, timezone)}"
+    label = "Weekly" if item.is_recurrent else "One-time"
+    start = item.next_occurrence_start or item.start
+    end = start + (item.end - item.start)
+    return f"{label} · {_format_interval(start, end, timezone)}"
 
 
 async def _load_page(
-    callback: CallbackQuery, manager: DialogManager, kind: BreakKind, skip: int
+    callback: CallbackQuery, manager: DialogManager, skip: int
 ) -> None:
     if callback.message is None:
         raise ValueError("Break management requires a private chat")
     try:
-        page = await backend(manager).read_management_page(
+        page = await backend(manager).read_unified_management_page(
             callback.from_user.id,
             callback.message.chat.id,
-            "breaks" if kind == "once" else "recurrent-breaks",
+            "breaks",
             skip=skip,
             limit=BREAK_PAGE_SIZE,
         )
+        if page.total > 0 and skip >= page.total:
+            skip = (page.total - 1) // BREAK_PAGE_SIZE * BREAK_PAGE_SIZE
+            page = await backend(manager).read_unified_management_page(
+                callback.from_user.id,
+                callback.message.chat.id,
+                "breaks",
+                skip=skip,
+                limit=BREAK_PAGE_SIZE,
+            )
     except (BackendError, BackendUnavailable) as exc:
-        manager.dialog_data.update(
-            kind=kind, skip=skip, items=[], total=0, error=str(exc)
-        )
+        manager.dialog_data.update(skip=skip, items=[], total=0, error=str(exc))
     else:
         manager.dialog_data.update(
-            kind=kind,
             skip=skip,
             items=[item.model_dump(mode="json") for item in page.items],
             total=page.total,
@@ -208,16 +231,25 @@ async def _load_page(
     await manager.switch_to(BreakScreens.events, show_mode=ShowMode.EDIT)
 
 
-async def choose_one_time(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
+async def open_add_break(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    await _load_page(callback, manager, "once", 0)
+    manager.dialog_data.update(error="", warning="", notice="")
+    await manager.switch_to(BreakScreens.add_kind, show_mode=ShowMode.EDIT)
+
+
+async def choose_one_time(
+    callback: CallbackQuery, button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["kind"] = "once"
+    await begin_create(callback, button, manager)
 
 
 async def choose_weekly(
-    callback: CallbackQuery, _button: Button, manager: DialogManager
+    callback: CallbackQuery, button: Button, manager: DialogManager
 ) -> None:
-    await _load_page(callback, manager, "weekly", 0)
+    manager.dialog_data["kind"] = "weekly"
+    await begin_create(callback, button, manager)
 
 
 async def previous_events(
@@ -226,7 +258,6 @@ async def previous_events(
     await _load_page(
         callback,
         manager,
-        _kind(manager),
         max(0, int(manager.dialog_data["skip"]) - BREAK_PAGE_SIZE),
     )
 
@@ -237,7 +268,6 @@ async def next_events(
     await _load_page(
         callback,
         manager,
-        _kind(manager),
         int(manager.dialog_data["skip"]) + BREAK_PAGE_SIZE,
     )
 
@@ -262,6 +292,7 @@ async def select_break(
         manager.dialog_data["error"] = "Reload the list and select a current break."
         await manager.show(show_mode=ShowMode.EDIT)
         return
+    manager.dialog_data["kind"] = "weekly" if selected["is_recurrent"] else "once"
     try:
         detail = await backend(manager).read_management_detail(
             callback.from_user.id,
@@ -1101,7 +1132,7 @@ async def _send_write(
     if is_edit:
         await _refresh_detail(callback, manager)
     else:
-        await _load_page(callback, manager, _kind(manager), int(data["skip"]))
+        await _load_page(callback, manager, int(data["skip"]))
 
 
 def _store_preview(
@@ -1308,7 +1339,7 @@ async def confirm_delete(
 
     data.update(submitting=False, operation=None, preview=None, error="")
     data["notice"] = "Break deleted. Displaced lessons were not restored."
-    await _load_page(callback, manager, _kind(manager), int(data["skip"]))
+    await _load_page(callback, manager, int(data["skip"]))
 
 
 async def reload_state(
@@ -1320,7 +1351,7 @@ async def reload_state(
     operation = data.get("operation")
     if operation == "create":
         data.update(outcome_unknown=False, needs_reload=False, preview=None)
-        await _load_page(callback, manager, _kind(manager), int(data["skip"]))
+        await _load_page(callback, manager, int(data["skip"]))
         manager.dialog_data["warning"] = (
             "The break list was reloaded. Check it before retrying; "
             "no write was repeated."
@@ -1336,7 +1367,7 @@ async def reload_state(
         )
     except BackendError as exc:
         if operation == "delete" and exc.status in {404, 422}:
-            await _load_page(callback, manager, _kind(manager), int(data["skip"]))
+            await _load_page(callback, manager, int(data["skip"]))
             manager.dialog_data.update(
                 outcome_unknown=False,
                 needs_reload=False,
@@ -1407,15 +1438,7 @@ async def back_to_detail(
 async def back_to_list(
     callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
-    await _load_page(
-        callback, manager, _kind(manager), int(manager.dialog_data["skip"])
-    )
-
-
-async def back_to_menu(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
-) -> None:
-    await manager.switch_to(BreakScreens.menu, show_mode=ShowMode.EDIT)
+    await _load_page(callback, manager, int(manager.dialog_data["skip"]))
 
 
 async def return_home(
@@ -1462,9 +1485,7 @@ async def list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
     skip = int(data.get("skip", 0))
     total = int(data.get("total", 0))
     return {
-        "title": "One-time breaks"
-        if data.get("kind") == "once"
-        else "Recurring breaks",
+        "title": "Manage breaks. Tap a break to remove it.",
         "timezone": escape(data["viewer_timezone"]),
         "breaks": [
             (_break_label(item, data["viewer_timezone"]), str(item.id))
@@ -1478,8 +1499,6 @@ async def list_data(dialog_manager: DialogManager, **_: Any) -> dict[str, Any]:
         "notice": escape(str(data.get("notice", ""))),
         "has_previous": skip > 0,
         "has_next": skip + len(items) < total,
-        "is_once": data.get("kind") == "once",
-        "is_weekly": data.get("kind") == "weekly",
     }
 
 
@@ -1520,22 +1539,16 @@ async def break_error(
 def build_break_dialog() -> Dialog:
     return Dialog(
         Window(
-            Const(
-                "Manage teacher breaks. Breaks block availability for all your students."
-            ),
-            Button(Const("One-time breaks"), id="once", on_click=choose_one_time),
-            Button(Const("Recurring breaks"), id="weekly", on_click=choose_weekly),
-            Button(Const("Back to home"), id="home", on_click=return_home),
-            state=BreakScreens.menu,
-        ),
-        Window(
             Format("{feedback}{title}\n{empty_state}\n{notice}\nTimezone: {timezone}"),
-            Select(
-                Format("{item[0]}"),
-                id="break",
-                item_id_getter=lambda item: item[1],
-                items="breaks",
-                on_click=select_break,
+            Button(Const("Add break"), id="add", on_click=open_add_break),
+            Column(
+                Select(
+                    Format("{item[0]}"),
+                    id="break",
+                    item_id_getter=lambda item: item[1],
+                    items="breaks",
+                    on_click=select_break,
+                )
             ),
             Row(
                 Button(
@@ -1551,23 +1564,15 @@ def build_break_dialog() -> Dialog:
                     when="has_next",
                 ),
             ),
-            Button(Const("Add break"), id="add", on_click=begin_create),
-            Row(
-                Button(
-                    Const("Recurring breaks"),
-                    id="weekly",
-                    on_click=choose_weekly,
-                    when="is_once",
-                ),
-                Button(
-                    Const("One-time breaks"),
-                    id="once",
-                    on_click=choose_one_time,
-                    when="is_weekly",
-                ),
-            ),
-            Button(Const("Back"), id="back", on_click=back_to_menu),
+            Button(Const("Back to home"), id="home", on_click=return_home),
             state=BreakScreens.events,
+        ),
+        Window(
+            Const("What kind of break do you want to add?"),
+            Button(Const("One-time break"), id="once", on_click=choose_one_time),
+            Button(Const("Recurring break"), id="weekly", on_click=choose_weekly),
+            Button(Const("Back"), id="back", on_click=back_to_list),
+            state=BreakScreens.add_kind,
         ),
         Window(
             Format("{feedback}{detail_text}\n{notice}"),
