@@ -14,6 +14,7 @@ from backend.events.models import Event, RecurrentCancels, RecurrentEvent
 from telegram.api import (
     BackendClient,
     BackendError,
+    BackendUnavailable,
     EventCreatePayload,
     EventWriteResult,
 )
@@ -258,10 +259,12 @@ async def _enter_break(
     assert driver.deleted_message_ids()[-1] == start_message_id
     assert driver.deleted_message_ids().count(start_message_id) == 1
     assert driver.session.last_message.message_id == screen_message_id
+    await driver.click("Enter time manually")
     start_time_message_id = driver.update_id + 1
     await driver.text(start_time)
     assert driver.deleted_message_ids()[-1] == start_time_message_id
     assert driver.deleted_message_ids().count(start_time_message_id) == 1
+    await driver.click("Enter time manually")
     end_time_message_id = driver.update_id + 1
     await driver.text(end_time)
     assert driver.deleted_message_ids()[-1] == end_time_message_id
@@ -431,6 +434,7 @@ async def test_break_time_input_cleanup_and_validation_failures(
         await driver.click("Add break")
         await driver.click(driver.add_break_label)
         await driver.text("10/03/2030")
+        await driver.click("Enter time manually")
         initial_deletions = driver.deleted_message_ids()
 
         invalid_message_id = driver.update_id + 1
@@ -455,6 +459,7 @@ async def test_break_time_input_cleanup_and_validation_failures(
             for request in requests
         )
 
+        await driver.click("Enter time manually")
         end_message_id = driver.update_id + 1
         await driver.text("03:30")
         assert driver.deleted_message_ids()[-1] == end_message_id
@@ -490,6 +495,7 @@ async def test_backend_rejected_break_times_are_not_deleted_on_create_or_edit(
         await driver.click("Add break")
         await driver.click(driver.add_break_label)
         await driver.text("04/11/2030")
+        await driver.click("Enter time manually")
         initial_deletions = driver.deleted_message_ids()
         create_message_id = driver.update_id + 1
         screen_message_id = driver.session.last_message.message_id
@@ -503,6 +509,7 @@ async def test_backend_rejected_break_times_are_not_deleted_on_create_or_edit(
         await driver.click(_event_button(driver))
         await driver.click("Edit break")
         await driver.click("Change start")
+        await driver.click("Enter time manually")
         edit_message_id = driver.update_id + 1
         screen_message_id = driver.session.last_message.message_id
         await driver.text("11:00")
@@ -887,11 +894,13 @@ async def test_editing_break_confirms_displacement_and_sends_revision(
         await driver.click(_event_button(driver))
         await driver.click("Edit break")
         await driver.click("Change start")
+        await driver.click("Enter time manually")
         start_message_id = driver.update_id + 1
         await driver.text("10:00")
         assert driver.deleted_message_ids()[-1] == start_message_id
         assert driver.deleted_message_ids().count(start_message_id) == 1
         await driver.click("Change end")
+        await driver.click("Enter time manually")
         end_message_id = driver.update_id + 1
         await driver.text("10:30")
         assert driver.deleted_message_ids()[-1] == end_message_id
@@ -950,10 +959,12 @@ async def test_weekly_break_edit_preserves_interval_and_deletes_in_one_tap(
         await driver.click(_event_button(driver))
         await driver.click("Edit break")
         await driver.click("Change start")
+        await driver.click("Enter time manually")
         start_message_id = driver.update_id + 1
         await driver.text("11:00")
         assert driver.deleted_message_ids()[-1] == start_message_id
         assert driver.deleted_message_ids().count(start_message_id) == 1
+        await driver.click("Enter time manually")
         end_message_id = driver.update_id + 1
         await driver.text("11:30")
         assert driver.deleted_message_ids()[-1] == end_message_id
@@ -1181,6 +1192,7 @@ async def test_canceling_a_changed_break_edit_does_not_write(
         await driver.click(_event_button(driver))
         await driver.click("Edit break")
         await driver.click("Change start")
+        await driver.click("Enter time manually")
         await driver.text("10:00")
         assert "10:00 - 12:30" in driver.session.last_message.text
         await driver.click("Cancel")
@@ -1220,6 +1232,7 @@ async def test_stale_break_edit_requires_reload_without_replaying_write(
         await driver.click(_event_button(driver))
         await driver.click("Edit break")
         await driver.click("Change start")
+        await driver.click("Enter time manually")
         await driver.text("10:00")
         await driver.click("Save change")
         assert "Reload" in [
@@ -1659,5 +1672,242 @@ async def test_break_delete_double_tap_sends_one_delete(
         await driver.click(data=callback)
         assert sum(request.method == "DELETE" for request in requests) == 1
         assert not await _event_exists(db_session, break_event.id)
+    finally:
+        await _close_bot(driver, http)
+
+
+def _times(driver: BotDriver) -> list[str]:
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    return [
+        button.text
+        for row in markup.inline_keyboard
+        for button in row
+        if button.text[:1].isdigit()
+    ]
+
+
+def _labels(driver: BotDriver) -> list[str]:
+    markup = driver.session.last_message.reply_markup
+    assert markup is not None
+    return [button.text for row in markup.inline_keyboard for button in row]
+
+
+async def _start_picker(driver: BotDriver, date_text: str = "04/11/2030") -> None:
+    await _open_break_list(driver)
+    await driver.click("Add break")
+    await driver.click(driver.add_break_label)
+    await driver.text(date_text)
+
+
+async def test_break_pickers_offer_only_free_start_and_end_times(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    lesson = _lesson(teacher, student, datetime(2030, 11, 4, 11))
+    db_session.add(lesson)
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _start_picker(driver)
+        assert "Choose the break start time." in driver.session.last_message.text
+        starts = _times(driver)
+        assert starts[0] == "09:00" and "Next ▶" in _labels(driver)
+        assert "10:45" in starts and "12:00" in starts
+        assert not {"11:00", "11:15", "11:30", "11:45"} & set(starts)
+        await driver.click("Next ▶")
+        assert _times(driver)[-1] == "17:45"
+        await driver.click("◀ Previous")
+        query = next(
+            request.url.params
+            for request in requests
+            if request.url.path == "/api/v1/events/available-start-times"
+        )
+        assert query["event_type"] == "BREAK" and "duration_minutes" not in query
+
+        await driver.click("10:00")
+        assert "Choose the break end time." in driver.session.last_message.text
+        assert _times(driver) == ["10:15", "10:30", "10:45", "11:00"]
+        assert {"Enter time manually", "Change start time"} <= set(_labels(driver))
+        await driver.click("11:00")
+        assert "10:00 - 11:00" in driver.session.last_message.text
+        await driver.click("Save break")
+        assert "Break created." in driver.session.last_message.text
+        assert "Confirm and displace" not in driver.session.last_message.text
+        created = (
+            await db_session.execute(
+                select(Event).where(Event.event_type == EventType.BREAK.value)
+            )
+        ).scalar_one()
+        assert created.start == datetime(2030, 11, 4, 10)
+        assert created.end == datetime(2030, 11, 4, 11)
+        assert await _event_exists(db_session, lesson.id)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_break_picker_five_minute_toggle_persists_and_resets(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _start_picker(driver)
+        assert "09:05" not in _times(driver)
+        await driver.click("Show 5-minute times")
+        assert _times(driver)[:3] == ["09:00", "09:05", "09:10"]
+        await driver.click("Change date")
+        await driver.text("05/11/2030")
+        assert "09:05" in _times(driver)
+        await driver.click("09:05")
+        assert _times(driver)[0] == "09:10"
+        assert "Show 15-minute times" in _labels(driver)
+        await driver.click("Show 15-minute times")
+        assert _times(driver)[0] == "09:15"
+        await driver.click("Cancel")
+
+        await driver.click("Add break")
+        await driver.click(driver.add_break_label)
+        await driver.text("05/11/2030")
+        assert "09:05" not in _times(driver)
+        assert "Show 5-minute times" in _labels(driver)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_break_manual_entry_keeps_displacement_reachable(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, student = await _seed_accounts(db_session)
+    lesson = _lesson(teacher, student, datetime(2030, 11, 4, 11))
+    db_session.add(lesson)
+    await db_session.commit()
+    driver, _api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _start_picker(driver)
+        await driver.click("Enter time manually")
+        assert "Enter the break start time" in driver.session.last_message.text
+        await driver.click("Back to times")
+        assert "09:00" in _times(driver)
+        await driver.click("Enter time manually")
+        await driver.text("11:15")
+        assert "No end time fits after this start" in driver.session.last_message.text
+        await driver.click("Enter time manually")
+        assert "Enter the break end time" in driver.session.last_message.text
+        await driver.click("Back to times")
+        await driver.click("Enter time manually")
+        await driver.text("11:45")
+        await driver.click("Save break")
+        assert "One-time lesson" in driver.session.last_message.text
+        assert "Confirm and displace lessons" in _labels(driver)
+        assert await _event_exists(db_session, lesson.id)
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_break_picker_empty_day_and_outages_offer_retry(
+    client, db_session, bot_service_key, monkeypatch
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    driver, api, http, _requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    start_original = api.read_available_start_times
+    end_original = api.read_available_break_end_times
+    failures = {"start": 1, "end": 1}
+
+    async def flaky_start(*args, **kwargs):
+        if failures["start"]:
+            failures["start"] -= 1
+            raise BackendUnavailable()
+        return await start_original(*args, **kwargs)
+
+    async def flaky_end(*args, **kwargs):
+        if failures["end"]:
+            failures["end"] -= 1
+            raise BackendUnavailable()
+        return await end_original(*args, **kwargs)
+
+    monkeypatch.setattr(api, "read_available_start_times", flaky_start)
+    monkeypatch.setattr(api, "read_available_break_end_times", flaky_end)
+    try:
+        await _start_picker(driver, "03/11/2030")
+        assert "Backend unavailable." in driver.session.last_message.text
+        assert {"Retry", "Enter time manually"} <= set(_labels(driver))
+        await driver.click("Retry")
+        assert "No free break times on" in driver.session.last_message.text
+        assert "Choose another date." in driver.session.last_message.text
+        assert not _times(driver)
+
+        await driver.click("Change date")
+        await driver.text("04/11/2030")
+        assert "09:00" in _times(driver)
+        await driver.click("09:00")
+        assert "Backend unavailable." in driver.session.last_message.text
+        assert {"Retry", "Enter time manually", "Change start time"} <= set(
+            _labels(driver)
+        )
+        await driver.click("Retry")
+        assert _times(driver)[0] == "09:15"
+    finally:
+        await _close_bot(driver, http)
+
+
+async def test_break_edit_offers_its_own_time_and_legacy_seconds_stay_typed(
+    client, db_session, bot_service_key
+) -> None:
+    teacher, _ = await _seed_accounts(db_session)
+    existing = _break(teacher, datetime(2030, 11, 4, 10), datetime(2030, 11, 4, 10, 30))
+    legacy = _break(
+        teacher,
+        datetime(2030, 11, 5, 10, 0, 30),
+        datetime(2030, 11, 5, 10, 30, 30),
+    )
+    db_session.add_all([existing, legacy])
+    await db_session.commit()
+    driver, _api, http, requests = await _make_bot(
+        client, bot_service_key, _telegram_id(teacher)
+    )
+    try:
+        await _open_break_list(driver)
+        await driver.click("One-time · Nov 4 (2030) 10:00 - 10:30")
+        await driver.click("Edit break")
+        await driver.click("Change start")
+        assert "10:00" in _times(driver)
+        query = [
+            request.url.params
+            for request in requests
+            if request.url.path == "/api/v1/events/available-start-times"
+        ][-1]
+        assert query["exclude_event_id"] == str(existing.id)
+        await driver.click("10:15")
+        assert "10:15 - 10:30" in driver.session.last_message.text
+        await driver.click("Change end")
+        assert "10:30" in _times(driver)
+        await driver.click("11:00")
+        await driver.click("Save change")
+        await db_session.refresh(existing)
+        assert (existing.start, existing.end) == (
+            datetime(2030, 11, 4, 10, 15),
+            datetime(2030, 11, 4, 11),
+        )
+
+        before = len([r for r in requests if "available-start-times" in r.url.path])
+        await driver.click("Back to list")
+        legacy_label = next(label for label in _labels(driver) if "Nov 5" in label)
+        await driver.click(legacy_label)
+        await driver.click("Edit break")
+        await driver.click("Change start")
+        assert "Enter the break start time" in driver.session.last_message.text
+        assert (
+            len([r for r in requests if "available-start-times" in r.url.path])
+            == before
+        )
     finally:
         await _close_bot(driver, http)

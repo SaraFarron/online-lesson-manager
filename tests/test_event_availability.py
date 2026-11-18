@@ -569,10 +569,14 @@ async def test_break_starts_and_ends_stay_in_work_hours_and_never_overlap(
         world.teacher_token, ENDS_URL, start="2030-01-07T09:05:00Z", step_minutes=5
     )
     assert fine[0] == "09:10" and fine[-1] == "11:00"
-    misaligned = await world.get_response(
+    # Ends follow the clock grid, so an off-grid start still gets aligned ends.
+    assert await world.get(
         world.teacher_token, ENDS_URL, start="2030-01-07T09:05:00Z"
+    ) == _times("09:15", "11:00", 15)
+    invalid_step = await world.get_response(
+        world.teacher_token, ENDS_URL, start="2030-01-07T09:00:00Z", step_minutes=10
     )
-    assert misaligned.status_code == 422
+    assert invalid_step.status_code == 422
     student = await world.get_response(
         world.a_token, ENDS_URL, start="2030-01-07T09:00:00Z"
     )

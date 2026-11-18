@@ -49,6 +49,16 @@ from telegram.shared.inputs import (
     parse_schedule_date,
     parse_schedule_time,
 )
+from telegram.shared.time_slots import (
+    clear_slots,
+    find_slot,
+    reset_slot_step,
+    slot_local_start,
+    slot_picker_data,
+    slot_picker_widgets,
+    store_slots,
+    toggle_slot_step,
+)
 
 BREAK_PAGE_SIZE = 20
 DISPLACEMENT_PAGE_SIZE = 10
@@ -74,7 +84,9 @@ class BreakScreens(StatesGroup):
     start_date = State()
     confirm_start_date = State()
     start_time = State()
+    manual_start_time = State()
     end_time = State()
+    manual_end_time = State()
     cutoff_date = State()
     confirm_cutoff_date = State()
     review = State()
@@ -110,7 +122,11 @@ async def open_break_management(
         "outcome_unknown": False,
         "operation": None,
         "field_snapshot": None,
+        "slot_options": [],
+        "slot_skip": 0,
+        "slots_failed": False,
     }
+    reset_slot_step(data)
     try:
         page = await backend(manager).read_unified_management_page(
             callback.from_user.id,
@@ -339,7 +355,10 @@ async def begin_create(
         submitting=False,
         needs_reload=False,
         outcome_unknown=False,
+        slots_failed=False,
     )
+    reset_slot_step(manager.dialog_data)
+    clear_slots(manager.dialog_data)
     await manager.switch_to(BreakScreens.start_date, show_mode=ShowMode.EDIT)
 
 
@@ -402,7 +421,7 @@ async def _accept_start_date(
             resolution=None,
             error="",
         )
-        await manager.switch_to(BreakScreens.start_time, show_mode=ShowMode.EDIT)
+        await _open_start_picker(manager, sender_id, chat_id)
         return True
 
     try:
@@ -459,17 +478,21 @@ async def change_start_date(
 
 
 async def change_start_time(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
+    callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
     manager.dialog_data.update(error="", notice="")
-    await manager.switch_to(BreakScreens.start_time, show_mode=ShowMode.EDIT)
+    await _open_start_picker(manager, callback.from_user.id, callback.message.chat.id)
 
 
 async def change_end_time(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
+    callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
     manager.dialog_data.update(error="", notice="")
-    await manager.switch_to(BreakScreens.end_time, show_mode=ShowMode.EDIT)
+    await _open_end_picker(manager, callback.from_user.id, callback.message.chat.id)
 
 
 async def change_cutoff_date(
@@ -496,18 +519,22 @@ async def edit_start_date(
 
 
 async def edit_start_time(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
+    callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
     _begin_field_edit(manager, "start_time")
-    await manager.switch_to(BreakScreens.start_time, show_mode=ShowMode.EDIT)
+    await _open_start_picker(manager, callback.from_user.id, callback.message.chat.id)
 
 
 async def edit_end_time(
-    _callback: CallbackQuery, _button: Button, manager: DialogManager
+    callback: CallbackQuery, _button: Button, manager: DialogManager
 ) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
     _begin_field_edit(manager, "end_time")
     manager.dialog_data["notice"] = ""
-    await manager.switch_to(BreakScreens.end_time, show_mode=ShowMode.EDIT)
+    await _open_end_picker(manager, callback.from_user.id, callback.message.chat.id)
 
 
 async def edit_cutoff_date(
@@ -625,12 +652,36 @@ async def start_time_input(
         raise ValueError("Break management requires a private chat")
     try:
         start_time = parse_schedule_time(value)
+    except ValueError as exc:
+        manager.dialog_data["error"] = str(exc)
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    await _apply_start_time(
+        manager, message.from_user.id, message.chat.id, start_time, message
+    )
+
+
+async def _delete_accepted_time(
+    message: Message | None, manager: DialogManager
+) -> None:
+    if message is not None:
+        await delete_accepted_input_message(message, manager, "time")
+
+
+async def _apply_start_time(
+    manager: DialogManager,
+    sender_id: int,
+    chat_id: int,
+    start_time: str,
+    message: Message | None,
+) -> None:
+    try:
         data = manager.dialog_data
         start_date = date.fromisoformat(data["start_date"])
         local_start = combine_schedule_date_time(start_date, start_time)
         await backend(manager).resolve_local_interval(
-            message.from_user.id,
-            message.chat.id,
+            sender_id,
+            chat_id,
             local_start,
             local_start + timedelta(minutes=1),
         )
@@ -649,12 +700,12 @@ async def start_time_input(
                     notice="Enter an end time after the new start time.",
                 )
                 _invalidate_preview(data)
-                await delete_accepted_input_message(message, manager, "time")
-                await manager.switch_to(BreakScreens.end_time, show_mode=ShowMode.EDIT)
+                await _delete_accepted_time(message, manager)
+                await _open_end_picker(manager, sender_id, chat_id)
                 return
             resolution = await _resolve_draft_interval(
-                message.from_user.id,
-                message.chat.id,
+                sender_id,
+                chat_id,
                 manager,
                 start_time=start_time,
                 start_seconds=0,
@@ -675,16 +726,16 @@ async def start_time_input(
                 )
             else:
                 data["error"] = ""
-            await delete_accepted_input_message(message, manager, "time")
+            await _delete_accepted_time(message, manager)
             await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
             return
         data.update(start_time=start_time, start_seconds=0, error="", notice="")
-        await delete_accepted_input_message(message, manager, "time")
+        await _delete_accepted_time(message, manager)
     except (BackendError, BackendUnavailable, OverflowError, ValueError) as exc:
         manager.dialog_data["error"] = str(exc)
         await manager.show(show_mode=ShowMode.EDIT)
         return
-    await manager.switch_to(BreakScreens.end_time, show_mode=ShowMode.EDIT)
+    await _open_end_picker(manager, sender_id, chat_id)
 
 
 async def end_time_input(
@@ -697,9 +748,26 @@ async def end_time_input(
         raise ValueError("Break management requires a private chat")
     try:
         end_time = parse_schedule_time(value)
+    except ValueError as exc:
+        manager.dialog_data["error"] = str(exc)
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    await _apply_end_time(
+        manager, message.from_user.id, message.chat.id, end_time, message
+    )
+
+
+async def _apply_end_time(
+    manager: DialogManager,
+    sender_id: int,
+    chat_id: int,
+    end_time: str,
+    message: Message | None,
+) -> None:
+    try:
         resolution = await _resolve_draft_interval(
-            message.from_user.id,
-            message.chat.id,
+            sender_id,
+            chat_id,
             manager,
             end_time=end_time,
             end_seconds=0,
@@ -719,8 +787,194 @@ async def end_time_input(
     )
     _finish_field_edit(data)
     _invalidate_preview(data)
-    await delete_accepted_input_message(message, manager, "time")
+    await _delete_accepted_time(message, manager)
     await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
+
+
+def _slots_apply(data: dict[str, Any]) -> bool:
+    """Legacy intervals with seconds or a different end date keep typed entry."""
+    return not (
+        int(data.get("start_seconds", 0))
+        or int(data.get("end_seconds", 0))
+        or int(data.get("end_day_offset", 0))
+    )
+
+
+def _excluded_break_id(manager: DialogManager) -> UUID | None:
+    if manager.dialog_data.get("form_action") == "edit":
+        return _detail(manager).id
+    return None
+
+
+async def _open_start_picker(
+    manager: DialogManager, sender_id: int, chat_id: int
+) -> None:
+    data = manager.dialog_data
+    if not _slots_apply(data):
+        clear_slots(data)
+        data["slots_failed"] = False
+        await manager.switch_to(BreakScreens.manual_start_time, show_mode=ShowMode.EDIT)
+        return
+    try:
+        result = await backend(manager).read_available_start_times(
+            sender_id,
+            chat_id,
+            day=date.fromisoformat(data["start_date"]),
+            event_type="BREAK",
+            step_minutes=int(data["slot_step"]),
+            exclude_event_id=_excluded_break_id(manager),
+        )
+    except (BackendError, BackendUnavailable) as exc:
+        clear_slots(data)
+        data.update(slots_failed=True, error=str(exc))
+    else:
+        store_slots(data, result.slots, result.timezone)
+        data.update(slots_failed=False, error="")
+    await manager.switch_to(BreakScreens.start_time, show_mode=ShowMode.EDIT)
+
+
+async def _open_end_picker(
+    manager: DialogManager, sender_id: int, chat_id: int
+) -> None:
+    data = manager.dialog_data
+    if not _slots_apply(data):
+        clear_slots(data)
+        data["slots_failed"] = False
+        await manager.switch_to(BreakScreens.manual_end_time, show_mode=ShowMode.EDIT)
+        return
+    try:
+        local_start = combine_schedule_date_time(
+            date.fromisoformat(data["start_date"]), data["start_time"]
+        )
+        client = backend(manager)
+        start = await client.resolve_local_interval(
+            sender_id, chat_id, local_start, local_start + timedelta(minutes=1)
+        )
+        result = await client.read_available_break_end_times(
+            sender_id,
+            chat_id,
+            start=start.start.utc,
+            step_minutes=int(data["slot_step"]),
+            exclude_event_id=_excluded_break_id(manager),
+        )
+    except (BackendError, BackendUnavailable, OverflowError, ValueError) as exc:
+        clear_slots(data)
+        data.update(slots_failed=True, error=str(exc))
+    else:
+        store_slots(data, result.ends, result.timezone)
+        data.update(slots_failed=False, error="")
+    await manager.switch_to(BreakScreens.end_time, show_mode=ShowMode.EDIT)
+
+
+def _slot_clock(slot: dict[str, Any]) -> str:
+    local = slot_local_start(slot)
+    return f"{local.hour:02}:{local.minute:02}"
+
+
+async def select_start_slot(
+    callback: CallbackQuery,
+    _widget: Select[str],
+    manager: DialogManager,
+    item: str,
+) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
+    slot = find_slot(manager.dialog_data, item)
+    if slot is None:
+        manager.dialog_data["error"] = "Choose a time from the current list."
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    await _apply_start_time(
+        manager,
+        callback.from_user.id,
+        callback.message.chat.id,
+        _slot_clock(slot),
+        None,
+    )
+
+
+async def select_end_slot(
+    callback: CallbackQuery,
+    _widget: Select[str],
+    manager: DialogManager,
+    item: str,
+) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
+    slot = find_slot(manager.dialog_data, item)
+    if slot is None:
+        manager.dialog_data["error"] = "Choose a time from the current list."
+        await manager.show(show_mode=ShowMode.EDIT)
+        return
+    await _apply_end_time(
+        manager,
+        callback.from_user.id,
+        callback.message.chat.id,
+        _slot_clock(slot),
+        None,
+    )
+
+
+async def toggle_start_granularity(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
+    toggle_slot_step(manager.dialog_data)
+    await _open_start_picker(manager, callback.from_user.id, callback.message.chat.id)
+
+
+async def toggle_end_granularity(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
+    toggle_slot_step(manager.dialog_data)
+    await _open_end_picker(manager, callback.from_user.id, callback.message.chat.id)
+
+
+async def retry_start_slots(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
+    await _open_start_picker(manager, callback.from_user.id, callback.message.chat.id)
+
+
+async def retry_end_slots(
+    callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    if callback.message is None:
+        raise ValueError("Break management requires a private chat")
+    await _open_end_picker(manager, callback.from_user.id, callback.message.chat.id)
+
+
+async def open_manual_start(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await manager.switch_to(BreakScreens.manual_start_time, show_mode=ShowMode.EDIT)
+
+
+async def open_manual_end(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await manager.switch_to(BreakScreens.manual_end_time, show_mode=ShowMode.EDIT)
+
+
+async def back_to_start_slots(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await manager.switch_to(BreakScreens.start_time, show_mode=ShowMode.EDIT)
+
+
+async def back_to_end_slots(
+    _callback: CallbackQuery, _button: Button, manager: DialogManager
+) -> None:
+    manager.dialog_data["error"] = ""
+    await manager.switch_to(BreakScreens.end_time, show_mode=ShowMode.EDIT)
 
 
 async def cutoff_date_input(
@@ -872,7 +1126,10 @@ async def begin_edit(
         pending_payload=None,
         needs_reload=False,
         outcome_unknown=False,
+        slots_failed=False,
     )
+    reset_slot_step(data)
+    clear_slots(data)
     await manager.switch_to(BreakScreens.review, show_mode=ShowMode.EDIT)
 
 
@@ -1488,7 +1745,40 @@ async def management_data(dialog_manager: DialogManager, **_: Any) -> dict[str, 
     if data.get("detail") is not None:
         result.update(await detail_data(dialog_manager))
     result.update(await review_data(dialog_manager))
+    result.update(_slot_view(data))
     return result
+
+
+def _slot_view(data: dict[str, Any]) -> dict[str, Any]:
+    start_date = data.get("start_date")
+    failed = bool(data.get("slots_failed"))
+    has_slots = bool(data.get("slot_options"))
+    retry_prompt = "Choose retry or enter the time manually."
+    if failed:
+        start_prompt = end_prompt = retry_prompt
+    else:
+        start_prompt = (
+            "Choose the break start time."
+            if has_slots
+            else (
+                "No free break times on "
+                f"{_format_date(date.fromisoformat(start_date), data['viewer_timezone'])}. "
+                "Choose another date."
+                if start_date
+                else ""
+            )
+        )
+        end_prompt = (
+            "Choose the break end time."
+            if has_slots
+            else "No end time fits after this start. Change the start time."
+        )
+    return {
+        **slot_picker_data(data),
+        "slots_failed": failed,
+        "start_slot_prompt": start_prompt,
+        "end_slot_prompt": end_prompt,
+    }
 
 
 async def break_error(
@@ -1591,11 +1881,19 @@ def build_break_dialog() -> Dialog:
             state=BreakScreens.confirm_start_date,
         ),
         Window(
-            Format(
-                "{feedback}Enter the break start time as HH:MM or HH MM.\n"
-                "Timezone: {viewer_timezone}"
+            Format("{feedback}{start_slot_prompt}\nTimezone: {viewer_timezone}"),
+            *slot_picker_widgets(
+                on_select=select_start_slot, on_toggle_step=toggle_start_granularity
             ),
-            TextInput("start_time", on_success=start_time_input, on_error=break_error),
+            Button(
+                Const("Retry"),
+                id="retry",
+                on_click=retry_start_slots,
+                when="slots_failed",
+            ),
+            Button(
+                Const("Enter time manually"), id="manual", on_click=open_manual_start
+            ),
             Button(
                 Const("Change date"),
                 id="date",
@@ -1613,10 +1911,38 @@ def build_break_dialog() -> Dialog:
         ),
         Window(
             Format(
-                "{feedback}{notice}Enter the break end time on the same local date.\n"
+                "{feedback}Enter the break start time as HH:MM or HH MM.\n"
                 "Timezone: {viewer_timezone}"
             ),
-            TextInput("end_time", on_success=end_time_input, on_error=break_error),
+            TextInput("start_time", on_success=start_time_input, on_error=break_error),
+            Button(Const("Back to times"), id="slots", on_click=back_to_start_slots),
+            Button(
+                Const("Change date"),
+                id="date",
+                on_click=change_start_date,
+                when="can_change_date",
+            ),
+            Button(
+                Const("Back"),
+                id="back",
+                on_click=back_from_field_edit,
+                when="has_field_snapshot",
+            ),
+            Button(Const("Cancel"), id="cancel", on_click=back_to_list),
+            state=BreakScreens.manual_start_time,
+        ),
+        Window(
+            Format("{feedback}{notice}{end_slot_prompt}\nTimezone: {viewer_timezone}"),
+            *slot_picker_widgets(
+                on_select=select_end_slot, on_toggle_step=toggle_end_granularity
+            ),
+            Button(
+                Const("Retry"),
+                id="retry",
+                on_click=retry_end_slots,
+                when="slots_failed",
+            ),
+            Button(Const("Enter time manually"), id="manual", on_click=open_manual_end),
             Button(Const("Change start time"), id="start", on_click=change_start_time),
             Button(
                 Const("Back"),
@@ -1626,6 +1952,23 @@ def build_break_dialog() -> Dialog:
             ),
             Button(Const("Cancel"), id="cancel", on_click=back_to_list),
             state=BreakScreens.end_time,
+        ),
+        Window(
+            Format(
+                "{feedback}{notice}Enter the break end time on the same local date.\n"
+                "Timezone: {viewer_timezone}"
+            ),
+            TextInput("end_time", on_success=end_time_input, on_error=break_error),
+            Button(Const("Back to times"), id="slots", on_click=back_to_end_slots),
+            Button(Const("Change start time"), id="start", on_click=change_start_time),
+            Button(
+                Const("Back"),
+                id="back",
+                on_click=back_from_field_edit,
+                when="has_field_snapshot",
+            ),
+            Button(Const("Cancel"), id="cancel", on_click=back_to_list),
+            state=BreakScreens.manual_end_time,
         ),
         Window(
             Format(

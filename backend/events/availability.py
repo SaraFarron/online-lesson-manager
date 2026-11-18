@@ -160,32 +160,42 @@ async def list_available_break_end_times(
     viewer_zone = get_timezone(actor.timezone)
     start_utc = normalize_utc(start)
     local_start = start_utc.astimezone(viewer_zone)
-    if (
-        local_start.second
-        or local_start.microsecond
-        or (local_start.hour * 60 + local_start.minute) % step_minutes
-    ):
-        raise ValidationError("Break start must be aligned to the requested step")
-
     _, day_end = local_day_bounds(local_start.date(), actor.timezone)
     existing = await _load_existing(session, context, start_utc, day_end)
 
     ends: list[ResolvedLocalInstant] = []
-    step = timedelta(minutes=step_minutes)
-    end = start_utc + step
-    while end <= day_end and is_within_work_window(
-        start_utc, end, context.profile, context.teacher_timezone
+    for local_end, end in _aligned_ends_after(
+        local_start, actor.timezone, step_minutes
     ):
-        if not _is_acceptable(context, start_utc, end, existing):
+        if not is_within_work_window(
+            start_utc, end, context.profile, context.teacher_timezone
+        ) or not _is_acceptable(context, start_utc, end, existing):
             break
-        ends.append(ResolvedLocalInstant.from_local(end.astimezone(viewer_zone), end))
-        end += step
+        ends.append(ResolvedLocalInstant.from_local(local_end, end))
     return AvailableEndTimes(
         timezone=actor.timezone,
         start=ResolvedLocalInstant.from_local(local_start, start_utc),
         step_minutes=step_minutes,
         ends=ends,
     )
+
+
+def _aligned_ends_after(
+    local_start: datetime, timezone_name: str, step_minutes: int
+) -> list[tuple[datetime, datetime]]:
+    """Clock-aligned local times after the start on the same local day."""
+    midnight = datetime.combine(local_start.date(), time.min)
+    start_minute = local_start.hour * 60 + local_start.minute
+    first = (start_minute // step_minutes + 1) * step_minutes
+    candidates: list[tuple[datetime, datetime]] = []
+    for minute in range(first, MINUTES_PER_DAY, step_minutes):
+        naive = midnight + timedelta(minutes=minute)
+        local = resolve_local_datetime(naive, timezone_name)
+        end = local.astimezone(UTC)
+        if local.replace(tzinfo=None) != naive or end <= local_start:
+            continue
+        candidates.append((local, end))
+    return candidates
 
 
 def _validate_step(step_minutes: int) -> None:

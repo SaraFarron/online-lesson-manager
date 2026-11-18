@@ -137,7 +137,9 @@ async def _add_break(driver: BotDriver) -> None:
     await driver.click("Add break")
     await driver.click("One-time break")
     await driver.text(_LOCAL_DATE)
+    await driver.click("Enter time manually")
     await driver.text("09:30")
+    await driver.click("Enter time manually")
     await driver.text("12:30")
     await driver.click("Save break")
 
